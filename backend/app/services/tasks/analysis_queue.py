@@ -75,7 +75,7 @@ async def queue_tracks_for_embeddings(limit: int | None = None) -> int:
         limit = adaptive_queue_limit()
     from sqlalchemy import and_, or_, select
 
-    from app.db.models import Track, TrackAnalysis
+    from app.db.models import Track, TrackAnalysis, TrackStatus
     from app.db.session import async_session_maker
     from app.services.app_settings import get_app_settings_service
     from app.services.background import get_background_manager
@@ -96,6 +96,25 @@ async def queue_tracks_for_embeddings(limit: int | None = None) -> int:
             .join(TrackAnalysis, Track.id == TrackAnalysis.track_id)
             .where(
                 and_(
+                    # A track whose file is gone cannot be embedded, and trying is
+                    # not harmless. On 2026-09-03 one missing file took the whole
+                    # analysis pipeline down repeatedly: the worker died on it, and
+                    # because the *process* died it never got to record
+                    # `embedding_failed_at` — so the retry guard below never
+                    # engaged and it was requeued immediately, killing the pool
+                    # again. The executor's circuit breaker then disabled analysis
+                    # entirely until somebody POSTed to reset it.
+                    #
+                    # The tell was a failure count frozen at 4 while the executor
+                    # kept disabling itself after hundreds of "terminated abruptly"
+                    # errors. A crash that cannot record its own failure defeats
+                    # every guard keyed on that record.
+                    # `queue_tracks_for_features` filters on status and this did
+                    # not — the asymmetry is the bug. The crashing track was
+                    # `pending_deletion`, so the features phase never touched it
+                    # while the embeddings phase picked it up every pass.
+                    Track.status == TrackStatus.ACTIVE,
+                    Track.missing_since.is_(None),
                     TrackAnalysis.features_version >= FEATURES_VERSION,
                     TrackAnalysis.embedding_version < EMBEDDING_VERSION,
                     # Exclude recently-failed embeddings (use TrackAnalysis.embedding_failed_at)

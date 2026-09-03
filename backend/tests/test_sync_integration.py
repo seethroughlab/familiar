@@ -444,3 +444,74 @@ class TestQueueTracksForEmbeddings:
             queued = await queue_tracks_for_embeddings()
 
         assert queued == 0
+
+
+class TestEmbeddingQueueExcludesUnplayableTracks:
+    """The selection criteria, not the queueing mechanics.
+
+    Every other test in this file mocks `fetchall`, so the WHERE clause is never
+    exercised — which is exactly how the defect below survived. These compile the
+    statement the function actually builds and assert what it filters on.
+
+    **The defect.** `queue_tracks_for_embeddings` filtered on version columns only,
+    where `queue_tracks_for_features` filters on `status`. So a track whose file
+    had gone missing — status `pending_deletion` — was invisible to the features
+    phase and picked up by the embeddings phase on every pass.
+
+    Attempting it killed the worker process. Because the *process* died, it never
+    recorded `embedding_failed_at`, so the retry guard keyed on that column never
+    engaged and the track was requeued immediately, killing the pool again. The
+    executor's circuit breaker then disabled analysis outright until somebody
+    POSTed to reset it.
+
+    On 2026-09-03 that stalled a 26,000-track re-analysis four times over eighteen
+    hours. The tell was a failure count frozen at 4 while the executor disabled
+    itself after hundreds of "terminated abruptly" errors: **a crash that cannot
+    record its own failure defeats every guard keyed on that record.**
+    """
+
+    @staticmethod
+    async def _compiled_where() -> str:
+        """Run the function against a mock and return the SQL it built."""
+        mock_db = MagicMock()
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = []
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        mock_session = MagicMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_db)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+
+        mock_settings = MagicMock()
+        mock_settings.is_clap_embeddings_enabled.return_value = (True, "")
+
+        with patch("app.db.session.async_session_maker", return_value=mock_session), \
+             patch("app.services.app_settings.get_app_settings_service", return_value=mock_settings):
+            from app.services.tasks import queue_tracks_for_embeddings
+            await queue_tracks_for_embeddings(limit=10)
+
+        statement = mock_db.execute.call_args[0][0]
+        return str(statement.compile(compile_kwargs={"literal_binds": True}))
+
+    @pytest.mark.asyncio
+    async def test_it_skips_tracks_whose_file_is_missing(self):
+        sql = await self._compiled_where()
+        assert "missing_since IS NULL" in sql, (
+            "a track whose file is gone cannot be embedded, and attempting it "
+            "killed the worker without recording a failure — so it requeued forever"
+        )
+
+    @pytest.mark.asyncio
+    async def test_it_only_queues_active_tracks(self):
+        """`queue_tracks_for_features` has always filtered status; this did not."""
+        sql = await self._compiled_where()
+        assert "tracks.status" in sql, (
+            "the embeddings phase must not pick up tracks the features phase "
+            "deliberately skips — that asymmetry is what surfaced the poison pill"
+        )
+
+    @pytest.mark.asyncio
+    async def test_it_still_respects_the_failure_retry_window(self):
+        """The new filters must not have displaced the existing guard."""
+        sql = await self._compiled_where()
+        assert "embedding_failed_at" in sql
