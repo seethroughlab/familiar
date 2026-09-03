@@ -1,5 +1,6 @@
 """Track-related Pydantic schemas shared across route modules."""
 
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -25,6 +26,38 @@ class TrackFeaturesResponse(BaseModel):
     loudness_lufs: float | None = None
     track_peak: float | None = None
     replaygain_track_gain: float | None = None
+
+    @classmethod
+    def from_analysis(cls, analysis: Any) -> "TrackFeaturesResponse | None":
+        """Build from a `TrackAnalysis`, or `None` when there is nothing analysed to report.
+
+        **`bpm is None` means unanalysed**, and that guard is the reason this is a factory rather
+        than a `model_validate`: a features object full of nulls is not the same answer as no
+        features object, and callers branch on the second.
+
+        Extracted because it was written out twice in `routes/tracks/listing.py` and a third copy
+        was about to go into `routes/listening/radio.py` — which is how the three would have come
+        to disagree about which columns count as features.
+        """
+        if analysis is None or analysis.bpm is None:
+            return None
+        return cls(
+            bpm=analysis.bpm,
+            key=analysis.key,
+            energy=analysis.energy,
+            danceability=analysis.danceability,
+            valence=analysis.valence,
+            acousticness=analysis.acousticness,
+            instrumentalness=analysis.instrumentalness,
+            speechiness=analysis.speechiness,
+            brightness=analysis.brightness,
+            harmonic_complexity=analysis.harmonic_complexity,
+            swing_ratio=analysis.swing_ratio,
+            syncopation=analysis.syncopation,
+            loudness_lufs=analysis.loudness_lufs,
+            track_peak=analysis.track_peak,
+            replaygain_track_gain=analysis.replaygain_track_gain,
+        )
 
 
 class TrackResponse(BaseModel):

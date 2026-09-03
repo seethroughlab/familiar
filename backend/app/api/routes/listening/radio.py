@@ -25,7 +25,7 @@ from app.api.exceptions import (
     TrackNotFoundError,
     ValidationError,
 )
-from app.api.schemas.tracks import TrackResponse
+from app.api.schemas.tracks import TrackFeaturesResponse, TrackResponse
 from app.db.models import Track
 from app.services.ambient import get_candidates
 from app.services.ranking_profiles import get_profile
@@ -59,6 +59,25 @@ class SuggestionsResponse(BaseModel):
     # something arbitrary.
     pool_size: int
     pool_collapsed: bool
+
+
+def _with_features(track: Track) -> TrackResponse:
+    """A suggestion, with the analysis a client might want to show alongside it.
+
+    **This was `model_validate(track)` and so answered `features: null` every time.** `Track` has no
+    `features` attribute — only `routes/tracks/listing.py` ever populated one — so the field has
+    been on this response since it existed and has never once been filled. A client asking radio
+    what to play next got a track it could not tell you the key or tempo of.
+
+    Free here: `analyses` is already eagerly loaded above, because `Track.analysis_version` returns
+    0 when it is not.
+    """
+    response = TrackResponse.model_validate(track)
+    if track.analyses:
+        response.features = TrackFeaturesResponse.from_analysis(track.analyses[0])
+    return response
+
+
 @router.post("/suggestions", response_model=SuggestionsResponse)
 async def suggestions(
     request: SuggestionsRequest,
@@ -109,7 +128,7 @@ async def suggestions(
     return SuggestionsResponse(
         suggestions=[
             Suggestion(
-                track=TrackResponse.model_validate(by_id[c.descriptor.track_id]),
+                track=_with_features(by_id[c.descriptor.track_id]),
                 score=round(c.compatibility_score, 4),
             )
             for c in candidates

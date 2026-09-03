@@ -272,6 +272,21 @@ def score_candidate(
     ):
         total += profile.quiet_energy_bonus
 
+    # Pull back toward calm, in absolute terms.
+    #
+    # Scaled by how far past the ceiling the candidate is, so a track just over it is nudged and a
+    # genuinely loud one is pushed hard. Both energy and brightness count: a quiet but very bright
+    # track — a cymbal-heavy recording, a thin live mix — is as wrong for this as a loud one, and
+    # `energy` alone does not catch it.
+    if profile.liveliness_penalty:
+        excess = max(
+            _safe_float(candidate.energy) - profile.liveliness_ceiling,
+            _safe_float(candidate.brightness) - profile.liveliness_ceiling,
+        )
+        if excess > 0:
+            headroom = max(1.0 - profile.liveliness_ceiling, 1e-6)
+            total -= profile.liveliness_penalty * min(excess / headroom, 1.0)
+
     # Dark filter bonus for minor keys
     if profile.minor_key_bonus and candidate.modal_character and "minor" in (candidate.modal_character or "").lower():
         total += profile.minor_key_bonus  # Small bonus, mainly used by dark filter
@@ -426,6 +441,11 @@ async def pick_surprise_seed(
     from the pool, so the final seed is as quiet as the library allows.
     """
     base_conditions = [
+        # The same exclusion `get_candidates` gained and this path did not: a MISSING track is a
+        # file no longer on disk and 404s on stream. Missing it here is worse than missing it
+        # there — a bad candidate is one skipped transition, a bad *seed* is a session that
+        # cannot start at all. Restored with the routes under ADR-0106 point 6.
+        Track.active_filter(),
         TrackAnalysis.instrumentalness >= 0.5,
         TrackAnalysis.speechiness <= 0.5,
         TrackAnalysis.energy <= 0.7,
@@ -461,6 +481,27 @@ async def pick_surprise_seed(
 # How far back skips and rejections count against a track. Recent dislikes matter and
 # old ones fade — taste changes, and a track skipped repeatedly last year should not be
 # exiled forever. Also bounds the aggregate as `play_events` grows.
+#: How many rows the two-phase ranker retrieves before scoring.
+CANDIDATE_POOL = 150
+
+#: What `hnsw.ef_search` must be raised to for `CANDIDATE_POOL` to be reachable.
+#:
+#: **pgvector's HNSW index returns at most `ef_search` rows, whatever the LIMIT says**, and the
+#: default is 40. So every ANN query in this module has been asking for 150 and receiving 40 — a
+#: quarter of the pool it was written around — since the index was created. Measured on the real
+#: library: the same query returns 40 rows at the default and 150 with this set.
+#:
+#: The symptom was not slow or wrong results, which is why it survived. It was ambient sessions
+#: ending after a handful of windows with "running low on matching tracks": each transition excludes
+#: what has just played, and a pool of 40 drains in a few minutes where a pool of 150 does not.
+#: Radio, playlist generation, collection suggestions and the offline manifest all rank through this
+#: same function and have been quietly working from the smaller pool too.
+#:
+#: Comfortably above the pool rather than equal to it: `ef_search` is the size of the candidate list
+#: the search keeps, so asking for exactly 150 makes the last of them the worst the index happened
+#: to hold.
+CANDIDATE_EF_SEARCH = 400
+
 NEGATIVE_SIGNAL_WINDOW_DAYS = 90
 
 # Which shuffle preset supplies radio's taste signal: favour well-played tracks that have
@@ -638,6 +679,12 @@ async def get_candidates(
     current_embedding = current_embedding_result.scalar()
 
     if current_embedding is not None:
+        # **Raise `ef_search` or the LIMIT below is a lie.** pgvector's HNSW scan returns at most
+        # `ef_search` rows — 40 by default — so this query asked for 150 and got 40 until this line
+        # existed. `SET LOCAL` scopes it to the surrounding transaction, so nothing else on the
+        # connection inherits a larger search than it asked for.
+        await db.execute(text(f"SET LOCAL hnsw.ef_search = {CANDIDATE_EF_SEARCH}"))
+
         # Use embedding similarity for initial ranking
         cosine_dist = TrackAnalysis.embedding.cosine_distance(current_embedding)
         query = (
@@ -649,7 +696,7 @@ async def get_candidates(
             .join(TrackAnalysis, TrackAnalysis.track_id == Track.id)
             .where(and_(*base_conditions, TrackAnalysis.embedding.isnot(None)))
             .order_by(cosine_dist)
-            .limit(150)
+            .limit(CANDIDATE_POOL)
         )
     else:
         # No embedding — fall back to random sampling
@@ -662,7 +709,7 @@ async def get_candidates(
             .join(TrackAnalysis, TrackAnalysis.track_id == Track.id)
             .where(and_(*base_conditions))
             .order_by(func.random())
-            .limit(150)
+            .limit(CANDIDATE_POOL)
         )
 
     result = await db.execute(query)
@@ -729,6 +776,8 @@ async def find_seed_by_artist(
 ) -> AmbientDescriptor | None:
     """Find a seed track by artist name (best ambient fitness)."""
     base_conditions = [
+        # See `pick_surprise_seed` — the same missing exclusion, for the same reason.
+        Track.active_filter(),
         Track.artist.ilike(f"%{artist_name}%"),
         Track.duration_seconds >= 45,
         TrackAnalysis.energy.isnot(None),

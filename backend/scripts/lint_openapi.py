@@ -39,9 +39,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 #   was dead generated code rather than a defect — under ADR-0013 those 17 stop being dead, since
 #   the review surfaces need them.
 #
-#   `ambient` is absent, and as of ADR-0077 so are its routes — the tag is gone from the schema
-#   entirely. ADR-0001 point 5 had put ambient/generative mode out of v1; ADR-0077 found the three
-#   routes had no client left at all, `app/services/ambient` staying put behind five importers.
+#   `ambient` is present again, as of ADR-0106, and the history is worth keeping because it is the
+#   only tag here that has been removed and restored. ADR-0001 point 5 put ambient/generative mode
+#   out of native v1, so the tag was never generated; ADR-0077 then deleted the three routes
+#   themselves, having found they had no client left anywhere — `app/services/ambient` staying put
+#   behind five importers. **That was a judgement about the routes, not the capability**, and
+#   ADR-0077 said so. ADR-0106 amends ADR-0001 point 5 and ADR-0013 point 4 and brings all three
+#   back, unchanged in path, for a Mac client that now exists.
 #
 #   `outputs` is present as nine *operations* rather than as a tag. ADR-0077 deleted the nine zone
 #   operations that first forced that shape, but the shape survives them: of the fifteen that
@@ -89,6 +93,10 @@ VENDORED_TAGS = {
     "playback-session",
     "radio",
     "offline",
+    # The fourth of that family, and the one it was all built from (ADR-0106). Mac-only at the
+    # client, like `music_map` and `videos` — but tags cannot express that, and the generated
+    # client is shared, so iOS compiles these three and does not yet call them.
+    "ambient",
     # Management surfaces the Mac app gained (ADR-0013, generated per ADR-0014). Not on iOS, which
     # ADR-0013 point 2 keeps on the listening path — but the generated client is shared by both
     # targets, so iOS compiles these and never calls them.

@@ -37,7 +37,6 @@ ALLOWLISTED_MODULES = {
     "outputs",
     "artwork",
     "analysis",
-    "ambient",
     "background",
     # Still exempt after ADR-0086. Every video operation is keyed by a track, and a video
     # belongs to the library rather than to a listener, so none of them is profile state.
@@ -69,6 +68,20 @@ ALLOWLISTED_FUNCTIONS = {
     # way.
     ("auth", "issue_token"),
     ("auth", "revoke_token"),
+    # Ambient (ADR-0106). Both are POSTs because they carry a body, not because they mutate
+    # anything: they rank the library against a track and return the result. There is no profile
+    # state to protect, and `AMBIENT`'s `taste_weight` and `max_negative_penalty` are both 0, so a
+    # profile id would change no ordering — `radio.py`'s docstring draws exactly this contrast and
+    # says radio does not inherit the exemption.
+    #
+    # **Per-function, and the previous entry was not.** A bare `"ambient"` sat in
+    # ALLOWLISTED_MODULES from before ADR-0077 deleted the routes, and stayed there afterwards
+    # exempting nothing. It would not have covered this file either way: module keys are paths
+    # (`get_module_key`), the routes now live under `listening/`, and the key is
+    # `listening/ambient`. The dead entry is removed rather than repointed, per the note above
+    # about ADR-0045 point 2 sending ALLOWLISTED_MODULES to zero.
+    ("listening/ambient", "seed"),
+    ("listening/ambient", "candidates"),
     # Profile creation/registration can't require an existing profile
     ("profiles", "create_profile"),
     ("profiles", "register_profile"),

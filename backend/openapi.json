@@ -232,6 +232,164 @@
         "title": "AlbumTrack",
         "type": "object"
       },
+      "AmbientCandidateResponse": {
+        "properties": {
+          "compatibility_score": {
+            "title": "Compatibility Score",
+            "type": "number"
+          },
+          "descriptor": {
+            "$ref": "#/components/schemas/AmbientDescriptorResponse"
+          },
+          "key_compatibility": {
+            "title": "Key Compatibility",
+            "type": "number"
+          },
+          "suggested_end_pct": {
+            "title": "Suggested End Pct",
+            "type": "number"
+          },
+          "suggested_start_pct": {
+            "title": "Suggested Start Pct",
+            "type": "number"
+          }
+        },
+        "required": [
+          "descriptor",
+          "compatibility_score",
+          "key_compatibility",
+          "suggested_start_pct",
+          "suggested_end_pct"
+        ],
+        "title": "AmbientCandidateResponse",
+        "type": "object"
+      },
+      "AmbientDescriptorResponse": {
+        "description": "A track reduced to what an ambient transition is decided from.\n\n`key` drives the drone's pitch, `duration_seconds` and `energy_shape` place the snippet\nwindow; the rest is what `score_candidate` weighs, returned so a client can show its working.",
+        "properties": {
+          "acousticness": {
+            "title": "Acousticness",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "album": {
+            "title": "Album",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "artist": {
+            "title": "Artist",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "bpm": {
+            "title": "Bpm",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "brightness": {
+            "title": "Brightness",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "duration_seconds": {
+            "title": "Duration Seconds",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "dynamic_range_db": {
+            "title": "Dynamic Range Db",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "energy": {
+            "title": "Energy",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "energy_shape": {
+            "title": "Energy Shape",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "instrumentalness": {
+            "title": "Instrumentalness",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "key": {
+            "title": "Key",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "modal_character": {
+            "title": "Modal Character",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "section_count": {
+            "title": "Section Count",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "speechiness": {
+            "title": "Speechiness",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "title": {
+            "title": "Title",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "track_id": {
+            "title": "Track Id",
+            "type": "string"
+          },
+          "valence": {
+            "title": "Valence",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "track_id"
+        ],
+        "title": "AmbientDescriptorResponse",
+        "type": "object"
+      },
       "AnalysisDownloadRequest": {
         "description": "Request to download track analyses as ZIP.",
         "properties": {
@@ -1878,6 +2036,89 @@
           "message"
         ],
         "title": "CancelResponse",
+        "type": "object"
+      },
+      "CandidatesRequest": {
+        "properties": {
+          "current_track_id": {
+            "format": "uuid",
+            "title": "Current Track Id",
+            "type": "string"
+          },
+          "filter_preset": {
+            "default": "all",
+            "enum": [
+              "all",
+              "soft",
+              "dark",
+              "instrumental"
+            ],
+            "title": "Filter Preset",
+            "type": "string"
+          },
+          "intensity": {
+            "default": "balanced",
+            "enum": [
+              "quiet",
+              "balanced",
+              "immersive"
+            ],
+            "title": "Intensity",
+            "type": "string"
+          },
+          "limit": {
+            "default": 10,
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "recent_artist_names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Recent Artist Names",
+            "type": "array"
+          },
+          "recent_track_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Recent Track Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "current_track_id"
+        ],
+        "title": "CandidatesRequest",
+        "type": "object"
+      },
+      "CandidatesResponse": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/AmbientCandidateResponse"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "pool_collapsed": {
+            "title": "Pool Collapsed",
+            "type": "boolean"
+          },
+          "pool_size": {
+            "title": "Pool Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "candidates",
+          "pool_size",
+          "pool_collapsed"
+        ],
+        "title": "CandidatesResponse",
         "type": "object"
       },
       "ChangePreviewResponse": {
@@ -8074,6 +8315,84 @@
         "title": "ScrobbleResponse",
         "type": "object"
       },
+      "SeedRequest": {
+        "description": "How to start a session: from a track, from an artist, or from nothing in particular.",
+        "properties": {
+          "artist": {
+            "title": "Artist",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "filter_preset": {
+            "default": "all",
+            "enum": [
+              "all",
+              "soft",
+              "dark",
+              "instrumental"
+            ],
+            "title": "Filter Preset",
+            "type": "string"
+          },
+          "intensity": {
+            "default": "balanced",
+            "enum": [
+              "quiet",
+              "balanced",
+              "immersive"
+            ],
+            "title": "Intensity",
+            "type": "string"
+          },
+          "surprise_me": {
+            "default": false,
+            "title": "Surprise Me",
+            "type": "boolean"
+          },
+          "track_id": {
+            "format": "uuid",
+            "title": "Track Id",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "title": "SeedRequest",
+        "type": "object"
+      },
+      "SeedResponse": {
+        "properties": {
+          "initial_candidates": {
+            "items": {
+              "$ref": "#/components/schemas/AmbientCandidateResponse"
+            },
+            "title": "Initial Candidates",
+            "type": "array"
+          },
+          "pool_collapsed": {
+            "title": "Pool Collapsed",
+            "type": "boolean"
+          },
+          "pool_size": {
+            "title": "Pool Size",
+            "type": "integer"
+          },
+          "seed": {
+            "$ref": "#/components/schemas/AmbientDescriptorResponse"
+          }
+        },
+        "required": [
+          "seed",
+          "initial_candidates",
+          "pool_size",
+          "pool_collapsed"
+        ],
+        "title": "SeedResponse",
+        "type": "object"
+      },
       "SeekRequest": {
         "properties": {
           "position_ms": {
@@ -10993,6 +11312,170 @@
           }
         },
         "summary": "Root"
+      }
+    },
+    "/api/v1/ambient/candidates": {
+      "post": {
+        "description": "Get ranked candidates for ambient continuation.",
+        "operationId": "ambient_candidates",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CandidatesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidatesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Candidates",
+        "tags": [
+          "ambient"
+        ]
+      }
+    },
+    "/api/v1/ambient/seed": {
+      "post": {
+        "description": "Resolve a seed track and return initial candidates.",
+        "operationId": "ambient_seed",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeedRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeedResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Seed",
+        "tags": [
+          "ambient"
+        ]
       }
     },
     "/api/v1/artists/merge": {
@@ -33540,6 +34023,10 @@
       "name": "offline"
     },
     {
+      "description": "A session of harmonically-chained snippets: a seed, then a walk through the library under the `AMBIENT` weight profile, with the window to play and the key to tune a drone to (ADR-0106). The same engine radio uses, asked a different question \u2014 which is what ADR-0005 decided it was.",
+      "name": "ambient"
+    },
+    {
       "description": "The command channel an MCP client uses to actuate a native player (ADR-0044), and the artifacts a command asks it to produce (ADR-0053). **Nothing here plays anything** \u2014 the server holds no transport. It was called `playback`, which named this and the listening ledger at once, and described neither (ADR-0075).",
       "name": "commands"
     },
@@ -33634,6 +34121,7 @@
         "playback-session",
         "radio",
         "offline",
+        "ambient",
         "commands",
         "plays",
         "outputs",
