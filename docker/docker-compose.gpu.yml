@@ -1,0 +1,37 @@
+# GPU acceleration, opt-in.
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.gpu.yml up -d
+#
+# This is a separate file because the device reservation below is **fatal** on a
+# host without the NVIDIA container runtime, not ignored:
+#
+#   Error response from daemon: could not select device driver "nvidia"
+#   with capabilities: [[gpu]]
+#
+# So it cannot live in the default compose. An earlier version of this change put
+# it there on the assumption that Docker would skip an unsatisfiable reservation;
+# it does not, and that would have stopped every installation without an NVIDIA
+# card from starting at all.
+#
+# What you need on the host, all three:
+#   - an NVIDIA driver whose kernel module matches its userspace libraries
+#     (a driver package upgrade without a reboot breaks this for every container)
+#   - `libcuda1` and ideally `nvidia-smi` — a display driver alone is not enough,
+#     libcuda.so is what CUDA actually needs and it ships separately
+#   - nvidia-container-toolkit, so Docker can pass the device through
+#
+# Verify before expecting a speedup — the embedder falls back to the CPU silently
+# and correctly, so "no error" is not evidence:
+#
+#   docker exec familiar-api python /app/scripts/smoke_test_clap.py
+#
+# and look for "CUDA requested and bound" rather than merely "requested".
+services:
+  api:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
