@@ -16,6 +16,7 @@ it runs in CI with no Docker.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -33,6 +34,16 @@ def prod() -> dict:
     if not PROD_COMPOSE.is_file():
         pytest.skip(f"{PROD_COMPOSE} not found")
     return yaml.safe_load(PROD_COMPOSE.read_text())
+
+
+def _api_environment() -> dict[str, str]:
+    """The api service's environment, outside the fixture, for module-level use."""
+    entries = yaml.safe_load(PROD_COMPOSE.read_text())["services"]["api"]["environment"]
+    out = {}
+    for entry in entries:
+        key, _, value = str(entry).partition("=")
+        out[key] = value
+    return out
 
 
 @pytest.fixture(scope="module")
@@ -145,3 +156,55 @@ def test_the_model_dir_is_not_inside_a_mounted_volume() -> None:
             f"{mount}, which will hide it on any installation whose volume "
             "predates the artifacts"
         )
+
+
+# ---------------------------------------------------------------------------
+# Recovery
+# ---------------------------------------------------------------------------
+
+
+def test_the_executor_reset_url_in_error_messages_is_real() -> None:
+    """The one instruction emitted at the moment you are stuck must work.
+
+    When the process pool breaks, the executor disables itself and logs a URL to
+    POST to. That URL was `/api/v1/analysis/reset-executor`, which returns 405 —
+    the route is `/analysis/executor/reset` under the library router's prefix.
+    Found at 05:00 while trying to un-stick a re-analysis that had been dead for
+    half an hour, by following the instruction the software gave.
+    """
+    root = Path(__file__).resolve().parents[1] / "app"
+    executors = root / "services" / "background" / "executors.py"
+    routes = root / "api" / "routes" / "library_analysis.py"
+    if not executors.is_file() or not routes.is_file():
+        pytest.skip("source not found")
+
+    text = executors.read_text()
+    assert "/api/v1/analysis/reset-executor" not in text, (
+        "that path 405s; the route is /analysis/executor/reset under the library "
+        "router's prefix"
+    )
+    assert '@router.post("/analysis/executor/reset"' in routes.read_text(), (
+        "the route named in the error message must exist"
+    )
+    assert "/api/v1/library/analysis/executor/reset" in text
+
+
+def test_executor_auto_recovery_is_enabled_in_production() -> None:
+    """A broken pool otherwise stays broken until somebody notices.
+
+    One worker crash breaks the ProcessPoolExecutor; every task after it then
+    fails against the dead pool until the circuit breaker disables the executor
+    outright — 10,283 consecutive failures on 2026-09-03 — and it stays disabled
+    until a manual POST. Nothing errors at the API; the library just stops being
+    analysed. The default is off, which is defensible for a desktop and wrong for
+    an unattended server.
+    """
+    value = _api_environment().get("EXECUTOR_AUTO_RECOVERY_ENABLED", "")
+    # Compose interpolation: `${VAR:-default}` is the right shape here, since an
+    # operator may want it off. What must hold is that the *default* is on.
+    match = re.fullmatch(r"\$\{[A-Z_]+:-(.*)\}", value.strip())
+    effective = match.group(1) if match else value
+    assert effective.strip().lower() == "true", (
+        "without this a single worker crash halts analysis permanently and "
+        f"silently (resolves to {effective!r})"
+    )

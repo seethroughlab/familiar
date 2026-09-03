@@ -116,6 +116,16 @@ services:
       # recreated. A recreate discards anything `deploy-dev.sh` copied in, so re-run
       # `make deploy-dev` afterwards or the container silently reverts to the image.
       - MAX_ANALYSIS_WORKERS=${MAX_ANALYSIS_WORKERS:-3}
+      # A single worker crash breaks the ProcessPoolExecutor. Without recovery,
+      # every task after it fails against the dead pool until the circuit breaker
+      # disables the executor outright — 10,283 consecutive failures on
+      # 2026-09-03 — and it stays disabled until somebody POSTs to un-stick it.
+      # Nothing errors at the API; the library simply stops being analysed.
+      #
+      # Off by default, which is defensible for a desktop and wrong for a server
+      # nobody is watching. Recovery backs off 900s and gives up after 3 attempts,
+      # so it cannot mask a genuinely broken worker forever.
+      - EXECUTOR_AUTO_RECOVERY_ENABLED=${EXECUTOR_AUTO_RECOVERY_ENABLED:-true}
       # Needed for libcuda.so to reach the container. The toolkit's default
       # capability set is `utility`, which provides nvidia-smi and NVML but *not*
       # compute — so the GPU looks present while CUDA cannot initialise, and ONNX
