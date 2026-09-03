@@ -101,6 +101,21 @@ services:
       - DATABASE_URL=postgresql+asyncpg://familiar:${POSTGRES_PASSWORD:-familiar}@postgres:5432/familiar
       - REDIS_URL=redis://redis:6379/0
       - MUSIC_LIBRARY_PATH=/music
+      # Analysis process pool size. One worker leaves most of the CPU limit above
+      # idle: a track is one process, and `max_tasks_per_child=1` means it does not
+      # even amortise its own interpreter start. Measured on the deployment host —
+      # 1 worker 15.7s/track, 3 workers 11.3s/track, and with the GPU 2.9s.
+      #
+      # Each worker holds a CLAP model, so this trades memory for throughput; raise
+      # it and the `memory` limit together. Three workers measured 2.3 GiB against
+      # the 10G limit, so there is room, but scaling is sub-linear because decode
+      # and mel are disk- and CPU-bound rather than model-bound.
+      #
+      # Unlike `cpus`, this cannot be applied with `docker update` — it is read from
+      # the environment at process start, so changing it needs the container
+      # recreated. A recreate discards anything `deploy-dev.sh` copied in, so re-run
+      # `make deploy-dev` afterwards or the container silently reverts to the image.
+      - MAX_ANALYSIS_WORKERS=${MAX_ANALYSIS_WORKERS:-3}
       # Needed for libcuda.so to reach the container. The toolkit's default
       # capability set is `utility`, which provides nvidia-smi and NVML but *not*
       # compute — so the GPU looks present while CUDA cannot initialise, and ONNX
