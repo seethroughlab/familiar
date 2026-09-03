@@ -105,6 +105,59 @@ fi
 echo "Restarting container with new code..."
 ssh jeff@$NAS_HOST "docker restart familiar-api"
 
+# Verify the container actually ends up with the code we just sent.
+#
+# `docker cp` MERGES: it overwrites files and never removes them, and it has no
+# notion of newer or older. So any file left stale in $REMOTE_PATH silently
+# replaces the container's copy — including a *newer* one baked into the image.
+#
+# That is not hypothetical. On 2026-09-03 this script pushed an `analysis.py`
+# from two days earlier over the version in the running image, reverting the
+# embedder to a torch implementation the image no longer installs. Embeddings
+# switched themselves off, every library sync reported success having done
+# nothing, and it took two stalls and an hour to find, because the only symptom
+# was work not happening.
+#
+# Checks that every local file is present in the container at the same size.
+# Size is enough: the failure mode is a wholly different revision of a file, not
+# a one-byte edit, and it needs no checksum tool to agree across macOS and Linux.
+#
+# Extra files in the container are reported but not fatal. `docker cp` never
+# deletes, so every module ever removed from the repo is still sitting in there —
+# 55 of them as of this writing, including `chat.py`, which ADR-0048 deleted.
+# They are inert unless something imports them, which is its own hazard, but that
+# is a cleanup rather than a deploy failure.
+if [ "$DEPLOY_BACKEND" = true ]; then
+    echo "Verifying deployed code matches source..."
+    # LC_ALL=C on both sides: macOS and Linux `sort` disagree on where `_` and
+    # `/` fall in the default locale, so an unsorted-identically pair makes `comm`
+    # report every file as differing while the sizes match exactly.
+    LOCAL_MANIFEST=$(cd backend/app && find . -name '*.py' -not -path '*__pycache__*' \
+        -exec stat -f '%N %z' {} \; 2>/dev/null | LC_ALL=C sort)
+    REMOTE_MANIFEST=$(ssh jeff@$NAS_HOST "docker exec familiar-api sh -c \"cd /app/app && find . -name '*.py' -not -path '*__pycache__*' -exec stat -c '%n %s' {} \\; | LC_ALL=C sort\"" 2>/dev/null)
+
+    if [ -z "$REMOTE_MANIFEST" ]; then
+        echo "  WARNING: could not read the container's files; skipping verification"
+    else
+        MISSING=$(LC_ALL=C comm -23 <(echo "$LOCAL_MANIFEST") <(echo "$REMOTE_MANIFEST"))
+        ORPHANS=$(LC_ALL=C comm -13 <(echo "$LOCAL_MANIFEST" | cut -d' ' -f1 | LC_ALL=C sort) \
+                                    <(echo "$REMOTE_MANIFEST" | cut -d' ' -f1 | LC_ALL=C sort) | wc -l | tr -d ' ')
+        if [ -n "$MISSING" ]; then
+            echo ""
+            echo "  MISMATCH — the container is not running the code in this checkout."
+            echo "  Local files absent or a different size in the container:"
+            echo "$MISSING" | head -20 | sed 's/^/    /'
+            echo ""
+            echo "  Most likely $REMOTE_PATH on $NAS_HOST holds a stale copy that"
+            echo "  docker cp pushed over the image's newer one. Re-run this script;"
+            echo "  if it persists, compare against the image directly:"
+            echo "    docker run --rm --entrypoint sh <image> -c 'stat -c %s /app/app/services/analysis.py'"
+            exit 1
+        fi
+        echo "  OK: $(echo "$LOCAL_MANIFEST" | wc -l | tr -d ' ') files match ($ORPHANS orphaned in container)"
+    fi
+fi
+
 echo ""
 echo "Done! Changes deployed in ${SECONDS}s"
 echo "View at: http://$NAS_HOST:4400"
