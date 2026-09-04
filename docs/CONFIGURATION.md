@@ -60,7 +60,9 @@ not here**, and Familiar never sees it.
 
 ## Tailscale HTTPS
 
-If you access Familiar over [Tailscale](https://tailscale.com/), you can enable HTTPS for full PWA support (install prompts, background sync, etc.).
+If you access Familiar over [Tailscale](https://tailscale.com/), you can enable HTTPS for secure
+remote access to the web administration UI, API and native clients. The browser app is no longer a
+PWA, so HTTPS is for transport security rather than install prompts or background sync.
 
 1. **Enable HTTPS certificates** in your Tailscale admin console:
    - Go to [DNS settings](https://login.tailscale.com/admin/dns)

@@ -21,7 +21,7 @@
 | Self-hosted / no cloud | Yes | Yes | Yes | Partial |
 | Music video playback | Yes | — | Yes | Yes |
 | Smart playlists | Rules-based | — | — | Yes |
-| Mobile PWA | Yes | Web only | Web + apps | Apps |
+| Native Mac/iPhone clients | Yes | — | Apps | Apps |
 
 ## Screenshots
 
@@ -128,10 +128,11 @@ Three destinations — the library, the tools you run against it, and the server
 - **AcoustID fingerprinting** - Identify unknown tracks
 - **Cloud backup** - S3 Glacier Deep Archive backup (~$1/TB/month) with scheduled backups and restore
 
-### Mobile & Offline
-- **PWA support** - Install on mobile or desktop, works offline
-- **Download tracks** - Cache music for offline playback
-- **Lock screen controls** - Media notifications and controls
+### Native Clients & Remote Access
+- **Mac and iPhone clients** - Listening happens in the native apps from
+  [`familiar-apple`](https://github.com/seethroughlab/familiar-apple)
+- **Offline listening** - Native clients handle downloaded tracks and mobile playback
+- **Lock screen controls** - Media notifications and controls in the native clients
 - **Works over Tailscale** - Access your library anywhere with HTTPS
 
 ### Sharing
@@ -187,30 +188,15 @@ includes Find Similar and suggested tracks. It can be enabled later on a bigger 
 This used to be documented as an ARM64 caveat and as "4 GB recommended". Both were wrong: the
 constraint is memory rather than architecture, and 4 GB is what the model alone needs.
 
-## Keyboard Shortcuts
-
-Press `?` anytime to see all shortcuts.
-
-| Key | Action |
-|-----|--------|
-| `Space` | Play / Pause |
-| `←` / `→` | Previous / Next track |
-| `↑` / `↓` | Volume up / down |
-| `J` / `L` | Seek backward / forward 10s |
-| `S` | Toggle shuffle |
-| `R` | Cycle repeat mode |
-| `M` | Mute / Unmute |
-| `F` | Toggle full player |
-| `Esc` | Close overlay |
-| `?` | Show shortcuts help |
-
 ## Documentation
 
 - **[Installation Guide](docs/INSTALLATION.md)** - Docker, OpenMediaVault, Synology NAS, and development setup
+- **[Architecture](docs/ARCHITECTURE.md)** - Current server/web/native-client boundaries
 - **[macOS Guide](docs/MACOS.md)** - Docker Desktop setup, Apple Silicon, music library paths
 - **[Configuration](docs/CONFIGURATION.md)** - Environment variables, API keys, Tailscale HTTPS, cloud backup
 - **[Library Browser API](docs/LIBRARY_BROWSERS.md)** - Create custom 2D/3D library visualizations
 - **[REST API Reference](docs/REST-API.md)** - Backend REST API documentation
+- **[Contributing](CONTRIBUTING.md)** - Local workflow, guardrails and PR checks
 
 ## Coming Soon
 
@@ -247,21 +233,26 @@ familiar/
 │   │   ├── services/ # Business logic + background tasks
 │   │   └── utils/    # Utilities
 │   └── tests/
-├── frontend/         # React + TypeScript PWA
-│   ├── src/
-│   │   ├── api/      # API client modules
-│   │   ├── components/
-│   │   ├── hooks/
-│   │   ├── player/   # Audio engine, stores, persistence
-│   │   ├── services/ # Offline, sync services
-│   │   └── stores/   # Zustand state
+├── packages/
+│   ├── frontend/     # Shared React code for web, embed and visualizer entry points
+│   │   └── src/
+│   │       ├── api/        # API client modules
+│   │       ├── app/        # Routes and app shell
+│   │       ├── components/
+│   │       ├── hooks/
+│   │       ├── panels/     # Library, tools and server panels
+│   │       ├── screens/    # Top-level web destinations
+│   │       ├── services/
+│   │       └── stores/     # Zustand state
+│   ├── web/          # Vite web/admin/embed/visualizer entry points
+│   └── visualizers/  # Bundled visualizer documents and examples
 ├── docker/           # Docker configuration
 └── docs/             # Documentation
 ```
 
 ## Contributing
 
-Contributions are welcome! Please read our contributing guidelines before submitting PRs.
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting PRs.
 
 ## License
 
