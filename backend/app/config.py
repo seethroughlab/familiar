@@ -90,8 +90,67 @@ class Settings(BaseSettings):
 
     @property
     def sync_database_url(self) -> str:
-        """Synchronous database URL for Alembic or sync operations."""
-        return self.database_url.replace("+asyncpg", "")
+        """Synchronous database URL for Alembic or sync operations.
+
+        Dropping `+asyncpg` is not enough: the query string may carry options
+        only asyncpg understands, and psycopg2 rejects the whole DSN rather than
+        ignoring them. The demo server's backups failed on every run with
+
+            (psycopg2.ProgrammingError) invalid dsn:
+            invalid connection option "ssl"
+
+        because its URL ends `?ssl=require`. The NAS has no such parameter, so
+        the nightly backups there were green throughout and said nothing about
+        this path.
+
+        `ssl` is translated rather than dropped — silently discarding it would
+        turn a TLS connection into a plaintext one, which is worse than failing.
+        """
+        from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+        url = self.database_url.replace("+asyncpg", "")
+        parts = urlsplit(url)
+        if not parts.query:
+            return url
+
+        # asyncpg's `ssl` maps onto libpq's `sslmode`; the truthy spellings all
+        # mean "require TLS".
+        ssl_to_sslmode = {
+            "true": "require",
+            "1": "require",
+            "require": "require",
+            "yes": "require",
+            "on": "require",
+            "false": "disable",
+            "0": "disable",
+            "disable": "disable",
+            "off": "disable",
+            "prefer": "prefer",
+            "allow": "allow",
+            "verify-ca": "verify-ca",
+            "verify-full": "verify-full",
+        }
+        # Options asyncpg accepts and libpq does not. Passing any of them makes
+        # psycopg2 reject the entire DSN.
+        asyncpg_only = {
+            "server_settings",
+            "command_timeout",
+            "statement_cache_size",
+            "prepared_statement_cache_size",
+            "max_cached_statement_lifetime",
+            "max_cacheable_statement_size",
+        }
+
+        kept: list[tuple[str, str]] = []
+        for key, value in parse_qsl(parts.query, keep_blank_values=True):
+            if key == "ssl":
+                kept.append(("sslmode", ssl_to_sslmode.get(value.lower(), "require")))
+            elif key in asyncpg_only:
+                continue
+            else:
+                kept.append((key, value))
+
+        return urlunsplit(parts._replace(query=urlencode(kept)))
 
 
 # Per-phase analysis version constants
