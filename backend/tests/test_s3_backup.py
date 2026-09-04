@@ -183,9 +183,13 @@ def fake_pg(tmp_path):
         obj = client.get_object(Bucket=bucket, Key=s3_key)
         restored["bytes"] = gzip.decompress(obj["Body"].read())
 
+    def fake_pg_dump_to(self, out_path):
+        Path(out_path).write_bytes(gzip.compress(dump_payload))
+
     with (
         patch.object(s3mod.S3BackupService, "_backup_database", fake_dump),
         patch.object(s3mod.S3BackupService, "_restore_database", fake_restore),
+        patch.object(s3mod.S3BackupService, "_pg_dump_to", fake_pg_dump_to),
     ):
         yield SimpleNamespace(payload=dump_payload, restored=restored)
 
@@ -376,3 +380,75 @@ def test_validate_fails_on_a_bucket_that_does_not_exist(fake_redis, s3_settings)
     )
     assert result.get("valid") is False
     assert result.get("error")
+
+
+# --- the safety dump -------------------------------------------------------
+
+
+@mock_aws
+def test_restore_writes_a_local_safety_dump_before_overwriting_the_database(
+    fake_redis, s3_settings, library, fake_pg
+):
+    """`download_and_restore` runs psql against the live database.
+
+    The endpoint docstring promised "creates a local safety backup first" and
+    nothing produced one, so the operation had no undo. This pins the promise.
+    """
+    client = boto3.client("s3", region_name=REGION)
+    _bucket(client)
+    _service().run_backup()
+    _service().initiate_restore()
+    fake_redis.kv.pop(s3mod.REDIS_BACKUP_LOCK, None)
+
+    _service().download_and_restore()
+
+    dumps = sorted((library.root / "data" / "restore-safety").glob("pre-restore_*.sql.gz"))
+    assert dumps, "no safety dump was written before the restore"
+    assert dumps[0].stat().st_size > 0
+
+
+@mock_aws
+def test_a_restore_aborts_when_the_safety_dump_fails(fake_redis, s3_settings, library, fake_pg):
+    """Refusing the restore beats running it with no way back.
+
+    The worst available failure mode is skipping the safety net silently and
+    letting psql overwrite the database anyway.
+    """
+    client = boto3.client("s3", region_name=REGION)
+    _bucket(client)
+    _service().run_backup()
+    _service().initiate_restore()
+    fake_redis.kv.pop(s3mod.REDIS_BACKUP_LOCK, None)
+
+    def boom(self, out_path):
+        raise RuntimeError("pg_dump: connection refused")
+
+    with patch.object(s3mod.S3BackupService, "_pg_dump_to", boom):
+        result = _service().download_and_restore()
+
+    assert result.get("status") == "error", result
+    assert "safety dump" in (result.get("error") or "").lower()
+    assert fake_pg.restored == {}, "database was overwritten despite no safety dump"
+
+
+@mock_aws
+def test_the_safety_dump_stays_local_rather_than_going_to_glacier(
+    fake_redis, s3_settings, library, fake_pg
+):
+    """A safety copy behind a 12-48 hour thaw is not a safety copy.
+
+    The restore is already running because S3 is being read, so the undo has to
+    be reachable without S3 at all.
+    """
+    client = boto3.client("s3", region_name=REGION)
+    _bucket(client)
+    _service().run_backup()
+    _service().initiate_restore()
+    fake_redis.kv.pop(s3mod.REDIS_BACKUP_LOCK, None)
+
+    before = {o["Key"] for o in client.list_objects_v2(Bucket=BUCKET).get("Contents", [])}
+    _service().download_and_restore()
+    after = {o["Key"] for o in client.list_objects_v2(Bucket=BUCKET).get("Contents", [])}
+
+    assert after == before, "the safety dump was uploaded instead of kept local"
+    assert (library.root / "data" / "restore-safety").is_dir()

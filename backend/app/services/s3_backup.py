@@ -289,7 +289,9 @@ class S3BackupService:
             engine = create_engine(app_config.sync_database_url)
             with engine.connect() as conn:
                 row = conn.execute(
-                    text("SELECT COUNT(*), COALESCE(SUM(file_size), 0) FROM tracks WHERE file_size IS NOT NULL")
+                    text(
+                        "SELECT COUNT(*), COALESCE(SUM(file_size), 0) FROM tracks WHERE file_size IS NOT NULL"
+                    )
                 ).fetchone()
                 if row:
                     audio_count = int(row[0] or 0)
@@ -337,9 +339,7 @@ class S3BackupService:
         try:
             engine = create_engine(app_config.sync_database_url)
             with engine.connect() as conn:
-                row = conn.execute(
-                    text("SELECT pg_database_size(current_database())")
-                ).fetchone()
+                row = conn.execute(text("SELECT pg_database_size(current_database())")).fetchone()
                 if row:
                     db_size = row[0] or 0
             engine.dispose()
@@ -375,8 +375,7 @@ class S3BackupService:
 
         # Estimated full restore cost (retrieval + GET)
         glacier_size_gb = sum(
-            c["size_gb"] for name, c in categories.items()
-            if name not in ("database", "settings")
+            c["size_gb"] for name, c in categories.items() if name not in ("database", "settings")
         )
         estimated_restore_cost = glacier_size_gb * DEEP_ARCHIVE_RETRIEVAL_PER_GB
 
@@ -447,7 +446,9 @@ class S3BackupService:
             if settings_path.exists():
                 s_key = _s3_key(prefix, "settings.json")
                 client.upload_file(
-                    str(settings_path), bucket, s_key,
+                    str(settings_path),
+                    bucket,
+                    s_key,
                     ExtraArgs={"StorageClass": "STANDARD"},
                 )
                 manifest["settings"] = {
@@ -460,7 +461,9 @@ class S3BackupService:
             engine = create_engine(app_config.sync_database_url)
             with engine.connect() as conn:
                 rows = conn.execute(
-                    text("SELECT id, file_path, file_hash, file_size FROM tracks WHERE file_hash IS NOT NULL")
+                    text(
+                        "SELECT id, file_path, file_hash, file_size FROM tracks WHERE file_hash IS NOT NULL"
+                    )
                 ).fetchall()
             engine.dispose()
 
@@ -503,7 +506,9 @@ class S3BackupService:
 
                 try:
                     client.upload_file(
-                        str(fp), bucket, s3_full_key,
+                        str(fp),
+                        bucket,
+                        s3_full_key,
                         ExtraArgs={"StorageClass": "DEEP_ARCHIVE"},
                         Config=transfer_config,
                     )
@@ -533,22 +538,40 @@ class S3BackupService:
             # Phase: Artwork
             progress.update(phase="artwork")
             self._backup_directory(
-                client, bucket, prefix, Path(app_config.art_path),
-                "artwork", manifest, progress, transfer_config,
+                client,
+                bucket,
+                prefix,
+                Path(app_config.art_path),
+                "artwork",
+                manifest,
+                progress,
+                transfer_config,
             )
 
             # Phase: Videos
             progress.update(phase="videos")
             self._backup_directory(
-                client, bucket, prefix, Path(app_config.videos_path),
-                "videos", manifest, progress, transfer_config,
+                client,
+                bucket,
+                prefix,
+                Path(app_config.videos_path),
+                "videos",
+                manifest,
+                progress,
+                transfer_config,
             )
 
             # Phase: Profiles
             progress.update(phase="profiles")
             self._backup_directory(
-                client, bucket, prefix, Path(app_config.profiles_path),
-                "profiles", manifest, progress, transfer_config,
+                client,
+                bucket,
+                prefix,
+                Path(app_config.profiles_path),
+                "profiles",
+                manifest,
+                progress,
+                transfer_config,
             )
 
             # Write manifest
@@ -561,14 +584,16 @@ class S3BackupService:
             progress.update(phase="complete", status="complete", current_file=None)
 
             # Save to history
-            self._save_history_entry({
-                "timestamp": utcnow().isoformat(),
-                "duration_seconds": round(duration, 1),
-                "files_uploaded": final["files_uploaded"],
-                "files_skipped": final["files_skipped"],
-                "bytes_uploaded": final["bytes_uploaded"],
-                "status": "success",
-            })
+            self._save_history_entry(
+                {
+                    "timestamp": utcnow().isoformat(),
+                    "duration_seconds": round(duration, 1),
+                    "files_uploaded": final["files_uploaded"],
+                    "files_skipped": final["files_skipped"],
+                    "bytes_uploaded": final["bytes_uploaded"],
+                    "status": "success",
+                }
+            )
 
             return {
                 "status": "success",
@@ -581,15 +606,17 @@ class S3BackupService:
         except Exception as e:
             logger.error(f"Backup failed: {e}", exc_info=True)
             progress.update(phase="error", status="error", error=str(e))
-            self._save_history_entry({
-                "timestamp": utcnow().isoformat(),
-                "duration_seconds": round(time.monotonic() - start_time, 1),
-                "files_uploaded": progress.get()["files_uploaded"],
-                "files_skipped": progress.get()["files_skipped"],
-                "bytes_uploaded": progress.get()["bytes_uploaded"],
-                "status": "error",
-                "error": str(e),
-            })
+            self._save_history_entry(
+                {
+                    "timestamp": utcnow().isoformat(),
+                    "duration_seconds": round(time.monotonic() - start_time, 1),
+                    "files_uploaded": progress.get()["files_uploaded"],
+                    "files_skipped": progress.get()["files_skipped"],
+                    "bytes_uploaded": progress.get()["bytes_uploaded"],
+                    "status": "error",
+                    "error": str(e),
+                }
+            )
             return {"status": "error", "error": str(e)}
         finally:
             try:
@@ -597,51 +624,81 @@ class S3BackupService:
             except Exception:
                 pass
 
-    def _backup_database(
-        self, client: Any, bucket: str, prefix: str
-    ) -> tuple[str, int, str]:
-        """Run pg_dump, gzip, upload to S3 Standard. Returns (key, size, checksum)."""
-        db_url = app_config.sync_database_url
-        # Parse connection string for pg_dump
-        # Format: postgresql://user:pass@host:port/dbname
+    def _pg_dump_to(self, out_path: str) -> None:
+        """Run `pg_dump | gzip` into `out_path`. Raises if pg_dump fails.
+
+        Shared by the S3 upload and by `_safety_dump`, so the copy taken before a
+        restore is produced by exactly the same command as the copy that is
+        archived — a safety net built differently from the thing it protects is a
+        second implementation to get wrong.
+        """
         from urllib.parse import urlparse
 
-        parsed = urlparse(db_url)
+        parsed = urlparse(app_config.sync_database_url)
 
         env = os.environ.copy()
         if parsed.password:
             env["PGPASSWORD"] = parsed.password
 
+        pg_dump_cmd = [
+            "pg_dump",
+            "-h",
+            parsed.hostname or "localhost",
+            "-p",
+            str(parsed.port or 5432),
+            "-U",
+            parsed.username or "familiar",
+            "-d",
+            parsed.path.lstrip("/") if parsed.path else "familiar",
+            "--no-owner",
+            "--no-acl",
+        ]
+
+        with open(out_path, "wb") as out_f:
+            dump_proc = subprocess.Popen(
+                pg_dump_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env
+            )
+            with gzip.open(out_f, "wb") as gz:
+                while True:
+                    chunk = dump_proc.stdout.read(65536)
+                    if not chunk:
+                        break
+                    gz.write(chunk)
+
+            dump_proc.wait()
+            if dump_proc.returncode != 0:
+                stderr = dump_proc.stderr.read().decode() if dump_proc.stderr else ""
+                raise RuntimeError(f"pg_dump failed: {stderr}")
+
+    def _safety_dump(self) -> Path:
+        """Dump the current database to local disk before a restore overwrites it.
+
+        `download_and_restore` runs `psql` against the live database. Without this
+        the operation has no undo, and the endpoint's own docstring promised a
+        safety copy that nothing produced.
+
+        Deliberately local and outside S3: the restore is already happening
+        because S3 is being read, and a safety copy that needs a 12-hour Glacier
+        thaw to reach is not a safety copy. Raises if the dump fails, so a
+        restore cannot proceed unprotected.
+        """
+        safety_dir = Path("data/restore-safety")
+        safety_dir.mkdir(parents=True, exist_ok=True)
+        stamp = utcnow().strftime("%Y%m%d_%H%M%S")
+        out = safety_dir / f"pre-restore_{stamp}.sql.gz"
+        self._pg_dump_to(str(out))
+        if not out.exists() or out.stat().st_size == 0:
+            raise RuntimeError(f"safety dump produced no data at {out}")
+        logger.info(f"Pre-restore safety dump written: {out} ({out.stat().st_size} bytes)")
+        return out
+
+    def _backup_database(self, client: Any, bucket: str, prefix: str) -> tuple[str, int, str]:
+        """Run pg_dump, gzip, upload to S3 Standard. Returns (key, size, checksum)."""
         with tempfile.NamedTemporaryFile(suffix=".sql.gz", delete=False) as tmp:
             tmp_path = tmp.name
 
         try:
-            # pg_dump | gzip
-            pg_dump_cmd = [
-                "pg_dump",
-                "-h", parsed.hostname or "localhost",
-                "-p", str(parsed.port or 5432),
-                "-U", parsed.username or "familiar",
-                "-d", parsed.path.lstrip("/") if parsed.path else "familiar",
-                "--no-owner",
-                "--no-acl",
-            ]
-
-            with open(tmp_path, "wb") as out_f:
-                dump_proc = subprocess.Popen(
-                    pg_dump_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env
-                )
-                with gzip.open(out_f, "wb") as gz:
-                    while True:
-                        chunk = dump_proc.stdout.read(65536)
-                        if not chunk:
-                            break
-                        gz.write(chunk)
-
-                dump_proc.wait()
-                if dump_proc.returncode != 0:
-                    stderr = dump_proc.stderr.read().decode() if dump_proc.stderr else ""
-                    raise RuntimeError(f"pg_dump failed: {stderr}")
+            self._pg_dump_to(tmp_path)
 
             size = os.path.getsize(tmp_path)
             checksum = _hash_file(Path(tmp_path))
@@ -650,7 +707,9 @@ class S3BackupService:
             s3_key = _s3_key(prefix, f"database/familiar_{timestamp}.sql.gz")
 
             client.upload_file(
-                tmp_path, bucket, s3_key,
+                tmp_path,
+                bucket,
+                s3_key,
                 ExtraArgs={"StorageClass": "STANDARD"},
             )
 
@@ -701,7 +760,9 @@ class S3BackupService:
 
             try:
                 client.upload_file(
-                    str(filepath), bucket, s3_full_key,
+                    str(filepath),
+                    bucket,
+                    s3_full_key,
                     ExtraArgs={"StorageClass": "DEEP_ARCHIVE"},
                     Config=transfer_config,
                 )
@@ -866,8 +927,7 @@ class S3BackupService:
         # Filter by category
         if categories:
             files = {
-                k: v for k, v in files.items()
-                if any(k.startswith(cat + "/") for cat in categories)
+                k: v for k, v in files.items() if any(k.startswith(cat + "/") for cat in categories)
             }
 
         total = len(files)
@@ -936,14 +996,10 @@ class S3BackupService:
         categories = state.get("categories", ["all"])
         if "all" not in categories:
             files = {
-                k: v for k, v in files.items()
-                if any(k.startswith(cat + "/") for cat in categories)
+                k: v for k, v in files.items() if any(k.startswith(cat + "/") for cat in categories)
             }
 
-        glacier_files = {
-            k: v for k, v in files.items()
-            if v.get("storage_class") == "DEEP_ARCHIVE"
-        }
+        glacier_files = {k: v for k, v in files.items() if v.get("storage_class") == "DEEP_ARCHIVE"}
 
         if not glacier_files:
             state["status"] = "available"
@@ -981,10 +1037,14 @@ class S3BackupService:
     def download_and_restore(self) -> dict[str, Any]:
         """Download restored files from S3 and apply. Runs synchronously in thread executor.
 
+        0. Dump the current database locally, so this is survivable
         1. Download + apply pg_dump (restore DB)
         2. Download settings.json
         3. Download audio files to original paths (skip if local hash matches)
         4. Download artwork, videos, profile avatars
+
+        Step 0 is not optional. Step 1 runs `psql` against the live database, so
+        without a local copy first this operation has no undo at all.
         """
         from botocore.exceptions import ClientError
 
@@ -1000,6 +1060,23 @@ class S3BackupService:
         start_time = time.monotonic()
 
         try:
+            # Phase: Safety dump. Before anything is overwritten, and fatal if it
+            # fails — proceeding would leave no way back to the current state.
+            progress.update(phase="safety_dump", current_file="pre-restore pg_dump")
+            try:
+                safety_path = self._safety_dump()
+            except Exception as e:
+                progress.update(
+                    status="error",
+                    error=f"Pre-restore safety dump failed, restore aborted: {e}",
+                )
+                logger.error(f"Restore aborted — safety dump failed: {e}")
+                return {
+                    "status": "error",
+                    "error": f"Pre-restore safety dump failed, restore aborted: {e}",
+                }
+            progress.update(safety_dump=str(safety_path))
+
             # Phase: Database
             db_info = manifest.get("database")
             if db_info:
@@ -1112,10 +1189,14 @@ class S3BackupService:
 
             restore_cmd = [
                 "psql",
-                "-h", parsed.hostname or "localhost",
-                "-p", str(parsed.port or 5432),
-                "-U", parsed.username or "familiar",
-                "-d", parsed.path.lstrip("/") if parsed.path else "familiar",
+                "-h",
+                parsed.hostname or "localhost",
+                "-p",
+                str(parsed.port or 5432),
+                "-U",
+                parsed.username or "familiar",
+                "-d",
+                parsed.path.lstrip("/") if parsed.path else "familiar",
             ]
 
             proc = subprocess.run(
