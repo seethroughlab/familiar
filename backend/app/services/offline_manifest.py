@@ -30,6 +30,7 @@ from app.services.ambient import (
     _row_to_descriptor,
     score_candidate,
 )
+from app.services.ambient_fitness import ambient_seed_conditions
 from app.services.ranking_profiles import RankingProfile
 
 logger = get_logger(__name__)
@@ -179,15 +180,9 @@ async def eligible_seed_ids(
     if not track_ids:
         return []
 
-    conditions = [
-        Track.active_filter(),
-        Track.id.in_(list(track_ids)),
-        TrackAnalysis.instrumentalness >= 0.5,
-        TrackAnalysis.speechiness <= 0.5,
-        TrackAnalysis.energy <= 0.7,
-        TrackAnalysis.energy.isnot(None),
-        Track.duration_seconds >= 60,
-    ]
+    # Shared with `pick_surprise_seed` rather than restated. The docstring above used to claim
+    # "same filters as pick_surprise_seed", which was true and had no way to stay true.
+    conditions = [Track.id.in_(list(track_ids)), *ambient_seed_conditions()]
     conditions.extend(_build_filter_conditions(filter_preset))
 
     rows = (

@@ -21,6 +21,10 @@ from app.db.models import (
     TrackAnalysis,
 )
 from app.logging_config import get_logger
+from app.services.ambient_fitness import (
+    ambient_fitness,
+    ambient_seed_conditions,
+)
 from app.services.ranking_profiles import AMBIENT, RankingProfile
 from app.services.taste_weighting import SHUFFLE_PRESETS, compute_track_weight
 from app.utils.time import utcnow
@@ -424,6 +428,22 @@ async def get_track_descriptor(
     return _row_to_descriptor(row[0], row[1])
 
 
+def _fitness_of(a: TrackAnalysis) -> float:
+    """`ambient_fitness` over a row.
+
+    The two seed paths used to score this differently — one targeting energy 0.25 with a 3.33
+    slope, the other 0.4 with no slope — so given one artist with tracks at 0.20 and 0.45 they
+    picked **different** tracks and disagreed about which was the more ambient.
+    """
+    return ambient_fitness(
+        energy=a.energy,
+        bpm=a.bpm,
+        acousticness=a.acousticness,
+        instrumentalness=a.instrumentalness,
+        speechiness=a.speechiness,
+    )
+
+
 async def pick_surprise_seed(
     db: AsyncSession,
     filter_preset: str = "all",
@@ -440,18 +460,11 @@ async def pick_surprise_seed(
     score inside this function still prefers the lowest-energy candidate
     from the pool, so the final seed is as quiet as the library allows.
     """
-    base_conditions = [
-        # The same exclusion `get_candidates` gained and this path did not: a MISSING track is a
-        # file no longer on disk and 404s on stream. Missing it here is worse than missing it
-        # there — a bad candidate is one skipped transition, a bad *seed* is a session that
-        # cannot start at all. Restored with the routes under ADR-0106 point 6.
-        Track.active_filter(),
-        TrackAnalysis.instrumentalness >= 0.5,
-        TrackAnalysis.speechiness <= 0.5,
-        TrackAnalysis.energy <= 0.7,
-        Track.duration_seconds >= 60,
-        TrackAnalysis.energy.isnot(None),
-    ]
+    # The exclusion `get_candidates` gained and this path did not: a MISSING track is a file no
+    # longer on disk and 404s on stream. A bad candidate is one skipped transition; a bad *seed*
+    # is a session that cannot start at all (ADR-0106 point 6). Shared, so the three places that
+    # once inlined these values cannot drift apart again.
+    base_conditions = ambient_seed_conditions()
     base_conditions.extend(_build_filter_conditions(filter_preset))
 
     result = await db.execute(
@@ -465,16 +478,7 @@ async def pick_surprise_seed(
     if not rows:
         return None
 
-    # Score by ambient fitness: high instrumentalness + low speechiness + moderate energy
-    def ambient_fitness(t: Track, a: TrackAnalysis) -> float:
-        inst = _safe_float(a.instrumentalness)
-        speech = _safe_float(a.speechiness)
-        energy = _safe_float(a.energy)
-        # Prefer low energy (0.1–0.4 sweet spot)
-        energy_bonus = 1.0 - abs(energy - 0.25) * 3.33
-        return inst * 0.4 + (1.0 - speech) * 0.3 + max(0, energy_bonus) * 0.3
-
-    best = max(rows, key=lambda r: ambient_fitness(r[0], r[1]))
+    best = max(rows, key=lambda r: _fitness_of(r[1]))
     return _row_to_descriptor(best[0], best[1])
 
 
@@ -788,15 +792,14 @@ async def find_seed_by_artist(
         select(Track, TrackAnalysis)
         .join(TrackAnalysis, TrackAnalysis.track_id == Track.id)
         .where(and_(*base_conditions))
+        # Without this the LIMIT took whichever 20 rows the table happened to return first, so a
+        # prolific artist's seed depended on physical row order.
+        .order_by(func.random())
         .limit(20)
     )
     rows = result.all()
     if not rows:
         return None
 
-    # Pick the most ambient-friendly track from this artist
-    def fitness(t: Track, a: TrackAnalysis) -> float:
-        return _safe_float(a.instrumentalness) * 0.4 + (1.0 - _safe_float(a.speechiness)) * 0.3 + (1.0 - abs(_safe_float(a.energy) - 0.4)) * 0.3
-
-    best = max(rows, key=lambda r: fitness(r[0], r[1]))
+    best = max(rows, key=lambda r: _fitness_of(r[1]))
     return _row_to_descriptor(best[0], best[1])
