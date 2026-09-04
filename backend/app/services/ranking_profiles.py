@@ -44,13 +44,41 @@ class AmbientPool:
     eligible does not depend on what is playing.
     """
 
-    #: Above this fitness a track is "ambient enough". Measured, not guessed: at 0.60 roughly
-    #: 14% of a 26,000-track library clears it. See `ambient_fitness`.
+    #: Above this fitness a track is "ambient enough".
+    #:
+    #: **The band above 0.60 is bottom-heavy, and that is a sampling problem rather than a
+    #: floor problem.** Measured on a 26,000-track library: 3,475 tracks clear 0.60, but
+    #: 1,334 sit in 0.60–0.70 and 1,432 in 0.70–0.80 against only 203 above 0.90. Drawn
+    #: uniformly, about five of `library_rows`' ninety came from the genuinely ambient end
+    #: and a session sounded like the floor rather than like the band.
+    #:
+    #: Raising the floor was tried and deliberately **not** taken: at 0.80 the band falls to
+    #: 709 tracks, which buys a better mix by making five sixths of the eligible music
+    #: ineligible, and long sessions would circle the same few hundred records.
+    #: `library_weight_exponent` gets the same effect out of the existing band — it lifts the
+    #: share of picks above 0.90 from 5.8% to roughly 23% while nothing stops being eligible.
+    #: A floor decides what is *allowed*; it was never the right tool for what is *likely*.
     fitness_floor: float
     #: Fit *and* near — continuity, when the current track is anywhere near the ambient end.
     neighbour_rows: int
     #: Fit, from anywhere. **The branch that breaks the lock-in.**
     library_rows: int
+    #: How sharply the library draw prefers the top of the band over its floor.
+    #:
+    #: A floor decides where the band starts and nothing about the shape of what it admits, so
+    #: a uniform draw returns whatever the band's mass happens to be — which for a real library
+    #: is its least ambient end. The draw is weighted by ``fitness ** library_weight_exponent``
+    #: instead. At 6, across the measured 0.60–1.00 band, a 1.00 track is about thirteen times
+    #: as likely as a 0.65 one, lifting the expected share of a 90-row draw scoring above 0.90
+    #: from 5.8% to roughly 23%, and above 0.80 from 20% to about 50%.
+    #:
+    #: **A weight of zero must never mean "ineligible".** Weighting is how the floor is allowed
+    #: to stay low: every track above the floor keeps a real chance, so nothing that used to be
+    #: reachable stops being reachable. If this ever became a filter it would be a second,
+    #: undeclared floor — `test_ambient_pool_weighting.py` guards exactly that.
+    #:
+    #: **1.0 is not "off"** — over a narrow band a linear weight is nearly uniform. Use 0.
+    library_weight_exponent: float
     #: Ungated neighbours, for the deliberate departures.
     excursion_rows: int
     #: One candidate in this many is drawn from the excursions.
@@ -61,6 +89,7 @@ AMBIENT_POOL = AmbientPool(
     fitness_floor=0.60,
     neighbour_rows=60,
     library_rows=90,
+    library_weight_exponent=6.0,
     excursion_rows=40,
     excursion_period=8,
 )

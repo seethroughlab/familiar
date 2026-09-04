@@ -5,6 +5,12 @@ Status: accepted
 Date: 2026-09-01
 
 Implementation:
+- **Point 8 is superseded by [ADR-0108](ADR-0108-ambient-composes-its-pool-rather-than-retrieving-it.md),
+  and was already false before that.** It claims *"nothing is added to the ranking engine… `AMBIENT`
+  stays byte-exact"*. Commit `4968b966` (2026-09-03) added `liveliness_ceiling` and
+  `liveliness_penalty` to `AMBIENT` two days after this ADR was accepted, and ADR-0108 then added a
+  pool composition and a fitness score. The rest of this ADR stands; the note below recording that
+  "point 8 held" was true when written and is not any more.
 - **Two routes, not three, and a defect fixed on radio.** Reviewed after acceptance against the
   question "could an existing endpoint have done this?". `GET /ambient/descriptor/{track_id}` had no
   caller and is not restored (point 1). `POST /radio/suggestions` now populates `features`, which it
