@@ -5,6 +5,7 @@ candidate ranking, filter presets, seed selection, and snippet window hints.
 No session persistence; all state lives on the client.
 """
 
+import hashlib
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
@@ -22,7 +23,9 @@ from app.db.models import (
 )
 from app.logging_config import get_logger
 from app.services.ambient_fitness import (
+    ambient_fitness_sql,
     ambient_seed_conditions,
+    measure_calibration,
     seed_fitness,
 )
 from app.services.ranking_profiles import AMBIENT, RankingProfile
@@ -626,6 +629,69 @@ async def _fetch_negative_signal(
     return {r.track_id: (r.skips or 0, r.rejects or 0) for r in rows}
 
 
+def excursion_phase(current_track_id: UUID, period: int) -> int:
+    """Which slot in the cycle this request's excursion falls in.
+
+    Derived from the current track rather than a session counter, because the client sends no
+    session position — `prefetch` sends the current window, five of history and what is already
+    planned, which counts nothing. A stable hash gives a phase that is uniform across seeds,
+    constant for a given one (so a retried request answers identically rather than re-rolling),
+    and pinnable in a test.
+
+    **`blake2b`, never the builtin `hash()`.** `hash()` on `bytes` is salted per process by
+    PYTHONHASHSEED, so two uvicorn workers would disagree about the same track and a test
+    pinning the value would pass locally and fail in CI.
+    """
+    if period <= 1:
+        return 0
+    digest = hashlib.blake2b(current_track_id.bytes, digest_size=8).digest()
+    return int.from_bytes(digest, "big") % period
+
+
+def interleave_excursions(
+    fit: list[AmbientCandidate],
+    excursions: list[AmbientCandidate],
+    *,
+    period: int,
+    phase: int,
+) -> list[AmbientCandidate]:
+    """Place an excursion in every `period`-th slot, starting at `phase`.
+
+    The rate is a property of **every prefix** of the result, and that is the point. The client
+    takes three candidates on seed and two on each top-up, and neither number appears here —
+    anything tuned against "two per request" would be tuned against a constant in another
+    repository. Averaged over a uniform phase, a prefix of length k holds k/period excursions.
+
+    The slot is filled regardless of score. An excursion is a decision about texture, not about
+    compatibility, and `liveliness_penalty` would otherwise rank every one of them out of
+    existence — which is precisely how the feature lost its variety in the first place.
+
+    Falls back to fit order when the excursions run out; one is never manufactured to fill a
+    slot.
+    """
+    if not excursions or period <= 1:
+        return fit
+
+    out: list[AmbientCandidate] = []
+    remaining = list(excursions)
+    fit_iter = iter(fit)
+    index = 0
+    while True:
+        if index % period == phase and remaining:
+            out.append(remaining.pop(0))
+        else:
+            nxt = next(fit_iter, None)
+            if nxt is None:
+                # Fit exhausted. Anything left is still a real candidate the pool paid for,
+                # so it goes on the end rather than being discarded — dropping it would make
+                # the returned list shorter than the caller's limit for no reason.
+                out.extend(remaining)
+                break
+            out.append(nxt)
+        index += 1
+    return out
+
+
 async def get_candidates(
     db: AsyncSession,
     current_track_id: UUID,
@@ -687,35 +753,112 @@ async def get_candidates(
         # connection inherits a larger search than it asked for.
         await db.execute(text(f"SET LOCAL hnsw.ef_search = {CANDIDATE_EF_SEARCH}"))
 
-        # Use embedding similarity for initial ranking
-        cosine_dist = TrackAnalysis.embedding.cosine_distance(current_embedding)
-        query = (
-            select(
-                Track,
-                TrackAnalysis,
-                (1 - cosine_dist).label("embedding_similarity"),
+    pool = profile.pool
+    cosine_dist = (
+        TrackAnalysis.embedding.cosine_distance(current_embedding)
+        if current_embedding is not None
+        else None
+    )
+
+    def _neighbours(limit: int, extra: list | None = None):
+        """Today's query: the nearest `limit` tracks, optionally gated further."""
+        conditions = [*base_conditions, *(extra or [])]
+        if cosine_dist is None:
+            return (
+                select(Track, TrackAnalysis, text("0.5 as embedding_similarity"))
+                .join(TrackAnalysis, TrackAnalysis.track_id == Track.id)
+                .where(and_(*conditions))
+                .order_by(func.random())
+                .limit(limit)
             )
+        return (
+            select(Track, TrackAnalysis, (1 - cosine_dist).label("embedding_similarity"))
             .join(TrackAnalysis, TrackAnalysis.track_id == Track.id)
-            .where(and_(*base_conditions, TrackAnalysis.embedding.isnot(None)))
+            .where(and_(*conditions, TrackAnalysis.embedding.isnot(None)))
             .order_by(cosine_dist)
-            .limit(CANDIDATE_POOL)
-        )
-    else:
-        # No embedding — fall back to random sampling
-        query = (
-            select(
-                Track,
-                TrackAnalysis,
-                text("0.5 as embedding_similarity"),
-            )
-            .join(TrackAnalysis, TrackAnalysis.track_id == Track.id)
-            .where(and_(*base_conditions))
-            .order_by(func.random())
-            .limit(CANDIDATE_POOL)
+            .limit(limit)
         )
 
-    result = await db.execute(query)
-    rows = result.all()
+    if pool is None:
+        # Radio, playlists, discovery — unchanged, one query, byte for byte.
+        rows = (await db.execute(_neighbours(CANDIDATE_POOL))).all()
+        excursion_ids: set[UUID] = set()
+    else:
+        calibration = await measure_calibration(db)
+        fitness = ambient_fitness_sql(calibration)
+        fit_gate = [
+            # Sargable conjuncts *as well as* the fitness expression. Both are implied by the
+            # floor; they exist so the planner can narrow with `ix_track_analysis_energy`
+            # before evaluating an expression no index can serve.
+            TrackAnalysis.energy <= calibration.energy_zero,
+            fitness >= pool.fitness_floor,
+        ]
+
+        # F1 — fit *and* near. Empty when the current track is far from the ambient end, which
+        # is exactly the case this whole change exists for; F2 is what covers it.
+        fit_near = (await db.execute(_neighbours(pool.neighbour_rows, fit_gate))).all()
+
+        # F2 — fit, from anywhere. **The line that breaks the lock-in.** `cosine_dist` stays in
+        # the SELECT list but not in ORDER BY, so this never touches the HNSW index and is not
+        # bounded by `ef_search` — while the rows still carry a real similarity, so they
+        # compete fairly on the `embedding` weight instead of falling back to a neutral 0.5.
+        fit_any_query = (
+            select(Track, TrackAnalysis, (1 - cosine_dist).label("embedding_similarity"))
+            if cosine_dist is not None
+            else select(Track, TrackAnalysis, text("0.5 as embedding_similarity"))
+        )
+        fit_any = (
+            await db.execute(
+                fit_any_query.join(TrackAnalysis, TrackAnalysis.track_id == Track.id)
+                .where(and_(*base_conditions, *fit_gate))
+                .order_by(func.random())
+                .limit(pool.library_rows)
+            )
+        ).all()
+
+        # X — the departures, drawn from *below* the floor rather than merely ungated.
+        #
+        # An ungated nearest-neighbour query looked right and is not: from a calm seed its
+        # neighbours are calm, every one of them is also fit, and dedup leaves almost nothing.
+        # So a session that was working correctly would produce no excursions at all — the
+        # variety would vanish exactly when the bed had settled, which is when it is wanted.
+        # Ordered by distance so the departure is the *nearest* unambient track rather than an
+        # arbitrary one; it still gets the cathedral treatment on the client.
+        excursions = (
+            await db.execute(_neighbours(pool.excursion_rows, [fitness < pool.fitness_floor]))
+        ).all()
+
+        seen: set[UUID] = set()
+        fit_rows = []
+        for row in [*fit_near, *fit_any]:
+            if row[0].id not in seen:
+                seen.add(row[0].id)
+                fit_rows.append(row)
+        # A row in both a fit branch and X is *fit* — it does not become an excursion by also
+        # being nearby.
+        excursion_rows_deduped = [r for r in excursions if r[0].id not in seen]
+        excursion_ids = {r[0].id for r in excursion_rows_deduped}
+
+        if not fit_rows:
+            # A library with nothing above the floor, or a filter preset stacked on top of it.
+            # Returning an empty pool surfaces as "Session ended", which is worse than the bug
+            # this fixes.
+            logger.warning(
+                "ambient pool: nothing cleared the fitness floor (%.2f); "
+                "falling back to nearest neighbours",
+                pool.fitness_floor,
+            )
+            rows = excursions
+            excursion_ids = set()
+        else:
+            rows = [*fit_rows, *excursion_rows_deduped]
+            logger.info(
+                "ambient pool: %d near-fit, %d library-fit, %d excursions (floor %.2f)",
+                len(fit_near),
+                len(fit_any),
+                len(excursion_rows_deduped),
+                pool.fitness_floor,
+            )
 
     pool_size = len(rows)
     pool_collapsed = pool_size < 5
@@ -768,7 +911,22 @@ async def get_candidates(
     # Sort by score descending
     scored.sort(key=lambda c: c.compatibility_score, reverse=True)
 
-    return scored[:limit], pool_size, pool_collapsed
+    if profile.pool is not None and excursion_ids:
+        # Rank the two groups independently, then interleave. Sorting them together would let
+        # the liveliness penalty bury every excursion, and the point of an excursion is that it
+        # is chosen rather than survives.
+        fit_ranked = [c for c in scored if c.descriptor.track_id not in excursion_ids]
+        excursion_ranked = [c for c in scored if c.descriptor.track_id in excursion_ids]
+        ordered = interleave_excursions(
+            fit_ranked,
+            excursion_ranked,
+            period=profile.pool.excursion_period,
+            phase=excursion_phase(current_track_id, profile.pool.excursion_period),
+        )
+    else:
+        ordered = scored
+
+    return ordered[:limit], pool_size, pool_collapsed
 
 
 async def find_seed_by_artist(

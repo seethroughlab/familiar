@@ -50,12 +50,21 @@ async def library(async_db):
         await insert_test_analysis(
             async_db,
             track.id,
+            # Ambient-*healthy*, not merely healthy. This fixture describes "a library with
+            # enough in it", and since `AMBIENT` began composing its pool from a fitness floor
+            # that also means a library with enough **ambient** in it: at energy 0.5, bpm 120
+            # and no `acousticness` at all, every one of these 200 tracks fell below the floor,
+            # the fit branches came back empty, and the pool collapsed to the excursion
+            # branch — which is what `test_the_pool_is_not_capped_at_the_pgvector_default`
+            # then caught. The fixture was wrong about what a healthy library is; the floor
+            # was not.
             {
-                "energy": 0.5,
+                "energy": 0.4,
                 "brightness": 0.5,
                 "valence": 0.5,
                 "key": "C",
-                "bpm": 120.0,
+                "bpm": 75.0,
+                "acousticness": 0.6,
                 "instrumentalness": 0.8,
                 "speechiness": 0.1,
                 "embedding": _embedding(i),
