@@ -81,7 +81,13 @@ dev = [
 analysis = [
     "librosa>=0.10.0",
     "numpy>=1.24.0",
-    "clapback-embed @ git+https://github.com/seethroughlab/clapback.git@main#subdirectory=packages/embed",
+    # Upper-bounded at the minor, which is not caution but the package's own contract:
+    # clapback's `ADR-0005` point 4 says any change that moves `PIPELINE_VERSION` is at
+    # minimum a minor bump and a patch release may never move it. So `<0.2` takes fixes
+    # and refuses, by construction, the release that would silently change what every
+    # vector in the library means. Raising it is a deliberate act with a re-analysis
+    # attached — see `EMBEDDING_VERSION` in app/config.py.
+    "clapback-embed>=0.1.0,<0.2",
     "soundfile>=0.12.0", # Audio file loading
     "umap-learn>=0.5.0", # Dimensionality reduction for music map
     "pyloudnorm>=0.1.0", # EBU R128 loudness measurement
@@ -95,12 +101,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
-
-# `clapback-embed` is installed from git rather than PyPI — it is published from
-# the clapback repository and has no release on an index yet. hatchling
-# refuses direct references without this.
-[tool.hatch.metadata]
-allow-direct-references = true
 
 [tool.ruff]
 line-length = 100
