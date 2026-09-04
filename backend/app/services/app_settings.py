@@ -28,6 +28,7 @@ Settings by Source
 
 import json
 import logging
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -79,6 +80,18 @@ class AppSettings(BaseModel):
     community_cache_enabled: bool = True  # Look up embeddings from community cache
     community_cache_contribute: bool = False  # Contribute computed embeddings (opt-in)
     community_cache_url: str = "https://familiar-cache.fly.dev"  # Cache server URL
+
+    # Opaque per-installation identifier sent with every embedding contribution, so the
+    # commons can tell "two installations computed the same vector" from "one installation
+    # submitted twice" — clapback's `ADR-0004`. Without it a contribution is still accepted
+    # and still stored; it simply can never count toward independent agreement, which is
+    # what makes the corpus's confidence mean anything.
+    #
+    # It identifies an *installation* and must never become a person: no email, no name,
+    # nothing linkable back to one. A random UUID is exactly enough, and the server is not
+    # meant to learn more. Generated on first contribution rather than at install time, so
+    # nobody who never contributes is ever assigned one.
+    community_cache_client_id: str = ""
 
     # Server-owned playback queue (ADR-0003). Off by default: this ships behind a flag and
     # is proven in the web app before the native client depends on it. Rejecting writes
@@ -186,6 +199,28 @@ class AppSettingsService:
         self._settings = AppSettings(**updated_data)
         self._save(self._settings)
         return self._settings
+
+    def ensure_community_cache_client_id(self) -> str:
+        """Return this installation's community-cache client id, creating it on first use.
+
+        clapback's `ADR-0004` point 2: self-issued, no registration, no key exchange. A random
+        UUID generated once and reused is the whole mechanism.
+
+        **This is not a secret and is deliberately not treated as one.** It is bookkeeping that
+        makes agreement countable, and `ADR-0004` point 10 is explicit that identity here is not
+        an abuse control — self-issued identifiers rotate. Masking it in the admin UI would
+        suggest a protection it does not provide.
+
+        Two workers racing on first contribution can each generate one before either saves; the
+        last write wins and both converge on the next read. The cost is that a single install
+        briefly looks like two, which slightly *over*-counts independence — worth knowing, and
+        far cheaper than a lock on a path that runs once in the life of an installation.
+        """
+        current = self.get()
+        if current.community_cache_client_id:
+            return current.community_cache_client_id
+        updated = self.update(community_cache_client_id=str(uuid.uuid4()))
+        return updated.community_cache_client_id
 
     def get_masked(self) -> dict[str, Any]:
         """Get settings with secrets masked for frontend display."""

@@ -564,8 +564,11 @@ def run_track_embedding(track_id: str) -> dict[str, Any]:
                     and acoustid_fingerprint
                 ):
                     try:
+                        # Generated here rather than at install time, so an installation that
+                        # never contributes is never assigned one (clapback's `ADR-0004`).
                         cache_service = get_community_cache_service(
-                            cache_url=app_settings.community_cache_url
+                            cache_url=app_settings.community_cache_url,
+                            client_id=get_app_settings_service().ensure_community_cache_client_id(),
                         )
                         asyncio.run(
                             cache_service.contribute(acoustid_fingerprint, embedding)

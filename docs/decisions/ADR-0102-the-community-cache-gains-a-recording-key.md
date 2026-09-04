@@ -65,7 +65,16 @@ it without already having the audio to fingerprint. **Adding a recording id chan
 becomes legible.** A MusicBrainz recording id names a recording.
 
 This is not a disclosure about a *person* — no profile, listener or installation identifier is
-attached, and `contributor_count` is a count rather than a list. It is a disclosure about the
+attached, and `contributor_count` is a count rather than a list.
+
+> **Amended 2026-09-04, per rule 5.** The clause about an installation identifier no longer holds.
+> Contributions now carry an opaque per-installation UUID, because clapback's `ADR-0004` needs one
+> to tell "two installations agreed" from "one installation submitted twice" — the distinction its
+> whole confidence model rests on. It is self-issued, generated on first contribution, never sent by
+> an installation that has not opted in, and deliberately not a person: no email, no name, nothing
+> linkable. The reasoning above is otherwise unchanged, and the recording-id disclosure this ADR
+> decided is still the larger of the two. Recorded here rather than quietly overtaken, because a
+> premise that stops being true is exactly what a later reader would rely on. It is a disclosure about the
 *corpus*: "these recordings are in somebody's library". That is a smaller thing than it first sounds
 and a larger thing than nothing, and it is the decision this ADR is really asking for.
 
