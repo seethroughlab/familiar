@@ -11,6 +11,17 @@ Relates to [ADR-0102](ADR-0102-the-community-cache-gains-a-recording-key.md), wh
 only meaningful if independent installations compute the same function.
 
 Implementation:
+- **The package is installed from PyPI as of 2026-09-04.** It was a git reference to
+  `clapback.git@main` while no release existed, which meant every rebuild silently took whatever was
+  on that branch — including, in principle, a commit that moved `PIPELINE_VERSION` and therefore
+  every vector this installation would compute. `clapback-embed 0.1.0` is published, so the
+  dependency is an ordinary version specifier and the `[tool.hatch.metadata]
+  allow-direct-references` stanza that a direct reference required is gone.
+- **The constraint is upper-bounded at the minor on purpose.** clapback's `ADR-0005` point 4 makes a
+  pipeline-identity change at minimum a minor bump and forbids a patch from moving it, so
+  `>=0.1.0,<0.2` takes fixes and refuses the release that would change what the library's embeddings
+  mean. Raising it is a deliberate act that comes with an `EMBEDDING_VERSION` bump and a
+  re-analysis.
 - **The GPU made each analysis worker more expensive in host RAM, and the tail of a library is where
   that bites.** Every worker now holds a CUDA context alongside its decode buffer, so three workers
   that were comfortable on the CPU path were not on the GPU one. Measured 2026-09-03: a 57-minute
