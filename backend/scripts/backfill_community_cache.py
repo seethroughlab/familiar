@@ -70,7 +70,7 @@ class Tally:
         )
 
 
-async def backfill(*, dry_run: bool, limit: int | None, per_minute: int) -> Tally:
+async def backfill(*, dry_run: bool, limit: int | None, per_minute: int, url: str | None) -> Tally:
     settings = get_app_settings_service().get()
     if not settings.community_cache_contribute and not dry_run:
         raise SystemExit(
@@ -79,8 +79,12 @@ async def backfill(*, dry_run: bool, limit: int | None, per_minute: int) -> Tall
         )
 
     client_id = get_app_settings_service().ensure_community_cache_client_id()
+    # An explicit target, because the commons moving hosts is exactly when a
+    # backfill is needed and exactly when `community_cache_url` still points at
+    # the old one. Mutating a setting in order to run a migration would leave the
+    # installation pointed somewhere nobody chose if the run were interrupted.
     cache = get_community_cache_service(
-        cache_url=settings.community_cache_url, client_id=client_id
+        cache_url=url or settings.community_cache_url, client_id=client_id
     )
     logger.info("corpus: %s", cache.cache_url)
     logger.info("installation: %s", client_id)
@@ -149,10 +153,13 @@ def main() -> None:
     p.add_argument("--limit", type=int, help="stop after this many tracks — for a first run")
     p.add_argument("--rate", type=int, default=25,
                    help="contributions per minute (server allows 30; default leaves headroom)")
+    p.add_argument("--url", help="contribute here instead of community_cache_url — for a host move")
     args = p.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
-    tally = asyncio.run(backfill(dry_run=args.dry_run, limit=args.limit, per_minute=args.rate))
+    tally = asyncio.run(
+        backfill(dry_run=args.dry_run, limit=args.limit, per_minute=args.rate, url=args.url)
+    )
 
     print()
     print("dry run — nothing was sent" if args.dry_run else "backfill complete")
