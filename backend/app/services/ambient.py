@@ -807,11 +807,32 @@ async def get_candidates(
             if cosine_dist is not None
             else select(Track, TrackAnalysis, text("0.5 as embedding_similarity"))
         )
+        # Weighted by fitness rather than uniform, because a floor decides *where the band
+        # starts* and nothing about the shape of what it admits. Uniformly over the measured
+        # 0.60 band, five of these ninety rows came from above 0.90 and the rest from the
+        # bottom two tenths — a pool that passed every test about eligibility and sounded
+        # wrong, which is the whole reason the floor moved to 0.80 alongside this.
+        #
+        # Efraimidis–Spirakis: taking the largest `random() ** (1/w)` selects without
+        # replacement with probability proportional to `w`. One expression, no extra pass, and
+        # it stays a single query. `power` rather than `-ln(random())/w` because `random()` can
+        # return exactly 0 and `ln(0)` is undefined; here it merely sorts last.
+        # Annotated because the two branches are different SQLAlchemy expression types —
+        # a `UnaryExpression` from `.desc()` against a plain `func.random()` — and mypy
+        # infers the variable from whichever branch it sees first.
+        fit_any_order: Any
+        if pool.library_weight_exponent > 0:
+            weight = func.power(
+                func.greatest(fitness, 1e-6), pool.library_weight_exponent
+            )
+            fit_any_order = func.power(func.random(), 1.0 / weight).desc()
+        else:
+            fit_any_order = func.random()
         fit_any = (
             await db.execute(
                 fit_any_query.join(TrackAnalysis, TrackAnalysis.track_id == Track.id)
                 .where(and_(*base_conditions, *fit_gate))
-                .order_by(func.random())
+                .order_by(fit_any_order)
                 .limit(pool.library_rows)
             )
         ).all()
