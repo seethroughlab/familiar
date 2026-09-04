@@ -22,8 +22,8 @@ from app.db.models import (
 )
 from app.logging_config import get_logger
 from app.services.ambient_fitness import (
-    ambient_fitness,
     ambient_seed_conditions,
+    seed_fitness,
 )
 from app.services.ranking_profiles import AMBIENT, RankingProfile
 from app.services.taste_weighting import SHUFFLE_PRESETS, compute_track_weight
@@ -429,16 +429,14 @@ async def get_track_descriptor(
 
 
 def _fitness_of(a: TrackAnalysis) -> float:
-    """`ambient_fitness` over a row.
+    """`seed_fitness` over a row.
 
     The two seed paths used to score this differently — one targeting energy 0.25 with a 3.33
     slope, the other 0.4 with no slope — so given one artist with tracks at 0.20 and 0.45 they
     picked **different** tracks and disagreed about which was the more ambient.
     """
-    return ambient_fitness(
+    return seed_fitness(
         energy=a.energy,
-        bpm=a.bpm,
-        acousticness=a.acousticness,
         instrumentalness=a.instrumentalness,
         speechiness=a.speechiness,
     )
