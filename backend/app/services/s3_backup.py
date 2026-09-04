@@ -652,6 +652,12 @@ class S3BackupService:
             parsed.path.lstrip("/") if parsed.path else "familiar",
             "--no-owner",
             "--no-acl",
+            # Without these the dump is INSERTs against tables that already
+            # exist, so `psql` *appends*: restoring a 26,469-track library into a
+            # live database leaves ~53,000 rows and looks like it worked.
+            # Measured against real S3 — a two-row table came back with four.
+            "--clean",
+            "--if-exists",
         ]
 
         with open(out_path, "wb") as out_f:
@@ -1098,6 +1104,8 @@ class S3BackupService:
             total_files = len(files)
             downloaded = 0
             skipped = 0
+            failed = 0
+            not_thawed = 0
 
             progress.update(phase="downloading", files_total=total_files)
 
@@ -1145,19 +1153,52 @@ class S3BackupService:
                         bytes_uploaded=cur["bytes_uploaded"] + info.get("size_bytes", 0),
                     )
                 except ClientError as e:
+                    failed += 1
+                    if e.response.get("Error", {}).get("Code") == "InvalidObjectState":
+                        # Deep Archive cannot be read until a thaw completes.
+                        # This is the ordinary mistake — restoring before the
+                        # 12-48 hour Bulk retrieval has finished — so it is
+                        # counted separately and reported in words.
+                        not_thawed += 1
                     logger.error(f"Failed to download {s3_path}: {e}")
 
             duration = time.monotonic() - start_time
-            progress.update(phase="complete", status="complete", current_file=None)
+
+            # A restore that downloaded nothing is not a success. Reporting one
+            # is worse than failing: the audio is absent and the operator has
+            # been told it is present.
+            if not_thawed:
+                outcome = "error"
+                message = (
+                    f"{not_thawed} file(s) are still in Glacier Deep Archive. Run the "
+                    "thaw step and wait for it to finish (12-48 hours on the Bulk "
+                    "tier) before restoring."
+                )
+            elif failed:
+                outcome = "incomplete"
+                message = f"{failed} file(s) could not be downloaded."
+            else:
+                outcome = "success"
+                message = None
+
+            progress.update(
+                phase="complete" if outcome == "success" else "error",
+                status="complete" if outcome == "success" else "error",
+                current_file=None,
+                error=message,
+            )
 
             # Update restore state
             state = {"status": "complete", "completed_at": utcnow().isoformat()}
             redis.set(REDIS_RESTORE_STATE, json.dumps(state), ex=7 * 86400)
 
             return {
-                "status": "success",
+                "status": outcome,
+                "error": message,
                 "files_downloaded": downloaded,
                 "files_skipped": skipped,
+                "files_failed": failed,
+                "files_not_thawed": not_thawed,
                 "duration_seconds": round(duration, 1),
             }
 

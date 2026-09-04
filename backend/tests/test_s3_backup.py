@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import gzip
 import hashlib
+import io
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -452,3 +453,143 @@ def test_the_safety_dump_stays_local_rather_than_going_to_glacier(
 
     assert after == before, "the safety dump was uploaded instead of kept local"
     assert (library.root / "data" / "restore-safety").is_dir()
+
+
+# --- restore correctness ---------------------------------------------------
+#
+# Both of these were found by running the real service against real S3 with a
+# real postgres. `moto` cannot surface either: one is `psql` semantics and the
+# other is a Glacier state transition mocks do not model.
+
+
+def test_the_dump_replaces_the_database_rather_than_appending_to_it(tmp_path):
+    """Restoring into a live database must not double it.
+
+    Measured against real S3 and a real postgres before this: a two-row `marker`
+    table came back with four rows, and a two-row `tracks` came back with four.
+    `pg_dump` without `--clean` emits INSERTs against tables that already exist,
+    so `psql` appends. On the real library that turns 26,469 tracks into ~53,000
+    and still reports success.
+
+    Asserts the argv actually handed to `pg_dump`, not the source text, so
+    reformatting cannot make this pass vacuously.
+    """
+    seen = {}
+
+    class FakeProc:
+        returncode = 0
+
+        def __init__(self):
+            self.stdout = io.BytesIO(b"-- dump\n")
+            self.stderr = io.BytesIO(b"")
+
+        def wait(self):
+            return 0
+
+    def fake_popen(cmd, *a, **kw):
+        seen["cmd"] = cmd
+        return FakeProc()
+
+    with patch.object(s3mod.subprocess, "Popen", fake_popen):
+        s3mod.S3BackupService()._pg_dump_to(str(tmp_path / "out.sql.gz"))
+
+    cmd = seen["cmd"]
+    assert "--clean" in cmd, f"pg_dump would append rather than replace: {cmd}"
+    assert "--if-exists" in cmd, f"--clean without --if-exists errors on a fresh db: {cmd}"
+
+
+@mock_aws
+def test_a_restore_that_cannot_read_glacier_reports_an_error_not_success(
+    fake_redis, s3_settings, library, fake_pg
+):
+    """The ordinary mistake: restoring before the 12-48 hour thaw finishes.
+
+    Every audio object answers `InvalidObjectState`, nothing is downloaded, and
+    the result used to be `{"status": "success", "files_downloaded": 0}` — the
+    audio absent and the operator told otherwise.
+    """
+    from botocore.exceptions import ClientError
+
+    client = boto3.client("s3", region_name=REGION)
+    _bucket(client)
+    _service().run_backup()
+    fake_redis.kv.pop(s3mod.REDIS_BACKUP_LOCK, None)
+    # Remove the local copies, or the restore skips them as already-matching.
+    for t in library.tracks:
+        Path(t["file_path"]).unlink()
+
+    svc = _service()
+    real_client = svc._get_client()
+
+    def frozen_download(bucket, key, path):
+        raise ClientError(
+            {"Error": {"Code": "InvalidObjectState", "Message": "not restored"}},
+            "GetObject",
+        )
+
+    with patch.object(
+        s3mod.S3BackupService, "_get_client", return_value=real_client
+    ):
+        real_client.download_file = frozen_download
+        result = svc.download_and_restore()
+
+    assert result["status"] == "error", result
+    assert result["files_not_thawed"] >= 2, result
+    assert result["files_downloaded"] == 0
+    assert "thaw" in (result.get("error") or "").lower()
+
+
+@mock_aws
+def test_a_partly_failed_restore_is_reported_as_incomplete(
+    fake_redis, s3_settings, library, fake_pg
+):
+    """A failure that is not a thaw problem still must not read as success."""
+    from botocore.exceptions import ClientError
+
+    client = boto3.client("s3", region_name=REGION)
+    _bucket(client)
+    _service().run_backup()
+    # Thaw first, so the only failure in this test is the injected one.
+    _service().initiate_restore()
+    fake_redis.kv.pop(s3mod.REDIS_BACKUP_LOCK, None)
+    # Remove the local copies, or the restore skips them as already-matching.
+    for t in library.tracks:
+        Path(t["file_path"]).unlink()
+
+    svc = _service()
+    real_client = svc._get_client()
+    calls = {"n": 0}
+    original = real_client.download_file
+
+    def flaky(bucket, key, path):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise ClientError(
+                {"Error": {"Code": "AccessDenied", "Message": "nope"}}, "GetObject"
+            )
+        return original(bucket, key, path)
+
+    with patch.object(s3mod.S3BackupService, "_get_client", return_value=real_client):
+        real_client.download_file = flaky
+        result = svc.download_and_restore()
+
+    assert result["status"] == "incomplete", result
+    assert result["files_failed"] == 1, result
+    assert result["files_downloaded"] >= 1
+
+
+@mock_aws
+def test_a_fully_successful_restore_still_reports_success(
+    fake_redis, s3_settings, library, fake_pg
+):
+    """The counters must not make the happy path look broken."""
+    client = boto3.client("s3", region_name=REGION)
+    _bucket(client)
+    _service().run_backup()
+    _service().initiate_restore()
+    fake_redis.kv.pop(s3mod.REDIS_BACKUP_LOCK, None)
+
+    result = _service().download_and_restore()
+    assert result["status"] == "success", result
+    assert result["files_failed"] == 0
+    assert result["files_not_thawed"] == 0
