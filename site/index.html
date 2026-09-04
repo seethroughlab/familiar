@@ -69,7 +69,8 @@
          requirements beside the download button. -->
     <div class="hero-install">
       <p class="hero-requirements">Docker&nbsp;24+ · 2&nbsp;GB RAM · x86_64 or ARM64 · MIT licensed</p>
-      <p class="hero-cta"><a href="#install" class="primary">Install Familiar</a> <span class="hero-cta-note">macOS, Windows, Synology, OpenMediaVault or Linux — about ten minutes</span></p>
+      <p class="hero-cta"><a href="#install" class="primary">Install Familiar</a> <a href="#features" class="hero-cta-secondary">See what it does</a></p>
+      <p class="hero-cta-note">macOS, Windows, Synology, OpenMediaVault or Linux — about ten minutes</p>
       <!-- The demo link was here under ADR-0039 point 8 and is deliberately gone. ADR-0038 built
            that instance because "Apple App Store review requires a working backend server with test
            data" — it is a compliance fixture, and pointing a visitor at it implied you could try
@@ -85,24 +86,26 @@
          describes. The closing CTA carries the same sentence for the same reason. -->
     <div class="hero-apps">
       <p class="hero-apps-label">Already running Familiar? Get the apps</p>
+      <!-- Apple's own badges, both of them, straight from the marketing toolbox: the iOS one is
+           `Download_on_the_App_Store_Badge_US-UK_RGB_blk_4SVG_092917` and the Mac one is
+           `Download_on_the_Mac_App_Store_Badge_US-UK_RGB_blk_092917`. Apple asks that its badges be
+           used unmodified where you link to a listing, and they are the form a visitor recognises
+           without reading. Both are 40px tall natively, so they align without being rescaled. -->
       <div class="app-links">
         <a href="https://apps.apple.com/us/app/familiar-player/id6759879772?platform=mac"
-           target="_blank" rel="noopener" class="app-link">
-          <span class="app-link-platform">Mac App Store</span>
-          <span class="app-link-note">macOS 14.4 or later</span>
+           target="_blank" rel="noopener" class="app-badge">
+          <img src="./assets/mac-app-store-badge.svg" alt="Download on the Mac App Store"
+               width="156" height="40">
         </a>
         <!-- Canonical URL rather than ?platform=iphone, which 301s to exactly this. -->
         <a href="https://apps.apple.com/us/app/familiar-player/id6759879772"
-           target="_blank" rel="noopener" class="app-link">
-          <span class="app-link-platform">iPhone &amp; iPad</span>
-          <span class="app-link-note">App&nbsp;Store</span>
+           target="_blank" rel="noopener" class="app-badge">
+          <img src="./assets/app-store-badge.svg" alt="Download on the App Store"
+               width="120" height="40">
         </a>
       </div>
-      <p class="app-links-note">Both need a Familiar server to connect to.</p>
+      <p class="app-links-note">Both need a Familiar server to connect to. The Mac app needs macOS&nbsp;14.4 or later.</p>
     </div>
-    <div class="nav-links">
-      <a href="#features">See what it does</a>
-      </div>
     </div>
   </div>
 </header>

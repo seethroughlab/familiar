@@ -26,6 +26,23 @@ test('the Mac App Store listing is linked, with its platform stated', async ({ p
   await expect(mac.first()).toBeVisible();
 });
 
+test('each badge is Apple’s own, at its native height and undistorted', async ({ page }) => {
+  // Apple asks that its badges are not rescaled or stretched. The two differ in width because the
+  // wordmarks do, so asserting a shared width would be the wrong check — height and the intrinsic
+  // ratio are what must hold.
+  for (const [href, file] of [
+    ['platform=mac', 'mac-app-store-badge.svg'],
+    [APP_ID, 'app-store-badge.svg'],
+  ]) {
+    const img = page.locator(`a[href*="${href}"] img[src*="${file}"]`).first();
+    await expect(img).toBeVisible();
+    const box = await img.boundingBox();
+    const natural = await img.evaluate((el: HTMLImageElement) => el.naturalWidth / el.naturalHeight);
+    expect(box!.height).toBeCloseTo(40, 0);
+    expect(box!.width / box!.height).toBeCloseTo(natural, 1);
+  }
+});
+
 test('the iPhone listing is linked', async ({ page }) => {
   const ios = page.locator(`a[href*="${APP_ID}"]:not([href*="platform=mac"])`);
   await expect(ios.first()).toBeVisible();
