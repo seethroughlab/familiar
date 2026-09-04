@@ -177,3 +177,45 @@ class TestRadioReadsTheRealCandidateShape:
         assert "error" not in result, result
         assert result["suggestions"][0]["score"] == 0.8765
         assert result["pool_size"] == 150
+
+
+class TestTheAmbientProfileIsNoLongerOffered:
+    """ADR-0108 point 12: `get_radio_suggestions` ranks with `RADIO` and nothing else.
+
+    `profile="ambient"` was coherent while ambient meant "these neighbours, weighted for
+    continuity". Ambient now composes its pool from three branches and **two of them ignore the
+    seed**, so the option would answer this tool's stated promise — the seed's neighbours plus
+    this listener's taste — with quiet tracks from anywhere in the library.
+
+    Both halves are asserted because they fail differently: the schema half stops a model being
+    offered the choice, and the handler half stops a stale caller getting the wrong ranking.
+    """
+
+    def test_the_published_schema_offers_no_profile(self):
+        from app.services.llm.tools import MUSIC_TOOLS
+
+        tool = next(t for t in MUSIC_TOOLS if t["name"] == "get_radio_suggestions")
+        assert "profile" not in tool["input_schema"]["properties"]
+
+    @pytest.mark.asyncio
+    async def test_a_stale_caller_passing_ambient_is_answered_with_radio(self, monkeypatch):
+        """**Accepted and ignored, not rejected.** `executor.py` dispatches with
+        `handler(**tool_input)`, so removing the keyword outright turns a stale call into a
+        `TypeError` the model reads as a failed tool. It must still answer, and answer as radio."""
+        from app.services.ranking_profiles import RADIO
+
+        seen: dict = {}
+
+        async def fake_candidates(*args, **kwargs):
+            seen["profile"] = kwargs.get("profile")
+            return [], 0, False
+
+        monkeypatch.setattr("app.services.ambient.get_candidates", fake_candidates)
+
+        executor = ToolExecutor(db=None, profile_id=uuid4())  # type: ignore[arg-type]
+        result = await executor._get_radio_suggestions(str(uuid4()), limit=3, profile="ambient")
+
+        assert "error" not in result, result
+        assert seen["profile"] is RADIO, (
+            f"asked for {seen['profile'].name if seen['profile'] else None}, not radio"
+        )

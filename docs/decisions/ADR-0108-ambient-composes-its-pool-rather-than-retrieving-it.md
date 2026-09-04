@@ -1,6 +1,6 @@
 # ADR-0108: Ambient Composes Its Pool Rather Than Retrieving It
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-04
 
@@ -11,8 +11,13 @@ Implementation:
   landed in `fe481563` (#282) and points 5–6 in `282393b3` (#284), both on 2026-09-04, before this
   record existed. That is the failure ADR-0106 point 8 also demonstrates, one level up: the decisions
   were real and the record was not written, so the only account of them was in commit messages. The
-  status stays `proposed` until reviewed; the code is not evidence of approval.
-- Point 12 is **not** implemented.
+  code was never evidence of approval; approval came separately, on review.
+- **Point 12 is implemented** — the one point that had no code when this was written. `profile` is
+  gone from `get_radio_suggestions`' published `input_schema` in `services/llm/tools.py`, so a model
+  is no longer offered a choice, and `_get_radio_suggestions` now always ranks with `RADIO`. The
+  keyword survives in the handler signature deliberately: `executor.py` dispatches with
+  `handler(**tool_input)`, so a stale or hallucinated `profile` argument would otherwise become a
+  `TypeError` surfaced to the model as a failed tool call. It is accepted and ignored instead.
 
 ## Context
 

@@ -82,7 +82,7 @@ class DiscoveryHandlersMixin:
         self: "ToolExecutor",
         seed_track_id: str,
         limit: int = 10,
-        profile: str = "radio",
+        profile: str | None = None,
     ) -> dict[str, Any]:
         """Familiar's own recommender, seeded from one track.
 
@@ -94,15 +94,25 @@ class DiscoveryHandlersMixin:
 
         Cheaper than it looks — roughly four queries and a 150-row vector search over precomputed
         embeddings, with no embedding inference and no model load.
+
+        **`profile` is accepted and ignored (ADR-0108 point 12).** It used to select `AMBIENT`,
+        which was coherent while ambient meant "these neighbours, weighted for continuity". It no
+        longer does: ambient composes its pool from three branches and two of them ignore the seed
+        entirely, so `profile="ambient"` would answer the promise made above — the seed's
+        neighbours plus this listener's taste — with quiet tracks from anywhere in the library.
+        The parameter is gone from the published `input_schema`, so nothing is offered the choice.
+        It survives here because `executor.py` dispatches with `handler(**tool_input)`, where an
+        unexpected keyword becomes a `TypeError` the model sees as a failed tool call; a stale
+        caller should get the right answer, not an error.
         """
         from app.services.ambient import get_candidates
-        from app.services.ranking_profiles import get_profile
+        from app.services.ranking_profiles import RADIO
 
         ids = self._safe_parse_uuids([seed_track_id])
         if not ids:
             return {"error": f"{seed_track_id!r} is not a valid track id."}
 
-        ranking = get_profile(profile if profile in ("radio", "ambient") else "radio")
+        ranking = RADIO
         candidates, pool_size, collapsed = await get_candidates(
             self.db,
             current_track_id=ids[0],
