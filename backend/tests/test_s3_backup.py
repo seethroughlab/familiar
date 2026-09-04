@@ -527,9 +527,7 @@ def test_a_restore_that_cannot_read_glacier_reports_an_error_not_success(
             "GetObject",
         )
 
-    with patch.object(
-        s3mod.S3BackupService, "_get_client", return_value=real_client
-    ):
+    with patch.object(s3mod.S3BackupService, "_get_client", return_value=real_client):
         real_client.download_file = frozen_download
         result = svc.download_and_restore()
 
@@ -564,9 +562,7 @@ def test_a_partly_failed_restore_is_reported_as_incomplete(
     def flaky(bucket, key, path):
         calls["n"] += 1
         if calls["n"] == 1:
-            raise ClientError(
-                {"Error": {"Code": "AccessDenied", "Message": "nope"}}, "GetObject"
-            )
+            raise ClientError({"Error": {"Code": "AccessDenied", "Message": "nope"}}, "GetObject")
         return original(bucket, key, path)
 
     with patch.object(s3mod.S3BackupService, "_get_client", return_value=real_client):
@@ -593,3 +589,114 @@ def test_a_fully_successful_restore_still_reports_success(
     assert result["status"] == "success", result
     assert result["files_failed"] == 0
     assert result["files_not_thawed"] == 0
+
+
+# --- a failed run must leave a trace ---------------------------------------
+#
+# `POST /run` answers "started" and hands the work to a thread. Nothing awaited
+# that future, so an exception in it was dropped by asyncio after the endpoint
+# had already claimed success. That is how the demo server ran for weeks with a
+# dead Redis: every manual backup reported "started" and none of them ran.
+
+
+@mock_aws
+def test_a_backup_that_raises_is_written_to_history(fake_redis, s3_settings):
+    """The failure has to be findable after the fact, not just in a log."""
+    svc = _service()
+    svc.record_failure("Redis operation set failed: Name or service not known", operation="backup")
+
+    history = svc.get_backup_history()
+    assert history, "the failure left no history entry"
+    assert history[0]["status"] == "error"
+    assert history[0]["operation"] == "backup"
+    assert "Name or service not known" in history[0]["error"]
+
+
+@mock_aws
+def test_a_recorded_failure_shows_up_in_progress(fake_redis, s3_settings):
+    """`/progress` is what a UI polls, so it must not keep saying 'running'."""
+    svc = _service()
+    svc.record_failure("pg_dump failed", operation="backup")
+
+    progress = svc.get_backup_progress()
+    assert progress is not None
+    assert progress["status"] == "error"
+    assert progress["error"] == "pg_dump failed"
+
+
+@mock_aws
+def test_recording_a_failure_does_not_raise_when_redis_is_the_problem(s3_settings):
+    """The most likely cause of the failure being recorded is Redis itself.
+
+    If `record_failure` raised in turn, the original error would be lost and the
+    endpoint's background task would die silently — exactly the behaviour this
+    is meant to remove.
+    """
+
+    class DeadRedis:
+        def set(self, *a, **kw):
+            raise RuntimeError("Name or service not known")
+
+        def lpush(self, *a, **kw):
+            raise RuntimeError("Name or service not known")
+
+        def ltrim(self, *a, **kw):
+            raise RuntimeError("Name or service not known")
+
+        def expire(self, *a, **kw):
+            raise RuntimeError("Name or service not known")
+
+        def get(self, *a, **kw):
+            raise RuntimeError("Name or service not known")
+
+        def lrange(self, *a, **kw):
+            raise RuntimeError("Name or service not known")
+
+        def delete(self, *a, **kw):
+            raise RuntimeError("Name or service not known")
+
+    with patch.object(s3mod, "get_resilient_redis", return_value=DeadRedis()):
+        _service().record_failure("the original error", operation="backup")
+
+
+async def test_the_run_endpoint_records_a_raised_backup(fake_redis, s3_settings):
+    """End to end: the endpoint's background task catches and records."""
+    from app.api.routes import s3_backup as routes
+
+    svc = _service()
+
+    def boom():
+        raise RuntimeError("Redis is gone")
+
+    with patch.object(routes, "get_s3_backup_service", return_value=svc):
+        await routes._run_and_record(boom, "backup")
+
+    history = svc.get_backup_history()
+    assert history and history[0]["status"] == "error"
+    assert "Redis is gone" in history[0]["error"]
+
+
+async def test_the_run_endpoint_records_an_error_status_return(fake_redis, s3_settings):
+    """`run_backup` returns `{"status": "error"}` without raising in some paths."""
+    from app.api.routes import s3_backup as routes
+
+    svc = _service()
+
+    with patch.object(routes, "get_s3_backup_service", return_value=svc):
+        await routes._run_and_record(
+            lambda: {"status": "error", "error": "not configured"}, "backup"
+        )
+
+    history = svc.get_backup_history()
+    assert history and history[0]["error"] == "not configured"
+
+
+async def test_a_successful_run_writes_no_failure(fake_redis, s3_settings):
+    """The recorder must not invent failures on the happy path."""
+    from app.api.routes import s3_backup as routes
+
+    svc = _service()
+    with patch.object(routes, "get_s3_backup_service", return_value=svc):
+        await routes._run_and_record(lambda: {"status": "success", "files_uploaded": 3}, "backup")
+
+    assert [h for h in svc.get_backup_history() if h.get("status") == "error"] == []

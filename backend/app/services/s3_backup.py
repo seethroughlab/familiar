@@ -846,6 +846,46 @@ class S3BackupService:
 
     # ── Phase 3: History & Status ────────────────────────────────────
 
+    def record_failure(self, error: str, *, operation: str = "backup") -> None:
+        """Write a failure where `/status` and `/history` will show it.
+
+        `POST /run` answers "started" and hands off to a thread. Anything that
+        goes wrong after that used to be invisible: `run_backup` acquires its
+        Redis lock *before* its own try block, and `with_retry` re-raises, so a
+        dead Redis raised straight out of the executor into a future nobody
+        awaited. The endpoint had already claimed success and no history row was
+        written — a backup that never ran looked exactly like one that did.
+        """
+        entry = {
+            "timestamp": utcnow().isoformat(),
+            "status": "error",
+            "operation": operation,
+            "error": error,
+        }
+        self._save_history_entry(entry)
+        try:
+            get_resilient_redis().set(
+                REDIS_BACKUP_PROGRESS,
+                json.dumps(
+                    {
+                        "status": "error",
+                        "phase": "error",
+                        "files_total": 0,
+                        "files_uploaded": 0,
+                        "files_skipped": 0,
+                        "bytes_uploaded": 0,
+                        "current_file": None,
+                        "started_at": None,
+                        "error": error,
+                    }
+                ),
+                ex=86400,
+            )
+        except Exception:
+            # Redis being unreachable is the most likely cause of the failure we
+            # are recording, so this must not raise in turn.
+            logger.error(f"{operation} failed and progress could not be written: {error}")
+
     def _save_history_entry(self, entry: dict[str, Any]) -> None:
         """Save a backup result to history list in Redis."""
         redis = get_resilient_redis()
