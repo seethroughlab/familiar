@@ -19,6 +19,8 @@ import { ProfileSettings } from '../panels/server/ProfileSettings';
 import { LastfmSettings } from '../panels/server/LastfmSettings';
 import { DebugSettings } from '../panels/server/DebugSettings';
 import { RemoteLogsPanel } from '../panels/server/RemoteLogsPanel';
+import { BackupSettings } from '../panels/server/BackupSettings';
+import { BackupRestore } from '../panels/server/BackupRestore';
 import { BackgroundJobs } from '../panels/server/BackgroundJobs';
 
 export function ServerPage() {
@@ -44,6 +46,11 @@ export function ServerPage() {
       </AdminSection>
 
       <BackgroundJobs />
+
+      <AdminSection title="Backup">
+        <BackupSettings />
+        <BackupRestore />
+      </AdminSection>
 
       <AdminSection title="Access">
         <ApiKeyStatus />

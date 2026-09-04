@@ -66,6 +66,9 @@ dev = [
     "ruff>=0.1.0",
     "mypy>=1.8.0",
     "httpx>=0.26.0",  # For TestClient
+    # S3 backup tests. Must live in `dev` rather than its own extra: CI runs
+    # `uv sync --extra dev`, so anything else is silently skipped rather than run.
+    "moto[s3]>=5.0.0",
 ]
 
 # Phase 1.5: Audio analysis

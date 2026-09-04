@@ -9,6 +9,7 @@ export * from './profiles';
 export * from './admin';
 export * from './metadata';
 export * from './backup';
+export * from './s3Backup';
 export * from './download';
 export * from './analysis';
 export * from './mixtapes';

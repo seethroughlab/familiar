@@ -35,6 +35,7 @@ const jobNames: Record<BackgroundJob['type'], string> = {
 
 const jobPhaseLabels: Record<string, string> = {
   starting: 'Starting...',
+  safety_dump: 'Safety dump before restore',
   discovering: 'Discovering files',
   reading: 'Reading metadata',
   features: 'Extracting features',

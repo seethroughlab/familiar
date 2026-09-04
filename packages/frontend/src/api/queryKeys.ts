@@ -106,6 +106,14 @@ export const queryKeys = {
   lastfmStatus: {
     all: ['lastfm-status'] as const,
   },
+  s3Backup: {
+    all: ['s3-backup'] as const,
+    status: ['s3-backup', 'status'] as const,
+    progress: ['s3-backup', 'progress'] as const,
+    history: ['s3-backup', 'history'] as const,
+    estimate: ['s3-backup', 'estimate'] as const,
+    restore: ['s3-backup', 'restore'] as const,
+  },
 
   // ── Discovery & Browse ────────────────────────────────────────────────
   libraryDiscover: {
