@@ -730,11 +730,11 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
             "properties": {
                 "seed_track_id": {"type": "string", "description": "Local track UUID to seed from."},
                 "limit": {"type": "integer", "description": "How many suggestions, up to 20."},
-                "profile": {
-                    "type": "string",
-                    "enum": ["radio", "ambient"],
-                    "description": "'radio' follows taste more strongly; 'ambient' favours continuity and low disruption.",
-                },
+                # `profile` was offered here with `enum: ["radio", "ambient"]` and is gone under
+                # ADR-0108 point 12. Ambient stopped meaning "the same neighbours, weighted for
+                # continuity": two of its three pool branches deliberately ignore the seed, so it
+                # would answer this tool's promise of the seed's neighbours with library-wide quiet
+                # tracks. Radio is the only profile whose contract matches the description above.
             },
             "required": ["seed_track_id"],
         },
