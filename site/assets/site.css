@@ -349,7 +349,6 @@ a:hover { text-decoration: underline; }
 }
 
 .closing-cta-actions a:hover { background: var(--bg-tertiary); text-decoration: none; }
-.closing-cta-actions a.app-store-link { padding: 0; border: none; background: none; }
 
 .nav-links a.primary,
 .closing-cta-actions a.primary {
@@ -365,24 +364,50 @@ a:hover { text-decoration: underline; }
   border-color: var(--accent-green-hover);
 }
 
-.nav-links a.app-store-link {
-  padding: 0;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  transition: opacity 0.15s;
+/* --- The two apps ---
+   Named links rather than the single "Download on the App Store" badge these replace. One badge
+   could only point at one listing, and the Mac app was the half it hid.
+
+   Sized below `.hero-cta`'s primary button on purpose: ADR-0055 point 11 keeps Install as the
+   call to action, because an app without a server behind it stops at a setup screen. */
+
+.hero-apps { margin-top: 22px; }
+
+.hero-apps-label {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--text-muted);
 }
 
-.nav-links a.app-store-link:hover {
-  background: transparent;
-  border: none;
-  opacity: 0.85;
+.app-links { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.app-links a.app-link {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 9px 16px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  transition: background 0.15s, border-color 0.15s, transform 0.05s;
 }
 
-.nav-links a.app-store-link img {
-  display: block;
-  height: 40px;
-  width: auto;
+.app-links a.app-link:hover {
+  background: #3f3f46;
+  border-color: var(--text-muted);
+  text-decoration: none;
+}
+
+.app-links a.app-link:active { transform: translateY(1px); }
+
+.app-link-platform { font-size: 14px; font-weight: 600; }
+.app-link-note { font-size: 12px; color: var(--text-muted); }
+
+.app-links-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 /* --- Sections --- */

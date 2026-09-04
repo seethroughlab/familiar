@@ -75,12 +75,32 @@
            data" — it is a compliance fixture, and pointing a visitor at it implied you could try
            Familiar without your own server. You cannot: the app's first screen asks for an address. -->
     </div>
+    <!-- Both apps, named, rather than one badge that hides half of what exists. ADR-0055 point 11
+         still holds — Install is the primary call to action above and these are deliberately not
+         styled to compete with it — but "one call to action" had come to mean the Mac app was
+         mentioned nowhere on the page, so a visitor who owns a Mac could not learn it exists.
+
+         The requirement line is not decoration. The app's first screen asks for a server address,
+         so arriving at the App Store from here without a server is the dead end the comment above
+         describes. The closing CTA carries the same sentence for the same reason. -->
+    <div class="hero-apps">
+      <p class="hero-apps-label">Already running Familiar? Get the apps</p>
+      <div class="app-links">
+        <a href="https://apps.apple.com/us/app/familiar-player/id6759879772?platform=mac"
+           target="_blank" rel="noopener" class="app-link">
+          <span class="app-link-platform">Mac App Store</span>
+          <span class="app-link-note">macOS 14.4 or later</span>
+        </a>
+        <!-- Canonical URL rather than ?platform=iphone, which 301s to exactly this. -->
+        <a href="https://apps.apple.com/us/app/familiar-player/id6759879772"
+           target="_blank" rel="noopener" class="app-link">
+          <span class="app-link-platform">iPhone &amp; iPad</span>
+          <span class="app-link-note">App&nbsp;Store</span>
+        </a>
+      </div>
+      <p class="app-links-note">Both need a Familiar server to connect to.</p>
+    </div>
     <div class="nav-links">
-      <a href="https://apps.apple.com/us/app/familiar-player/id6759879772" target="_blank" rel="noopener" class="app-store-link" aria-label="Download Familiar on the App Store">
-        <img src="./assets/app-store-badge.svg" alt="Download on the App Store">
-      </a>
-      <!-- Secondary now that Install is the hero's own call to action. ADR-0055 point 11: one call
-           to action, repeated, and it is Install. -->
       <a href="#features">See what it does</a>
       </div>
     </div>
@@ -369,9 +389,8 @@ docker compose -f docker-compose.prod.yml build</code></pre>
   </div>
   <div class="closing-cta-actions">
     <a href="#install" class="primary">Install the server</a>
-    <a href="https://apps.apple.com/us/app/familiar-player/id6759879772" target="_blank" rel="noopener" class="app-store-link" aria-label="Download Familiar on the App Store">
-      <img src="./assets/app-store-badge.svg" alt="Download on the App Store">
-    </a>
+    <a href="https://apps.apple.com/us/app/familiar-player/id6759879772?platform=mac" target="_blank" rel="noopener">Mac app</a>
+    <a href="https://apps.apple.com/us/app/familiar-player/id6759879772" target="_blank" rel="noopener">iPhone &amp; iPad app</a>
     <a href="https://github.com/seethroughlab/familiar/issues" target="_blank" rel="noopener">Report a bug</a>
   </div>
 </section>
