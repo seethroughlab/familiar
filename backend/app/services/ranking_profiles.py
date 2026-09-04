@@ -30,6 +30,43 @@ WEIGHT_KEYS = ("key", "energy", "embedding", "vocal", "brightness", "valence", "
 
 
 @dataclass(frozen=True)
+class AmbientPool:
+    """How a pool is assembled, when nearest-neighbours are the wrong pool.
+
+    `get_candidates` retrieves by embedding distance from the current track. That is right for
+    "more of this" and wrong for "stay ambient": from a rock seed every one of the 150 nearest
+    neighbours is rock, and a scorer can only reorder what it is handed. `liveliness_penalty`
+    was aimed at this and cannot reach it — given 150 rock tracks it selects the quietest rock
+    track.
+
+    So the ambient pool is **composed** from three queries rather than retrieved from one, and
+    the middle branch is the fix: fit tracks drawn from anywhere in the library, so what is
+    eligible does not depend on what is playing.
+    """
+
+    #: Above this fitness a track is "ambient enough". Measured, not guessed: at 0.60 roughly
+    #: 14% of a 26,000-track library clears it. See `ambient_fitness`.
+    fitness_floor: float
+    #: Fit *and* near — continuity, when the current track is anywhere near the ambient end.
+    neighbour_rows: int
+    #: Fit, from anywhere. **The branch that breaks the lock-in.**
+    library_rows: int
+    #: Ungated neighbours, for the deliberate departures.
+    excursion_rows: int
+    #: One candidate in this many is drawn from the excursions.
+    excursion_period: int
+
+
+AMBIENT_POOL = AmbientPool(
+    fitness_floor=0.60,
+    neighbour_rows=60,
+    library_rows=90,
+    excursion_rows=40,
+    excursion_period=8,
+)
+
+
+@dataclass(frozen=True)
 class RankingProfile:
     """How one mode weighs a candidate transition.
 
@@ -77,6 +114,10 @@ class RankingProfile:
     # Demotion per skip and per explicit rejection, from ADR-0004 `PlayEvent`. Rejection
     # is weighted more heavily: skipping is ambiguous (wrong moment, heard it recently),
     # rejecting is a stated judgement.
+    #: `None` means one nearest-neighbour query, exactly as before. Only `AMBIENT` sets this,
+    #: so radio and playlist generation cannot inherit the composed pool by accident.
+    pool: AmbientPool | None = None
+
     skip_penalty: float = 0.0
     reject_penalty: float = 0.0
     max_negative_penalty: float = 0.0
@@ -114,6 +155,7 @@ AMBIENT = RankingProfile(
     # still where a hard limit belongs.
     liveliness_ceiling=0.55,
     liveliness_penalty=0.30,
+    pool=AMBIENT_POOL,
 )
 
 
