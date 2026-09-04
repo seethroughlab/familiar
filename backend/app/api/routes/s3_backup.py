@@ -84,6 +84,28 @@ class RestoreDownloadRequest(BaseModel):
     confirm: bool = False
 
 
+async def _run_and_record(fn: Any, operation: str) -> None:
+    """Run a long backup operation, and make sure a failure leaves a trace.
+
+    `run_in_executor` returns a future. Nobody awaited it, so an exception in
+    the thread was collected by asyncio and dropped — the endpoint had already
+    answered "started". This awaits it, and records both a raised exception and
+    an error-status return where `/status` and `/history` will show them.
+    """
+    service = get_s3_backup_service()
+    loop = asyncio.get_event_loop()
+    try:
+        result = await loop.run_in_executor(None, fn)
+    except Exception as e:
+        logger.exception(f"{operation} raised")
+        service.record_failure(f"{type(e).__name__}: {e}", operation=operation)
+        return
+    if isinstance(result, dict) and result.get("status") in ("error", "incomplete"):
+        service.record_failure(
+            str(result.get("error") or result.get("status")), operation=operation
+        )
+
+
 # ── Phase 1: Validation & Estimate ───────────────────────────────────
 
 
@@ -151,9 +173,10 @@ async def trigger_backup() -> dict[str, Any]:
     if progress and progress.get("status") == "running":
         return {"status": "already_running", "message": "A backup is already in progress"}
 
-    # Run in background thread
-    loop = asyncio.get_event_loop()
-    loop.run_in_executor(None, service.run_backup)
+    # Run in background, recording anything that goes wrong: this endpoint
+    # answers before the work finishes, so "started" is a claim about the
+    # handoff and not about the outcome.
+    asyncio.create_task(_run_and_record(service.run_backup, "backup"))
 
     return {"status": "started", "message": "Backup started"}
 
@@ -247,9 +270,8 @@ async def download_and_restore(request: RestoreDownloadRequest) -> dict[str, Any
 
     service = get_s3_backup_service()
 
-    # Run in background thread
-    loop = asyncio.get_event_loop()
-    loop.run_in_executor(None, service.download_and_restore)
+    # Same handoff, same need for the failure to be visible afterwards.
+    asyncio.create_task(_run_and_record(service.download_and_restore, "restore"))
 
     return {"status": "started", "message": "Restore download started"}
 

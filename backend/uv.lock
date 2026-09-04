@@ -630,14 +630,19 @@ wheels = [
 [[package]]
 name = "clapback-embed"
 version = "0.1.0"
-source = { git = "https://github.com/seethroughlab/clapback.git?subdirectory=packages%2Fembed&rev=main#1623538905e5b38256f29fb5ce67deb30cb5d652" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "huggingface-hub" },
     { name = "librosa" },
     { name = "numpy" },
     { name = "onnxruntime" },
     { name = "soundfile" },
+    { name = "soxr" },
     { name = "tokenizers" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/de/4d/d46c8eb16dcfa7481c07def9125af4373966afb151691cd1ca9f6d2c8af9/clapback_embed-0.1.0.tar.gz", hash = "sha256:7cc6515abae798f6c220fb62d2c3ba709f6acaba3b8a4e8256e51a8121545ac6", size = 23958, upload-time = "2026-09-04T02:08:29.175Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d0/e9/0537e6244965c634764863575e659ce47108bf53c35b72819e56ed51c358/clapback_embed-0.1.0-py3-none-any.whl", hash = "sha256:bf27e314162c28ac93fc88b61c9a0ac83346f564e94a755d1435ef7546f901e1", size = 14939, upload-time = "2026-09-04T02:08:27.851Z" },
 ]
 
 [[package]]
@@ -1084,7 +1089,7 @@ requires-dist = [
     { name = "basic-pitch", extras = ["onnx"], marker = "extra == 'analysis'", specifier = ">=0.3.0" },
     { name = "beautifulsoup4", specifier = ">=4.14.3" },
     { name = "boto3", specifier = ">=1.34.0" },
-    { name = "clapback-embed", marker = "extra == 'analysis'", git = "https://github.com/seethroughlab/clapback.git?subdirectory=packages%2Fembed&rev=main" },
+    { name = "clapback-embed", marker = "extra == 'analysis'", specifier = ">=0.1.0,<0.2" },
     { name = "curl-cffi", specifier = ">=0.7.0" },
     { name = "fastapi", specifier = ">=0.109.0" },
     { name = "greenlet", specifier = ">=3.0.0" },
