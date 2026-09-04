@@ -37,8 +37,9 @@ hard gates in `ambient_seed_conditions`, which is the shape they actually have.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
-from sqlalchemy import ColumnElement, Float, cast, func, select
+from sqlalchemy import ColumnElement, Float, cast, func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Track, TrackAnalysis
@@ -161,9 +162,9 @@ def ambient_fitness_sql(
     """
     w = FITNESS_WEIGHTS
 
-    def ramp(col: ColumnElement[float], full: float, zero: float) -> ColumnElement[float]:
+    def ramp(col: Any, full: float, zero: float) -> ColumnElement[float]:
         if full == zero:
-            return func.cast(NEUTRAL, Float)
+            return literal(NEUTRAL)
         return func.greatest(0.0, func.least(1.0, (cast(col, Float) - zero) / (full - zero)))
 
     energy_term = func.coalesce(

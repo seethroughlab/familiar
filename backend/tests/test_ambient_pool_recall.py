@@ -25,6 +25,7 @@ import pytest
 from sqlalchemy import text
 
 from app.services.ambient import CANDIDATE_EF_SEARCH, CANDIDATE_POOL, get_candidates
+from app.services.ranking_profiles import AMBIENT
 from tests.factories import insert_test_analysis, insert_test_track
 
 # Comfortably past the pgvector default of 40, and past `CANDIDATE_POOL` too, so a query that
@@ -96,7 +97,17 @@ async def test_the_pool_is_not_capped_at_the_pgvector_default(async_db, library)
     assert pool_size > 40, (
         f"pool of {pool_size} is the pgvector ef_search default — the LIMIT is being ignored"
     )
-    assert pool_size > CANDIDATE_POOL * 0.8
+    # Expressed against the pool's own configuration rather than `CANDIDATE_POOL`, because
+    # `AMBIENT` no longer fills its pool from one query. It draws 60 nearest-fit and 90
+    # random-fit from the same eligible set, so the two branches overlap and a healthy pool
+    # here is ~120 of a possible 150 — not a collapse, a different shape. The property this
+    # test names is unchanged: if a filter excluded too much or a join dropped rows, the
+    # library branch alone could not fill from 200 eligible tracks.
+    assert AMBIENT.pool is not None
+    assert pool_size >= AMBIENT.pool.library_rows, (
+        f"pool of {pool_size} is below the library branch's own limit — something upstream "
+        "is excluding rows"
+    )
     assert not collapsed
 
 
