@@ -22,7 +22,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -98,8 +97,10 @@ class CommunityCacheService:
         timeout: float = 10.0,
         embedding_version: int | None = None,
         features_version: int | None = None,
+        client_id: str | None = None,
     ):
         self.cache_url = cache_url.rstrip("/")
+        self.client_id = client_id or None
         self._client: httpx.AsyncClient | None = None
         self._timeout = timeout
         # Lazy-import defaults from config only when not explicitly provided
@@ -281,18 +282,29 @@ class CommunityCacheService:
 
         fp_hash = self.hash_fingerprint(acoustid_fingerprint)
 
-        # Compress to float16 for smaller payload (~1KB vs 2KB)
-        embedding_f16 = np.array(embedding, dtype=np.float16).tolist()
+        # **Contribute the vector as computed.** This used to round to float16 to halve the
+        # request body, which cost 2.1e-08 of cosine distance — inside the corpus's `identical`
+        # band (1e-06), so nothing was broken, but roughly a hundred million times the 3.3e-16
+        # that float4 storage costs, and recorded nowhere. clapback's `ADR-0002` point 3 makes
+        # stored precision part of the corpus contract; there is no reason for the contributed
+        # precision to be quietly worse than what the corpus can hold. A few kilobytes per track,
+        # once per track, is not a trade worth making against that.
+        payload = {
+            "fingerprint_hash": fp_hash,
+            "embedding": [float(x) for x in embedding],
+            "analysis_version": analysis_version,
+            "clap_model_version": CLAP_MODEL_VERSION,
+        }
+        # Optional on the wire: the server accepts contributions without one, and older
+        # deployments predate the field entirely. Sending it is what lets this installation's
+        # submissions count toward independent agreement (`ADR-0004` point 3).
+        if self.client_id:
+            payload["client_id"] = self.client_id
 
         response = await self._request_with_retry(
             "POST",
             f"{self.cache_url}/v1/embeddings",
-            json={
-                "fingerprint_hash": fp_hash,
-                "embedding": embedding_f16,
-                "analysis_version": analysis_version,
-                "clap_model_version": CLAP_MODEL_VERSION,
-            },
+            json=payload,
         )
 
         if response is None:
@@ -553,21 +565,30 @@ class CommunityCacheService:
 _community_cache_service: CommunityCacheService | None = None
 
 
-def get_community_cache_service(cache_url: str | None = None) -> CommunityCacheService:
+def get_community_cache_service(
+    cache_url: str | None = None, client_id: str | None = None
+) -> CommunityCacheService:
     """Get or create the community cache service singleton.
 
     Args:
         cache_url: Optional custom cache URL. If provided and different
             from current, creates a new instance.
+        client_id: This installation's opaque identifier (`ADR-0004`). A change here
+            rebuilds the instance for the same reason a URL change does — the singleton
+            would otherwise keep contributing under a stale identity.
     """
     global _community_cache_service
 
     if _community_cache_service is None:
         _community_cache_service = CommunityCacheService(
-            cache_url=cache_url or DEFAULT_CACHE_URL
+            cache_url=cache_url or DEFAULT_CACHE_URL, client_id=client_id
         )
-    elif cache_url and cache_url != _community_cache_service.cache_url:
-        # URL changed, create new instance
-        _community_cache_service = CommunityCacheService(cache_url=cache_url)
+    elif (cache_url and cache_url != _community_cache_service.cache_url) or (
+        client_id and client_id != _community_cache_service.client_id
+    ):
+        _community_cache_service = CommunityCacheService(
+            cache_url=cache_url or _community_cache_service.cache_url,
+            client_id=client_id or _community_cache_service.client_id,
+        )
 
     return _community_cache_service
