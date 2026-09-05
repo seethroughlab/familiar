@@ -154,9 +154,14 @@ no test can reach — against ADR-0107 point 14.
   per-track level, and a melody that repeated exactly. Each is now measured rather than asserted.
 - **Positive.** Point 9 makes ambient behave like the rest of the app. The space bar, the media keys
   and the transport buttons all reach it, and playing a track ends it instead of doubling it.
-- **Tradeoff.** ~42 MB of SoundFonts in the repository, permanent in git history once committed, and
-  four licences that want checking before any App Store build. The guitar font carries 64 presets
-  where 16 are curated and one is used.
+- **Tradeoff, weighed and taken.** 45 MB of SoundFonts in the repository, permanent in history.
+  Both alternatives — LFS, and a post-install download — were put before the decision was made and
+  both were declined as not worth the machinery at this size. This is settled rather than deferred,
+  and the reason it is written down is that a repository's size is the kind of thing re-argued
+  yearly by people who were not in the room. The guitar font carries 64 presets where 16 are
+  curated and one is used, so the figure could fall a long way if it ever needs to.
+- **Follow-up.** Four SoundFont licences want checking before any App Store build. That is a
+  separate question from the size, and it is *not* settled.
 - **Tradeoff.** Sampled presets are fixed per build rather than per session or per phrase, which is
   two reductions from what was wanted, forced entirely by the crashes above. The ceiling appears to
   be about loading while running rather than node count — five nodes load fine before start — so it
