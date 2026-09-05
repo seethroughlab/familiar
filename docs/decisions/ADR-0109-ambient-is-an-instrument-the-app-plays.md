@@ -215,9 +215,33 @@ no test can reach — against ADR-0107 point 14.
   open; and a first attempt at measuring onset that timed the *reverb* rather than the note, and so
   passed against the voice that had just been reported as jarring. Measuring the right quantity is
   the hard half, and none of these were level problems.
-- **Tradeoff.** The bed is twelve voices where it was three, and the render path is much larger.
-  Measured at **0.55% of one core** in release for the densest texture before the bed rework; it
-  should be re-measured now.
+- **Tradeoff, now measured.** The synth is **eighteen voices** where it was three: a six-voice bed,
+  an air layer, ten melody slots and a bass. In release, all of them sounding at once cost
+  **1.08% of one core** — roughly double the 0.55% recorded for the pre-rework texture, and far
+  enough from a budget that voice count is not the constraint anyone thought it was.
+
+- **The melody has ten voices because four made it click, and that took three measurements to
+  establish.** `stealVoice` hands a slot to a new note and `latchGate` starts a note by setting
+  `envValue = 0`, so taking a slot whose previous note can still be heard steps it to silence in a
+  single sample. Across 200 phrases at the default harmony there were **227 such steals at four
+  slots and none at ten** — about one per phrase, and a phrase plays every intermission.
+
+  The two failed measurements are the useful part. Counting only *held* voices reported one steal
+  in two hundred phrases and nearly closed it as a non-issue: `stealVoice` prefers a **released**
+  slot, which reads as the polite choice and is not, because the pad's release is 2.4 seconds and a
+  voice released half a second ago is still most of the way up. And measuring the rendered signal
+  cannot work at all — a sample-to-sample delta counts legitimate slope, so going from four slots
+  to ten took "jumps over 0.02" from 3,062 to 22,586. The cause was countable when the symptom was
+  not.
+
+  It also invalidated point 5's calibration, which had been measured *under truncation*: with notes
+  no longer cut short the synthesised instruments rose unevenly, keys most of all at 0.0500 → 0.0704
+  RMS since its 2.2 s release was clipped most often. Recalibrated to 0.050 across all eight.
+
+- **A listener reported crackling and it was not this.** It continued with the app quit, and
+  `coreaudiod` was found at 15% of a core with nothing playing, restarting on its own, with a
+  duplicate BlackHole driver registered. Recorded because the voice-stealing defect above is real,
+  was found while chasing that report, and would otherwise have been written down as its cause.
 - **Follow-up.** `FILTER_PRESETS["instrumental"]` is still inert (ADR-0108 Context 5), and a session
   observed in real use played standup comedy and a radio play. Ambient plays whatever the ranker
   hands it, and nothing in the ranker can currently tell speech from music. This is the largest
