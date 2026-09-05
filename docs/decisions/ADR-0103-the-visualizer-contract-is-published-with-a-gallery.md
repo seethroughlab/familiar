@@ -1,6 +1,6 @@
 # ADR-0103: The Visualizer Contract Is Published, With a Gallery
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-31
 

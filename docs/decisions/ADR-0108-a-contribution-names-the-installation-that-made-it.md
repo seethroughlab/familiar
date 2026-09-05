@@ -1,6 +1,6 @@
 # ADR-0108: A Contribution Names the Installation That Made It
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-04
 
