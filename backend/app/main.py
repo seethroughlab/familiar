@@ -531,6 +531,59 @@ app.add_middleware(
 )
 
 
+#: Paths a visualizer plugin may read from an opaque origin.
+#:
+#: Media only, and read-only: cover art and the audio it is drawn over. Nothing here reveals
+#: anything a listener on the network could not already fetch, which is the same argument the media
+#: endpoints already rest on — a WiiM speaker holds no credential either.
+_OPAQUE_ORIGIN_READABLE = ("/artwork", "/stream")
+
+
+@app.middleware("http")
+async def allow_opaque_origin_media(request: Request, call_next):  # type: ignore[no-untyped-def]
+    """Let a sandboxed visualizer read cover art.
+
+    **A visualizer plugin has an opaque origin, so its requests arrive as `Origin: null`.** ADR-0087
+    point 1 loads plugin documents in an iframe with `sandbox="allow-scripts"` and deliberately
+    without `allow-same-origin`, which is what makes the origin opaque. `null` is not a URL, so it
+    matches neither `_get_cors_origins()` nor `allow_origin_regex`, and `CORSMiddleware` therefore
+    sends no `Access-Control-Allow-Origin` at all.
+
+    The symptom is silent and does not look like CORS: `beat-tiles` loads its cover with
+    `THREE.TextureLoader` and `setCrossOrigin('anonymous')`, so a refused read lands in the error
+    callback, which sets the texture to `null` — and the scene draws a grid of plain white cubes
+    with no error anywhere.
+
+    `familiar-apple` already fixed exactly this for the plugin's *own* folder: its custom scheme
+    handler attaches `Access-Control-Allow-Origin` with the same reasoning, found when a converted
+    visualizer could not load its own model. Artwork comes from this server instead, so it needs the
+    same answer here.
+
+    **Deliberately not `allow_credentials`.** The header is added only for `Origin: null`, only on
+    media paths, and only for reads. Adding `"null"` to the allow-list instead would have widened
+    every endpoint to opaque origins *with* credentials, which is a much larger claim than "a
+    sandboxed drawing surface may see the album cover".
+    """
+    response = await call_next(request)
+    if (
+        request.headers.get("origin") == "null"
+        and request.method in ("GET", "HEAD", "OPTIONS")
+        and any(part in request.url.path for part in _OPAQUE_ORIGIN_READABLE)
+        and "access-control-allow-origin" not in response.headers
+    ):
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        # **And drop the credentials claim, which `CORSMiddleware` attaches to any request carrying
+        # an `Origin` — allowed or not.** `Allow-Origin: *` with `Allow-Credentials: true` is a
+        # contradiction: a browser refuses the pair outright for a credentialed request, and for the
+        # anonymous read this exists for the claim is untrue anyway. Leaving it would make the one
+        # response that says "anyone may read this" also say "and you may send cookies".
+        # `del`, not `pop`: Starlette's `MutableHeaders` has no `pop`, and calling it raises inside
+        # the middleware — which surfaces as the header simply never being set, not as an error.
+        if "access-control-allow-credentials" in response.headers:
+            del response.headers["access-control-allow-credentials"]
+    return response
+
+
 # Global exception handlers
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(
