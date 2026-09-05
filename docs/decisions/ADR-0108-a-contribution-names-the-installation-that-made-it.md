@@ -1,6 +1,6 @@
 # ADR-0108: A Contribution Names the Installation That Made It
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-04
 
@@ -13,6 +13,14 @@ Implementation:
 - **Point 4 is not built.** The identifier is written to `settings.json` and is neither shown in the
   admin UI nor resettable from it. That is the gap between what this record asks the user to accept
   and what it currently gives them, and it should close before the next release rather than sit.
+- **Accepted 2026-09-05 with point 4 still outstanding, knowingly.** The gap was put to the owner
+  and the record was accepted anyway, on the grounds that contribution is opt-in and off by default
+  (`community_cache_contribute` is `False`), so nobody is disclosing an identifier without having
+  asked to. Recorded because "accepted" and "shipped" are not the same claim, and a later reader
+  finding point 4 missing should be able to tell that it was seen rather than overlooked. It
+  remains the one point that is *for the user* rather than about the mechanism — points 5 and 6
+  promise the identifier is used for the corpus and nothing else, and point 4 is what would let
+  someone check that promise instead of taking it.
 
 ## Context
 
