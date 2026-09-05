@@ -160,8 +160,21 @@ no test can reach — against ADR-0107 point 14.
   and the reason it is written down is that a repository's size is the kind of thing re-argued
   yearly by people who were not in the room. The guitar font carries 64 presets where 16 are
   curated and one is used, so the figure could fall a long way if it ever needs to.
-- **Follow-up.** Four SoundFont licences want checking before any App Store build. That is a
-  separate question from the size, and it is *not* settled.
+- **Checked, and clear.** All four SoundFonts permit commercial distribution: the choir, the pipe
+  organ and the drums are public domain, and the guitar is CC BY. Each was matched to its listing
+  by **filename and byte size** rather than by a similar title, which was not pedantry — these
+  fonts circulate in many edited versions under different terms, and the choir has a later
+  revision (`KBH-Real-Choir-V2.5.sf2`) distributed as CC BY-NC-SA. Bundled is not that file, and
+  upgrading it without re-checking would make the app non-distributable. See
+  `Sources/FamiliarKit/Resources/SoundFonts/CREDITS.md`, which ships inside the bundle because an
+  attribution requirement that lives only in a repository is not being met.
+- **Follow-up, and the only obligation this feature creates.** The guitar is CC BY, so *Studio
+  FG460s II Pro Guitar Pack* by Mitrofanis George Gemitros has to be credited somewhere a user can
+  see — an acknowledgements screen or the store description. There is no such screen yet.
+- **Residual risk, small and not zero.** The pipe organ is by its own metadata a merge, crediting
+  five sources including one reed whose origin the author cannot name because their computer was
+  wiped. A public-domain declaration by whoever assembled a merge does not clear the rights in what
+  was merged. Recorded rather than resolved, because it cannot be resolved from here.
 - **Tradeoff.** Sampled presets are fixed per build rather than per session or per phrase, which is
   two reductions from what was wanted, forced entirely by the crashes above. The ceiling appears to
   be about loading while running rather than node count — five nodes load fine before start — so it
