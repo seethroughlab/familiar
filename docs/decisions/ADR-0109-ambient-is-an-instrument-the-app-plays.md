@@ -71,11 +71,33 @@ thing.
    **multiplies** each track's own texture rather than replacing it, so a bright track's bed stays
    brighter than a dark one's however far the walk has gone.
 
-5. **Levels are measured, never chosen.** Every layer is rendered offline through the real graph and
-   pinned by `AmbientInstrumentBalanceTests`. This is not diligence for its own sake: uncalibrated,
-   the eight instruments measured **68× apart** and the melody peaked at 0.014 against a drone at
-   0.384 — inaudible — while every correctness test passed. A balance problem is invisible to
-   assertions about correctness.
+5. **Levels are measured on a phrase, never chosen and never on one note.** Every layer is rendered
+   offline through the real graph and pinned by `AmbientInstrumentBalanceTests`. This is not
+   diligence for its own sake: uncalibrated, the eight instruments measured **68× apart** and the
+   melody peaked at 0.014 against a drone at 0.384 — inaudible — while every correctness test
+   passed. A balance problem is invisible to assertions about correctness.
+
+   **"On a phrase" is the half this point originally got wrong**, and it is worth more than the
+   rest of the point. The first calibration levelled a single note at A4 to a peak of 0.20, which
+   passed everywhere and left the sampled instruments at roughly a *third* of the synthesised ones
+   in loudness — 0.0167 RMS for the cathedral organ against 0.0596 for the bell. The cause is
+   structural: a synthesised voice ends in `dx / (1 + |dx|)` and a sampler is an `AVAudioUnit` that
+   never passes through it, so four notes sum quite differently in the two paths. One note cannot
+   show that, and neither can peak — loudness is what a listener compares, so loudness is what a
+   level must be set on. The same error one layer down had the guitar's four registrations levelled
+   note-by-note and still 0.035 to 0.060 apart across a phrase, because a registration's decay
+   decides how much of it is still sounding when the next note arrives.
+
+   Two things follow that are worth stating as rules rather than as fixes. A test whose input the
+   system cannot produce measures nothing: an attempt to bound headroom by striking four notes at
+   once at velocity 0.8 and holding them six seconds reported every sampled instrument clipping at
+   1.35 to 2.38, and would have halved them all — on real phrases they peak at 0.138 to 0.294. And
+   a suite that covers half the cases hides the other half: the level test covered only the four
+   synthesised instruments, which is most of why an audible imbalance survived it.
+
+   An `AUPeakLimiter` closes the last gap, because sampled instruments still peak around 0.5 where
+   synthesised ones peak around 0.25 at equal loudness. It is a net, not a mix: it engages near
+   full scale, and every calibration assertion passes unchanged with it in the graph.
 
 ### The listener
 
