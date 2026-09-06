@@ -170,6 +170,37 @@ def extract_embedding(file_path: Path, target_sr: int = 48000) -> list[float] | 
         raise AnalysisError(f"Embedding extraction failed: {e}") from e
 
 
+def embedding_pipeline_version() -> str | None:
+    """The identity of the pipeline `extract_embedding` runs, or None if there is none.
+
+    `PIPELINE_VERSION` is composed by `clapback-embed` from every component that can
+    move a vector — the checkpoint, the mel front-end, the ONNX artifacts, the pooling
+    and the precision. Two vectors are comparable exactly when it matches, which is
+    what clapback's `ADR-0006` makes the corpus key.
+
+    **Read from the installed library rather than written down here.** A constant in
+    `config.py` would be a second copy of a fact, maintained by hand, drifting from the
+    code that actually computes the vectors — which is exactly the failure
+    `EMBEDDING_VERSION` already has and the reason `ADR-0006` was written. This cannot
+    drift: it is the value the encoder that just ran reports about itself.
+
+    Returns None when the embedder is not installed, which is the same case in which
+    this installation computes no embeddings and so has nothing to declare.
+    """
+    if not _embedder_available:
+        return None
+    try:
+        from clapback_embed import PIPELINE_VERSION
+
+        return PIPELINE_VERSION
+    except Exception as e:  # noqa: BLE001 - a missing attribute must not break analysis
+        # An older `clapback-embed` without the attribute. Declaring nothing is
+        # correct here: clapback's server treats absent as "unknown", which is
+        # true, and a guessed string would be worse than silence.
+        logger.debug(f"clapback-embed reports no PIPELINE_VERSION: {e}")
+        return None
+
+
 def extract_text_embedding(text: str) -> list[float] | None:
     """Extract CLAP text embedding from a text description.
 

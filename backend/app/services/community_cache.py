@@ -13,6 +13,13 @@ Versioning:
 - Embeddings are versioned by EMBEDDING_VERSION and CLAP model version
 - Features are versioned by FEATURES_VERSION
 - Prevents mixing data from incompatible analysis pipelines
+
+Neither of those two actually establishes that two vectors are comparable, which is
+what clapback's `ADR-0006` is about: EMBEDDING_VERSION is this application's own
+counter, and CLAP_MODEL_VERSION is the checkpoint, which a change to windowing or
+pooling moves every vector without touching. `clapback_embed.PIPELINE_VERSION` is
+composed from all five things that can move a vector, and contributions now carry it
+when the caller knows it — see `contribute`.
 """
 
 import asyncio
@@ -262,6 +269,7 @@ class CommunityCacheService:
         acoustid_fingerprint: str | bytes,
         embedding: list[float],
         analysis_version: int | None = None,
+        pipeline_version: str | None = None,
     ) -> bool:
         """Contribute an embedding to the community cache.
 
@@ -269,6 +277,15 @@ class CommunityCacheService:
             acoustid_fingerprint: The raw AcoustID fingerprint string
             embedding: 512-dimensional CLAP embedding
             analysis_version: Version of the analysis (defaults to current)
+            pipeline_version: The identity of the pipeline that computed this
+                vector — `clapback_embed.PIPELINE_VERSION`. **Explicit, and never
+                defaulted from the installed library**, because this method is
+                handed a vector and does not know what produced it. Filling it in
+                from whatever `clapback-embed` happens to be installed now would
+                declare today's pipeline for a vector computed months ago by a
+                different one, which is precisely the false assertion clapback's
+                `ADR-0006` exists to prevent. A caller that did not just compute
+                the vector passes nothing, and the corpus records "unknown".
 
         Returns:
             True if contribution was accepted, False otherwise
@@ -300,6 +317,18 @@ class CommunityCacheService:
         # submissions count toward independent agreement (`ADR-0004` point 3).
         if self.client_id:
             payload["client_id"] = self.client_id
+        # Phase 2 of clapback's `ADR-0006` point 6. The corpus keys on
+        # `analysis_version` and `clap_model_version` today, and neither says whether
+        # two vectors are comparable: the first is this application's own counter, and
+        # the second is the checkpoint, which windowing or pooling can move every vector
+        # without changing. `pipeline_version` is the one field that does.
+        #
+        # Omitted rather than sent as null when unknown, and optional on the wire for
+        # the same reason `client_id` is: a corpus that predates the field must keep
+        # accepting these. It becomes required when clapback reaches phase 4, and
+        # nothing here breaks before then.
+        if pipeline_version:
+            payload["pipeline_version"] = pipeline_version
 
         response = await self._request_with_retry(
             "POST",
