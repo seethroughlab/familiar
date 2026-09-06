@@ -172,13 +172,29 @@ FEATURES_VERSION = 8
 #   v5: Re-extract (psutil fix)
 #   v6: Matched features version at loudness addition
 #   v7: Whole track by chunked mean, L2-normalised, instead of the middle 10s (ADR-0104)
+#   v8: Recompute under a declared pipeline. The vectors do not change — see below.
 #
 # This constant is the identity of the embedding *pipeline*, not of the checkpoint.
 # ADR-0104 point 6: windowing, pooling, mel parameters, truncation and precision all
 # belong to it, and any change moving vectors by more than ~1e-6 must bump it — the
 # community cache keys on this value, and vectors from two pipelines are not
 # comparable. `laion/clap-htsat-unfused:v1` staying fixed does not make them so.
-EMBEDDING_VERSION = 7
+#
+# **v8 is the exception to that rule, and it is deliberate rather than an oversight.**
+# Nothing about the pipeline changed: `clapback_embed.PIPELINE_VERSION` is unmoved,
+# and a fresh computation reproduces a stored v7 vector to 5e-16 — measured over a
+# random sample of the library on 2026-09-06, not assumed. The bump exists to make
+# the re-analysis path recompute, which is phase 3 of clapback's `ADR-0006`: the
+# corpus holds 25,596 of our v7 vectors with no record of what produced them, its
+# phase 4 keys on the pipeline and drops rows that cannot say, and point 5 of that
+# record recomputes rather than relabels. Relabelling would assert a provenance
+# nobody verified; recomputing earns it, and this constant is the only lever we hold
+# that makes the existing re-analysis path do the work.
+#
+# So the bump does not mean "the vectors moved". It means "the vectors are being
+# produced again, this time saying who made them". A reader comparing v7 and v8 rows
+# in the corpus and finding them identical is seeing the intended outcome.
+EMBEDDING_VERSION = 8
 
 # Melodic history:
 #   v5: basic-pitch MIDI transcription + melodic feature extraction

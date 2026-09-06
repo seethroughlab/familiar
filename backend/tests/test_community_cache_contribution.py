@@ -232,3 +232,34 @@ class TestTheAccessorReadsTheLibraryRatherThanAConstant:
         with patch.dict(sys.modules, {"clapback_embed": module}):
             with patch.object(analysis, "_embedder_available", True):
                 assert analysis.embedding_pipeline_version() is None
+
+
+class TestTheEmbeddingVersionDocumentsItself:
+    """`EMBEDDING_VERSION` is a number whose meaning lives entirely in a comment.
+
+    Every other component of a vector's identity is now carried by
+    `clapback_embed.PIPELINE_VERSION`, which is composed from the code that computes
+    it and cannot drift. This one is still maintained by hand, and v8 is the first
+    bump that does **not** mean "the vectors moved" — it triggers a recompute so the
+    corpus can be told what produced them (clapback's `ADR-0006` phase 3). A future
+    reader who finds v7 and v8 vectors identical needs the comment to know that was
+    intended, so an undocumented bump is a real defect rather than untidiness.
+    """
+
+    def _history(self) -> str:
+        source = (
+            Path(__file__).resolve().parents[1] / "app/config.py"
+        ).read_text()
+        start = source.index("# Embedding history:")
+        return source[start : source.index("EMBEDDING_VERSION = ", start)]
+
+    def test_the_current_version_has_a_history_entry(self):
+        assert f"#   v{EMBEDDING_VERSION}:" in self._history()
+
+    def test_the_bump_that_moves_no_vectors_says_so(self):
+        """The constant's own rule is "bump when vectors move by more than ~1e-6".
+        v8 breaks that rule deliberately, and a deliberate exception that is not
+        written down is indistinguishable from a mistake."""
+        history = self._history()
+        assert "ADR-0006" in history, "the reason for the v8 bump is not recorded"
+        assert "do not change" in history or "does not mean" in history

@@ -35,6 +35,12 @@ Implementation:
   the backfill script may not, because its vectors came out of the database and
   `embedding_version == 7` narrows their provenance without pinning it. Declaring there would
   assert, on tens of thousands of rows at once, something nobody verified.
+- **`EMBEDDING_VERSION` is 8 as of 2026-09-06**, which is phase 3 of the same record: the existing
+  re-analysis path recomputes the library, and each track is contributed again through the path
+  above — this time declaring the pipeline, because the vector was just computed. The bump moves no
+  vectors and is an exception to the rule in
+  [`ADR-0104`](ADR-0104-familiar-embeds-whole-tracks-by-chunked-mean.md) point 6, which records it
+  along with the measurement showing what a recompute does and does not change.
 
 ## Context
 
