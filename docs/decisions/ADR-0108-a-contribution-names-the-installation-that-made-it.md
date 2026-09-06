@@ -21,6 +21,20 @@ Implementation:
   remains the one point that is *for the user* rather than about the mechanism — points 5 and 6
   promise the identifier is used for the corpus and nothing else, and point 4 is what would let
   someone check that promise instead of taking it.
+- **A contribution now names its pipeline as well as its installation** (2026-09-05), implementing
+  phase 2 of clapback's
+  [`ADR-0006`](https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0006-the-pipeline-identity-is-the-corpus-key.md).
+  `pipeline_version` is `clapback_embed.PIPELINE_VERSION`, read from the installed embedder rather
+  than written down here — a constant in `config.py` would be a second hand-maintained copy of a
+  fact, which is what `EMBEDDING_VERSION` already is and what that record exists to fix. Optional on
+  the wire and omitted when unknown, exactly as `client_id` is, so an older corpus keeps accepting
+  these.
+- **Only the analysis pipeline declares one.** `contribute` is handed a vector and does not know
+  what produced it, so it never fills the field in from whatever embedder happens to be installed.
+  The pipeline may, because it contributes solely in the branch where `extract_embedding` just ran;
+  the backfill script may not, because its vectors came out of the database and
+  `embedding_version == 7` narrows their provenance without pinning it. Declaring there would
+  assert, on tens of thousands of rows at once, something nobody verified.
 
 ## Context
 

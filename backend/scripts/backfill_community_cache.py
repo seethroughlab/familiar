@@ -92,7 +92,9 @@ async def backfill(*, dry_run: bool, limit: int | None, per_minute: int, url: st
 
     # Only the current pipeline. Older vectors are not comparable with what the
     # corpus is being asked to hold, and contributing them would be the mistake
-    # clapback's ADR-0006 exists to prevent.
+    # clapback's ADR-0006 exists to prevent. Note that this filter is the closest
+    # this script can get: it selects rows sharing a counter, not rows sharing a
+    # pipeline, which is why the contribution below declares no pipeline at all.
     stmt = (
         select(TrackAnalysis.acoustid, TrackAnalysis.embedding)
         .where(TrackAnalysis.embedding_version == EMBEDDING_VERSION)
@@ -126,6 +128,16 @@ async def backfill(*, dry_run: bool, limit: int | None, per_minute: int, url: st
             if dry_run:
                 tally.contributed += 1
             else:
+                # **No `pipeline_version`, deliberately.** These vectors came out
+                # of the database, computed at some earlier time by whatever
+                # `clapback-embed` was installed then. `embedding_version == 7`
+                # narrows that but does not pin it: the counter is this
+                # application's own and moved once for a reason unrelated to the
+                # encoder. Declaring the currently installed pipeline here would
+                # assert, on tens of thousands of rows, a provenance nobody
+                # verified — the exact failure clapback's `ADR-0006` is written to
+                # prevent, and its point 5 says these rows are recomputed rather
+                # than relabelled anyway.
                 ok = await cache.contribute(acoustid, list(embedding))
                 if ok:
                     tally.contributed += 1

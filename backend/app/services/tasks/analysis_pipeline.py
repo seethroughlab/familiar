@@ -493,7 +493,11 @@ def run_track_embedding(track_id: str) -> dict[str, Any]:
 
     from app.db.models import Track, TrackAnalysis
     from app.db.session import sync_session_maker
-    from app.services.analysis import AnalysisError, extract_embedding
+    from app.services.analysis import (
+        AnalysisError,
+        embedding_pipeline_version,
+        extract_embedding,
+    )
     from app.services.app_settings import get_app_settings_service
     from app.services.community_cache import get_community_cache_service
 
@@ -571,7 +575,17 @@ def run_track_embedding(track_id: str) -> dict[str, Any]:
                             client_id=get_app_settings_service().ensure_community_cache_client_id(),
                         )
                         asyncio.run(
-                            cache_service.contribute(acoustid_fingerprint, embedding)
+                            cache_service.contribute(
+                                acoustid_fingerprint,
+                                embedding,
+                                # **This branch is the one place that can honestly
+                                # declare a pipeline.** It is reached only when
+                                # `extract_embedding` above just computed the vector
+                                # locally — a cache hit returns before here — so the
+                                # installed embedder is provably the thing that
+                                # produced it. Phase 2 of clapback's `ADR-0006`.
+                                pipeline_version=embedding_pipeline_version(),
+                            )
                         )
                     except Exception as e:
                         logger.debug(f"Community cache contribution failed: {e}")
