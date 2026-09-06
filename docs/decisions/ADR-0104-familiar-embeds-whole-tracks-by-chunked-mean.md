@@ -9,6 +9,46 @@ Implementation:
   (`app/services/analysis.py`) now walks consecutive 480,000-sample windows, mean-pools the raw
   encoder outputs and L2-normalises; `EMBEDDING_VERSION` is 7. The re-analysis of 26,471 embeddings
   drives itself from the existing two-hourly sync — nothing was scheduled for it.
+- **`EMBEDDING_VERSION` is 8 as of 2026-09-06, and point 6's rule is deliberately broken to get
+  there.** That rule says the constant bumps when vectors move by more than ~1e-6. Nothing about
+  the pipeline changed and the vectors do not move; the bump exists to make this same re-analysis
+  path recompute the library, which is phase 3 of clapback's
+  [`ADR-0006`](https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0006-the-pipeline-identity-is-the-corpus-key.md).
+  Its point 5 recomputes rather than relabels, because the corpus holds 25,596 of our vectors with
+  no record of what produced them and relabelling would assert a provenance nobody verified. This
+  constant is the only lever we hold that drives the existing path. An exception to a written rule
+  that is not itself written down is indistinguishable from a mistake, so it is recorded here and
+  in the constant's own comment, and a test asserts the comment says it.
+
+### What a recompute actually changes, measured 2026-09-06
+
+Fifty tracks drawn at random from the 26,471 at `embedding_version = 7`, recomputed through the
+installed `clapback-embed` and compared with what is stored:
+
+| | tracks | cosine distance from stored |
+|---|---|---|
+| reproduced exactly | 43 | ≤ 6.7e-16, the float64 floor |
+| reproduced closely | 7 | 1.3e-12 – 5.5e-11 |
+
+So the recompute is very nearly a no-op on the numbers, which is the intended outcome — it is the
+*declaration* that phase 3 buys, not different vectors. Two things follow that are worth having
+written down rather than rediscovered:
+
+**The stored v7 vectors really are from the current pipeline.** That was an assumption before this
+measurement — v7 was declared 2026-09-01 and `clapback-embed` adopted 2026-09-02, one day apart,
+so a mixture of the old torch path and the ONNX path was entirely plausible. It is not what
+happened.
+
+**The audio decoder is not pinned, and `PIPELINE_VERSION` does not cover it.** All seven inexact
+tracks logged librosa's `PySoundFile failed. Trying audioread instead.` fallback. Embedding one of
+them twice in a single process gives 0.0 and -2.2e-16 — the fallback is deterministic *within* a
+run, so the difference is against whatever decoded the file when it was first stored, not run-to-run
+noise. Which decoder handles a file depends on the installed `libsndfile` and what it was built to
+read, and none of that appears in `PIPELINE_VERSION` despite its claim to pin everything that can
+move a vector. At 5.5e-11 it is four orders of magnitude inside clapback's 1e-6 "identical" band and
+seven inside the 3e-4 that two rips of one recording differ by, so it threatens no comparability —
+but it is a hole in the claim rather than an absence of one, and belongs to `clapback-embed` rather
+than here.
 - **Point 2 turned out to change more than pooling.** The previous implementation returned the raw
   encoder output *un-normalised*. Every consumer uses cosine — `cosine_distance` in pgvector,
   `cosine_similarity` in `ego_map.py` and `embedding_map.py`, no L2 or inner-product operator
