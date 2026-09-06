@@ -446,7 +446,7 @@ Each descriptor has a natural-language description (e.g., "happy uplifting joyfu
 | | |
 |---|---|
 | **Service** | `community_cache.py:CommunityCacheService` |
-| **Server** | `https://familiar-cache.fly.dev` |
+| **Server** | `https://clapback.seethroughlab.com` (was `familiar-cache.fly.dev`, retired when the service left Fly) |
 | **Key** | SHA256 hash of AcoustID fingerprint (privacy-preserving) |
 | **Data types** | Embeddings (512-dim CLAP), features (all scalar columns), analysis_detail (full structured data) |
 | **Versioning** | Matched by `EMBEDDING_VERSION`, `FEATURES_VERSION`, and CLAP model version |

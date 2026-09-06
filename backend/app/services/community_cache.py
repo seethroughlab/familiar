@@ -40,8 +40,20 @@ DEFAULT_RETRY_DELAY = 5.0  # seconds
 CLAP_MODEL_VERSION = "laion/clap-htsat-unfused:v1"
 EMBEDDING_DIM = 512
 
-# Default community cache server
-DEFAULT_CACHE_URL = "https://familiar-cache.fly.dev"
+# Default community cache server — the public commons, and the only one now.
+#
+# It was `familiar-cache.fly.dev` until 2026-09-06, which had not resolved since the
+# service left Fly. A default that points at nothing is not merely untidy: this is the
+# value an installation uses when it has no setting of its own, so a fresh install
+# looked up and contributed into a void, and every one of those requests failed in a
+# way that looks exactly like a cache miss.
+#
+# The same day, the local `familiar-cache` container this deployment had been pointed
+# at was decommissioned for the sister reason — it accepted contributions and returned
+# `201 Created` while silently discarding the `pipeline_version` its schema predated,
+# which is worse than failing. There is now one address, it is public, and anything
+# aimed elsewhere errors instead of appearing to work.
+DEFAULT_CACHE_URL = "https://clapback.seethroughlab.com"
 
 
 @dataclass
