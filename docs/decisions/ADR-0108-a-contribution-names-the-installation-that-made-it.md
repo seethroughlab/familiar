@@ -41,6 +41,15 @@ Implementation:
   vectors and is an exception to the rule in
   [`ADR-0104`](ADR-0104-familiar-embeds-whole-tracks-by-chunked-mean.md) point 6, which records it
   along with the measurement showing what a recompute does and does not change.
+- **Lookups name the pipeline too** (2026-09-06), which is the read-side half of clapback's phase 4.
+  Once the corpus keys on `(fingerprint_hash, pipeline_version)` a recording can hold one vector per
+  pipeline, and a query by `analysis_version` and the checkpoint alone can be answered with a vector
+  this installation cannot use — a well-formed 512-dimensional unit vector that means something
+  else, which would be stored as the track's embedding and compared against the whole library with
+  nothing downstream able to tell. The response is checked as well as the request filtered: a corpus
+  predating that phase ignores the parameter, so asking correctly does not make the answer right. A
+  vector declaring *nothing* is still accepted, because refusing it would break this client against
+  a server that is merely older.
 
 ## Context
 
