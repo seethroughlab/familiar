@@ -263,3 +263,98 @@ class TestTheEmbeddingVersionDocumentsItself:
         history = self._history()
         assert "ADR-0006" in history, "the reason for the v8 bump is not recorded"
         assert "do not change" in history or "does not mean" in history
+
+
+class TestALookupOnlyAcceptsItsOwnPipeline:
+    """clapback's `ADR-0006` phase 4 made `pipeline_version` half the corpus key, so
+    a recording can hold one vector per pipeline.
+
+    The failure this guards is silent and permanent. A vector from another pipeline
+    is a well-formed 512-dimensional unit vector that simply means something else;
+    accepted, it would be stored as the track's embedding and compared against
+    everything in the library, and nothing downstream could tell.
+    """
+
+    IDENTITY = "laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32"
+
+    def _lookup(self, *, returns: dict, declared: str | None = "unset") -> tuple:
+        """Returns `(params_sent, result)`."""
+        service = CommunityCacheService(cache_url="http://cache")
+        sent: dict = {}
+
+        async def fake(method, url, **kwargs):
+            sent.update(kwargs.get("params", {}))
+
+            class Response:
+                status_code = 200
+
+                def json(self):
+                    return returns
+
+            return Response()
+
+        kw = {} if declared == "unset" else {"pipeline_version": declared}
+        with patch.object(service, "_request_with_retry", new=AsyncMock(side_effect=fake)):
+            with patch.object(analysis, "_embedder_available", True):
+                module = types.ModuleType("clapback_embed")
+                module.PIPELINE_VERSION = self.IDENTITY
+                with patch.dict(sys.modules, {"clapback_embed": module}):
+                    result = asyncio.run(service.lookup("fp", **kw))
+        return sent, result
+
+    def _hit(self, pipeline: str | None) -> dict:
+        body = {
+            "embedding": _vector(),
+            "analysis_version": EMBEDDING_VERSION,
+            "clap_model_version": CLAP_MODEL_VERSION,
+            "contributor_count": 1,
+        }
+        if pipeline is not None:
+            body["pipeline_version"] = pipeline
+        return body
+
+    def test_the_request_names_the_pipeline_this_install_runs(self):
+        sent, _ = self._lookup(returns=self._hit(self.IDENTITY))
+        assert sent["pipeline_version"] == self.IDENTITY
+
+    def test_a_matching_vector_is_accepted(self):
+        _, result = self._lookup(returns=self._hit(self.IDENTITY))
+        assert result is not None
+        assert result.pipeline_version == self.IDENTITY
+
+    def test_a_vector_from_another_pipeline_is_refused(self):
+        """**The point of the class.** A corpus predating phase 4 ignores the
+        parameter and answers on metadata alone, so a correct request does not make
+        the response right — the answer has to be checked, not assumed."""
+        _, result = self._lookup(returns=self._hit("something+else+entirely"))
+        assert result is None
+
+    def test_an_undeclared_vector_is_still_accepted(self):
+        """An older corpus declares nothing. Refusing those would turn every lookup
+        against one into a miss, which breaks a client against a server that is
+        merely older rather than wrong."""
+        _, result = self._lookup(returns=self._hit(None))
+        assert result is not None
+
+    def test_an_install_without_an_embedder_sends_nothing(self):
+        """It has no pipeline of its own to match against, and an empty parameter
+        would be a filter on the empty string."""
+        service = CommunityCacheService(cache_url="http://cache")
+        sent: dict = {}
+
+        async def fake(method, url, **kwargs):
+            sent.update(kwargs.get("params", {}))
+
+            class Response:
+                status_code = 404
+
+                def json(self):
+                    return {}
+
+            return Response()
+
+        with patch.object(service, "_request_with_retry", new=AsyncMock(side_effect=fake)):
+            with patch.object(analysis, "_embedder_available", False):
+                assert asyncio.run(service.lookup("fp")) is None
+        assert "pipeline_version" not in sent
+        assert sent["analysis_version"] == EMBEDDING_VERSION

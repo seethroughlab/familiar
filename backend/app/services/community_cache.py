@@ -53,6 +53,9 @@ class CachedEmbedding:
     analysis_version: int
     clap_model_version: str
     contributor_count: int = 1  # How many users have contributed this embedding
+    #: What produced it. None from a corpus predating clapback's `ADR-0006`; every
+    #: row in a current one declares it.
+    pipeline_version: str | None = None
 
 
 @dataclass
@@ -202,28 +205,52 @@ class CommunityCacheService:
         self,
         acoustid_fingerprint: str | bytes,
         analysis_version: int | None = None,
+        pipeline_version: str | None = None,
     ) -> CachedEmbedding | None:
         """Look up an embedding from the community cache.
 
         Args:
             acoustid_fingerprint: The raw AcoustID fingerprint string
             analysis_version: Version to match (defaults to current EMBEDDING_VERSION)
+            pipeline_version: Only accept a vector from this pipeline. **This is the
+                parameter that makes the answer usable**, since clapback's `ADR-0006`
+                phase 4: it is half the corpus key, so it selects exactly one row,
+                and it is the only field that establishes the vector is comparable
+                with the ones this installation computes. `analysis_version` and the
+                checkpoint are filters on metadata — a corpus holding two pipelines
+                can answer a query by those alone with a vector we cannot use, and
+                nothing downstream would notice, because it is a well-formed 512-dim
+                unit vector that simply means something else.
 
         Returns:
             CachedEmbedding if found, None otherwise
         """
         if analysis_version is None:
             analysis_version = self._embedding_version
+        if pipeline_version is None:
+            # Imported here rather than at module scope: `analysis` pulls in numpy
+            # and acoustid, and this module is imported by paths that need neither.
+            from app.services.analysis import embedding_pipeline_version
+
+            pipeline_version = embedding_pipeline_version()
 
         fp_hash = self.hash_fingerprint(acoustid_fingerprint)
+
+        params: dict[str, Any] = {
+            "analysis_version": analysis_version,
+            "clap_model_version": CLAP_MODEL_VERSION,
+        }
+        # Omitted rather than sent empty when this installation has no embedder, and
+        # therefore no pipeline of its own to match against. httpx escapes the `+`
+        # in the identity, which matters: unescaped it decodes as a space server-side
+        # and matches nothing, 404ing as though the recording were absent.
+        if pipeline_version:
+            params["pipeline_version"] = pipeline_version
 
         response = await self._request_with_retry(
             "GET",
             f"{self.cache_url}/v1/embeddings/{fp_hash}",
-            params={
-                "analysis_version": analysis_version,
-                "clap_model_version": CLAP_MODEL_VERSION,
-            },
+            params=params,
         )
 
         if response is None:
@@ -248,6 +275,22 @@ class CommunityCacheService:
                 )
                 return None
 
+            # **Check what came back, do not assume the filter was honoured.** A
+            # corpus predating clapback's phase 4 ignores `pipeline_version`
+            # entirely and answers on the metadata alone, so the request being
+            # correct does not make the response right. Accepting a vector from
+            # another pipeline is silent and permanent: it is a valid 512-dim unit
+            # vector that means something else, and it would be stored as this
+            # track's embedding and compared against everything.
+            returned = data.get("pipeline_version")
+            if pipeline_version and returned and returned != pipeline_version:
+                logger.warning(
+                    "Community cache returned a vector from %s, not %s — ignoring it",
+                    returned,
+                    pipeline_version,
+                )
+                return None
+
             logger.info(
                 f"Community cache hit for {fp_hash[:16]}... "
                 f"(contributed by {data.get('contributor_count', 1)} users)"
@@ -259,6 +302,7 @@ class CommunityCacheService:
                 analysis_version=data.get("analysis_version", analysis_version),
                 clap_model_version=data.get("clap_model_version", CLAP_MODEL_VERSION),
                 contributor_count=data.get("contributor_count", 1),
+                pipeline_version=returned,
             )
         except Exception as e:
             logger.warning(f"Community cache lookup failed to parse response: {e}")
