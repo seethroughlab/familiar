@@ -358,3 +358,47 @@ class TestALookupOnlyAcceptsItsOwnPipeline:
                 assert asyncio.run(service.lookup("fp")) is None
         assert "pipeline_version" not in sent
         assert sent["analysis_version"] == EMBEDDING_VERSION
+
+
+class TestTheDefaultAddressIsOneThatAnswers:
+    """The default is what an installation uses when it has no setting of its own.
+
+    It pointed at `familiar-cache.fly.dev` until 2026-09-06 — a host that had not
+    resolved since the service left Fly. **A default aimed at nothing fails in the
+    shape of a cache miss**: lookups return None and contributions are swallowed by
+    the same `except` that handles a server being briefly down, so a fresh install
+    contributed nothing and nobody would have seen an error.
+    """
+
+    RETIRED = "familiar-cache.fly.dev"
+
+    def test_the_two_defaults_are_the_same_fact(self):
+        """`AppSettings.community_cache_url` and `DEFAULT_CACHE_URL` are written
+        twice and must not drift — one is used when a settings file exists without
+        the key, the other when the service is built without one."""
+        from app.services.app_settings import AppSettings
+        from app.services.community_cache import DEFAULT_CACHE_URL
+
+        assert AppSettings().community_cache_url == DEFAULT_CACHE_URL
+
+    def test_neither_points_at_the_retired_host(self):
+        from app.services.app_settings import AppSettings
+        from app.services.community_cache import DEFAULT_CACHE_URL
+
+        assert self.RETIRED not in DEFAULT_CACHE_URL
+        assert self.RETIRED not in AppSettings().community_cache_url
+
+    def test_a_service_built_without_a_url_uses_it(self):
+        """The path that matters: `get_community_cache_service()` with no argument."""
+        from app.services.community_cache import DEFAULT_CACHE_URL
+
+        service = CommunityCacheService()
+        assert service.cache_url == DEFAULT_CACHE_URL
+
+    def test_it_is_https(self):
+        """The commons is reached over the public internet now, not a Docker network
+        alias on one NAS. Contributions carry no personal data, but a plaintext
+        default would still be a decision nobody took."""
+        from app.services.community_cache import DEFAULT_CACHE_URL
+
+        assert DEFAULT_CACHE_URL.startswith("https://")

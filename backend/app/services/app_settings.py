@@ -79,7 +79,10 @@ class AppSettings(BaseModel):
     # Community embedding cache (share CLAP embeddings with other users)
     community_cache_enabled: bool = True  # Look up embeddings from community cache
     community_cache_contribute: bool = False  # Contribute computed embeddings (opt-in)
-    community_cache_url: str = "https://familiar-cache.fly.dev"  # Cache server URL
+    #: The commons this installation talks to. Keep in step with
+    #: `community_cache.DEFAULT_CACHE_URL` — they are the same fact written twice, and
+    #: a test asserts they agree.
+    community_cache_url: str = "https://clapback.seethroughlab.com"
 
     # Opaque per-installation identifier sent with every embedding contribution, so the
     # commons can tell "two installations computed the same vector" from "one installation
