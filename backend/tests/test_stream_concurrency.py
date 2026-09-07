@@ -65,12 +65,17 @@ def temp_audio_file():
 
 
 class TestConcurrentStream:
-    """Test concurrent stream requests don't crash.
+    """Concurrent stream requests do not crash.
 
-    These tests exercise the TestClient with concurrent threads to verify
-    that the streaming endpoint doesn't raise under parallel access.
-    Since DB may not be available, 404 responses are acceptable — the goal
-    is to ensure no unhandled exceptions or deadlocks.
+    **These are not the concurrency tests, and mistaking them for such is why the same incident
+    happened twice.** They drive three threads at a route that answers 404 immediately, so nothing
+    ever overlaps: the suite passed on 2026-08-02 and again on 2026-09-07 while the server was at
+    load 41 with individual ``/stream`` requests taking 180 to 424 seconds. A concurrency test whose
+    load is below the bound proves only that the code parses.
+
+    They are kept because they still say something worth saying — the route answers under parallel
+    access and raises nothing — but the bound itself is asserted in ``test_file_response_bound.py``,
+    against a load above it.
     """
 
     def test_concurrent_stream_same_track(self, client):
