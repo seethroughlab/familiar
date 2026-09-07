@@ -29,6 +29,7 @@ built on. Every track is looked up before it is offered.
     python -m scripts.backfill_community_cache --dry-run
     python -m scripts.backfill_community_cache --limit 50
     python -m scripts.backfill_community_cache
+    python -m scripts.backfill_community_cache --declare-pipeline
 """
 
 from __future__ import annotations
@@ -70,7 +71,14 @@ class Tally:
         )
 
 
-async def backfill(*, dry_run: bool, limit: int | None, per_minute: int, url: str | None) -> Tally:
+async def backfill(
+    *,
+    dry_run: bool,
+    limit: int | None,
+    per_minute: int,
+    url: str | None,
+    declare_pipeline: bool = False,
+) -> Tally:
     settings = get_app_settings_service().get()
     if not settings.community_cache_contribute and not dry_run:
         raise SystemExit(
@@ -92,9 +100,10 @@ async def backfill(*, dry_run: bool, limit: int | None, per_minute: int, url: st
 
     # Only the current pipeline. Older vectors are not comparable with what the
     # corpus is being asked to hold, and contributing them would be the mistake
-    # clapback's ADR-0006 exists to prevent. Note that this filter is the closest
-    # this script can get: it selects rows sharing a counter, not rows sharing a
-    # pipeline, which is why the contribution below declares no pipeline at all.
+    # clapback's ADR-0006 exists to prevent. This filter selects rows sharing a
+    # *counter* rather than rows sharing a pipeline — which is exactly why
+    # `--declare-pipeline` is opt-in, and why it is only defensible for rows at the
+    # current counter. See the comment above it.
     stmt = (
         select(TrackAnalysis.acoustid, TrackAnalysis.embedding)
         .where(TrackAnalysis.embedding_version == EMBEDDING_VERSION)
@@ -102,6 +111,48 @@ async def backfill(*, dry_run: bool, limit: int | None, per_minute: int, url: st
     )
     if limit:
         stmt = stmt.limit(limit)
+
+    # **What `--declare-pipeline` asserts, and on what basis.**
+    #
+    # Off, this script declares nothing, and that is the right default. Its vectors
+    # come out of the database, computed at some earlier time by whatever
+    # `clapback-embed` was installed then; the counter is this application's own and
+    # has moved for reasons unrelated to the encoder. Declaring the currently
+    # installed pipeline over rows like that asserts a provenance nobody verified,
+    # which is the exact failure clapback's `ADR-0006` is written to prevent.
+    #
+    # On, it declares — and the claim is narrower than it looks, because the query
+    # below selects only `embedding_version == EMBEDDING_VERSION`. A row at the
+    # *current* counter was written by code carrying that counter, which is the code
+    # running now, which delegates to the `clapback-embed` installed now. So the
+    # inference is "this vector was produced by the pipeline this machine has", and
+    # its one weak point is an embedder upgraded between the recompute and this run —
+    # nothing records which version wrote a row, so nothing here can check that.
+    #
+    # It exists because of a real loss. On 2026-09-06 a settings write reset
+    # `community_cache_contribute` to false partway through the phase 3 re-analysis;
+    # 8,772 tracks were recomputed, marked at the current version, and contributed
+    # nothing. They will never be re-embedded — the pipeline only offers a track
+    # after computing it — so the alternative to declaring here is bumping
+    # `EMBEDDING_VERSION` again and spending another day of CPU re-deriving vectors
+    # already measured identical to 5e-16.
+    #
+    # A flag rather than a default, and never inferred: the assertion should be
+    # visible in the command somebody typed, not buried in a script's behaviour.
+    declared: str | None = None
+    if declare_pipeline:
+        from app.services.analysis import embedding_pipeline_version
+
+        declared = embedding_pipeline_version()
+        if not declared:
+            raise SystemExit(
+                "--declare-pipeline needs an installed clapback-embed to read "
+                "PIPELINE_VERSION from. Without one there is nothing to declare, and "
+                "guessing is the failure ADR-0006 exists to prevent."
+            )
+        logger.info("declaring pipeline: %s", declared)
+    else:
+        logger.info("declaring no pipeline (pass --declare-pipeline to change that)")
 
     tally = Tally()
     # The server allows 30 contributions a minute. Pacing here rather than
@@ -128,17 +179,9 @@ async def backfill(*, dry_run: bool, limit: int | None, per_minute: int, url: st
             if dry_run:
                 tally.contributed += 1
             else:
-                # **No `pipeline_version`, deliberately.** These vectors came out
-                # of the database, computed at some earlier time by whatever
-                # `clapback-embed` was installed then. `embedding_version == 7`
-                # narrows that but does not pin it: the counter is this
-                # application's own and moved once for a reason unrelated to the
-                # encoder. Declaring the currently installed pipeline here would
-                # assert, on tens of thousands of rows, a provenance nobody
-                # verified — the exact failure clapback's `ADR-0006` is written to
-                # prevent, and its point 5 says these rows are recomputed rather
-                # than relabelled anyway.
-                ok = await cache.contribute(acoustid, list(embedding))
+                ok = await cache.contribute(
+                    acoustid, list(embedding), pipeline_version=declared
+                )
                 if ok:
                     tally.contributed += 1
                 else:
@@ -166,11 +209,26 @@ def main() -> None:
     p.add_argument("--rate", type=int, default=25,
                    help="contributions per minute (server allows 30; default leaves headroom)")
     p.add_argument("--url", help="contribute here instead of community_cache_url — for a host move")
+    p.add_argument(
+        "--declare-pipeline",
+        action="store_true",
+        help=(
+            "declare clapback_embed.PIPELINE_VERSION on each contribution. Only "
+            "honest because this selects rows at the current EMBEDDING_VERSION, "
+            "which the installed embedder produced — see the comment in backfill()"
+        ),
+    )
     args = p.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
     tally = asyncio.run(
-        backfill(dry_run=args.dry_run, limit=args.limit, per_minute=args.rate, url=args.url)
+        backfill(
+            dry_run=args.dry_run,
+            limit=args.limit,
+            per_minute=args.rate,
+            url=args.url,
+            declare_pipeline=args.declare_pipeline,
+        )
     )
 
     print()

@@ -194,17 +194,38 @@ class TestOnlyAFreshlyComputedVectorDeclaresOne:
         ).read_text()
         assert "pipeline_version=embedding_pipeline_version()" in source
 
-    def test_the_backfill_declares_nothing(self):
+    def test_the_backfill_declares_nothing_unless_asked(self):
         """It contributes vectors out of the database, computed at some earlier time
-        by an embedder nobody recorded. `embedding_version == 7` narrows that and does
-        not pin it."""
+        by an embedder nobody recorded — so silence is the default.
+
+        `--declare-pipeline` overrides that, and is defensible only because the query
+        selects rows at the *current* `EMBEDDING_VERSION`, which the installed
+        embedder produced. The property under test is that the assertion is opt-in:
+        a default that declared would relabel tens of thousands of rows on a bare
+        re-run, which is the failure `ADR-0006` point 5 forbids."""
         source = (
             Path(__file__).resolve().parents[1]
             / "scripts/backfill_community_cache.py"
         ).read_text()
+        # The parameter is passed a variable, never the installed version directly.
         call = source[source.index("await cache.contribute(") :]
-        call = call[: call.index(")") + 1]
-        assert "pipeline_version" not in call
+        call = call[: call.index(")", call.index("pipeline_version")) + 1]
+        assert "pipeline_version=declared" in call
+        assert "embedding_pipeline_version()" not in call
+
+        # ...and that variable is None unless the flag was given.
+        assert "declared: str | None = None" in source
+        assert "if declare_pipeline:" in source
+        assert 'action="store_true"' in source[source.index("--declare-pipeline") :]
+
+    def test_declaring_requires_an_embedder_to_read_it_from(self):
+        """Guessing the identity is the failure the record exists to prevent, so an
+        installation without one is refused rather than defaulted."""
+        source = (
+            Path(__file__).resolve().parents[1]
+            / "scripts/backfill_community_cache.py"
+        ).read_text()
+        assert "raise SystemExit" in source[source.index("if declare_pipeline:") :]
 
 
 class TestTheAccessorReadsTheLibraryRatherThanAConstant:
