@@ -1,4 +1,4 @@
-# ADR-0110: The Client Queues Transfers Rather Than Fanning Out
+# ADR-0111: The Client Queues Transfers Rather Than Fanning Out
 
 Status: proposed
 
@@ -233,7 +233,7 @@ app reads.
   ADR is about. Putting a grid of 3,475 circles behind a gate sized for a spinning disk would slow
   the app to protect a machine that is not being asked for anything.
 - **Follow-up, server side — now taken up by
-  [ADR-0111](ADR-0111-the-server-keeps-a-ceiling-of-its-own.md).** A bound on concurrent file
+  [ADR-0112](ADR-0112-the-server-keeps-a-ceiling-of-its-own.md).** A bound on concurrent file
   responses, and a way for a client to mark sync traffic so it can be deprioritised, since the two
   are indistinguishable today. The client half of that marker — `X-Familiar-Intent: sync` on every
   download, and a refusal treated as an appointment rather than a failure — landed here with it.

@@ -1,6 +1,6 @@
 """A ceiling on how many files the API will read at once.
 
-**This is the server half of ADR-0110, and it exists because the client half is not enough.**
+**This is the server half of ADR-0111, and it exists because the client half is not enough.**
 
 Favourites auto-download has taken this server down twice, five weeks apart, by the same mechanism
 against two different resources:
@@ -86,7 +86,7 @@ ARTWORK_WAIT_SECONDS = 2.0
 #:
 #: **The reservation is the point of classifying at all.** Sync can never take more than a third of
 #: the budget, so somebody pressing play always has eight slots that a cache fill cannot touch.
-#: A single well-behaved client presents at most three sync transfers (ADR-0110's client bound), so
+#: A single well-behaved client presents at most three sync transfers (ADR-0111's client bound), so
 #: this fits one syncing device comfortably and makes a second one queue rather than compete.
 MAX_CONCURRENT_SYNC_RESPONSES = 4
 

@@ -1,4 +1,4 @@
-"""How many files the API will read at once (ADR-0110, server half).
+"""How many files the API will read at once (ADR-0111, server half).
 
 **The test the last one should have been.** `test_stream_concurrency.py` drives three threads at a
 route that answers 404 immediately, so nothing ever overlaps — it passed on 2026-08-02 while 1,720

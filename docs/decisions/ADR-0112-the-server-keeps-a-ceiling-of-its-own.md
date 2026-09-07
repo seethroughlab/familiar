@@ -1,16 +1,16 @@
-# ADR-0111: The Server Keeps a Ceiling of Its Own
+# ADR-0112: The Server Keeps a Ceiling of Its Own
 
 Status: proposed
 
 Date: 2026-09-07
 
 Implements the two server-side Follow-ups of
-[ADR-0110](ADR-0110-the-client-queues-transfers-rather-than-fanning-out.md), which bounded the
+[ADR-0111](ADR-0111-the-client-queues-transfers-rather-than-fanning-out.md), which bounded the
 Apple client and said of this half only that it was "wanted" and "separate work". It is separate
 work; it is not optional, and the reason is in the Context below.
 
 Implementation:
-- Written before the code, as ADR-0110 was, and built the same day: `backend/app/api/concurrency.py`
+- Written before the code, as ADR-0111 was, and built the same day: `backend/app/api/concurrency.py`
   with `FileResponseLimiter` and `FileResponseConcurrencyMiddleware`, installed in `main.py` inside
   `TokenAuthMiddleware`; ten tests in `backend/tests/test_file_response_bound.py`. The client half
   of point 3 is in `familiar-apple`'s `DownloadManager`.
@@ -50,7 +50,7 @@ not remove the queue; it moves it to whatever is next-scarcest. The database poo
 pressure went to the threads and the spindle. Nothing in that sequence terminates, because there is
 always a next resource, and the only place a bound holds for all of them at once is at admission.
 
-ADR-0110 put that bound in the client, which is the fix that matters most and is still not
+ADR-0111 put that bound in the client, which is the fix that matters most and is still not
 sufficient. A server whose only protection is the good behaviour of its clients is protected by
 something it does not control: an old build of our own app that nobody has updated, a second
 listener, a browser tab with an aggressive prefetch, or the next feature that reads files in a loop.
@@ -77,7 +77,7 @@ refuses the rest explicitly.
 
 2. **Four of those twelve, at most, may be background sync.** The reservation is the point of
    classifying at all: eight slots are always there for somebody pressing play, whatever a cache
-   fill is doing. A well-behaved client presents at most three sync transfers (ADR-0110's client
+   fill is doing. A well-behaved client presents at most three sync transfers (ADR-0111's client
    bound), so one syncing device fits and a second one waits rather than competing with playback.
 
 3. **A client says which it is with `X-Familiar-Intent: sync`; unmarked traffic is playback.**
@@ -189,6 +189,6 @@ mislabels every browser prefetch, and one that is wrong in the unsafe direction 
 - **Follow-up.** The counters are readable in the process and reported nowhere. A line in `/health`
   or the metrics collector would make the next incident diagnosable from inside the server rather
   than from the NAS's syslog, which is where both of these came from.
-- **Follow-up.** ADR-0110's own follow-up about the monit threshold still stands: the NAS's
+- **Follow-up.** ADR-0111's own follow-up about the monit threshold still stands: the NAS's
   five-minute load alert was raised 8.0 → 16.0 on the morning of the incident for unrelated reasons,
   and should come back down now that both halves of the bound exist.
