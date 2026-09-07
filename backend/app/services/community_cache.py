@@ -32,6 +32,13 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
+
+class CommunityCacheUnavailable(Exception):
+    """A lookup could not be answered, which is not the same as answered "no".
+
+    Raised only when a caller asks for it. See `CommunityCacheService.lookup`.
+    """
+
 # Rate limit handling
 MAX_RETRIES = 3
 DEFAULT_RETRY_DELAY = 5.0  # seconds
@@ -218,6 +225,7 @@ class CommunityCacheService:
         acoustid_fingerprint: str | bytes,
         analysis_version: int | None = None,
         pipeline_version: str | None = None,
+        raise_on_error: bool = False,
     ) -> CachedEmbedding | None:
         """Look up an embedding from the community cache.
 
@@ -234,8 +242,24 @@ class CommunityCacheService:
                 nothing downstream would notice, because it is a well-formed 512-dim
                 unit vector that simply means something else.
 
+            raise_on_error: raise instead of returning None when the request could
+                not be completed at all — rate-limited past its retries, timed out,
+                server unreachable. **Absent and unanswered are different facts and
+                this method cannot otherwise tell you which you got.** The analysis
+                pipeline is right not to care: either way it computes locally, which
+                is correct and costs only CPU. A caller that decides whether to
+                *write* must care, because treating "unanswered" as "absent" means
+                contributing a vector the corpus already holds, which increments its
+                contributor count and files a `submission_agreement` row — evidence
+                that this installation independently agreed with itself, in the table
+                clapback's `ADR-0008` is built on.
+
         Returns:
             CachedEmbedding if found, None otherwise
+
+        Raises:
+            CommunityCacheUnavailable: only when `raise_on_error` is set and the
+                request could not be completed.
         """
         if analysis_version is None:
             analysis_version = self._embedding_version
@@ -266,6 +290,11 @@ class CommunityCacheService:
         )
 
         if response is None:
+            if raise_on_error:
+                raise CommunityCacheUnavailable(
+                    f"no answer for {fp_hash[:16]}... — rate-limited, timed out or "
+                    f"unreachable. Not the same as absent."
+                )
             return None
 
         if response.status_code == 404:
@@ -274,6 +303,10 @@ class CommunityCacheService:
 
         if response.status_code != 200:
             logger.warning(f"Community cache lookup error: HTTP {response.status_code}")
+            if raise_on_error:
+                raise CommunityCacheUnavailable(
+                    f"HTTP {response.status_code} for {fp_hash[:16]}... — not absent."
+                )
             return None
 
         try:

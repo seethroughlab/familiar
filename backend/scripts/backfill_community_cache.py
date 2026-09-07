@@ -78,6 +78,7 @@ async def backfill(
     per_minute: int,
     url: str | None,
     declare_pipeline: bool = False,
+    lookup_per_minute: int = 250,
 ) -> Tally:
     settings = get_app_settings_service().get()
     if not settings.community_cache_contribute and not dry_run:
@@ -158,6 +159,12 @@ async def backfill(
     # The server allows 30 contributions a minute. Pacing here rather than
     # discovering it as 429s keeps the run boring and the log readable.
     interval = 60.0 / max(per_minute, 1)
+    # Every track costs a lookup whether or not it costs a contribution, and the
+    # server's lookup allowance is separate from and larger than its contribution
+    # allowance. Pacing only the writes leaves ~25,000 reads to go out as fast as the
+    # loop can issue them, which earns 429s, and a 429 past its retries is precisely
+    # the ambiguity `raise_on_error` above exists to catch. Cheaper not to provoke it.
+    lookup_interval = 60.0 / max(lookup_per_minute, 1)
     started = time.monotonic()
 
     async with async_session_maker() as session:
@@ -171,7 +178,16 @@ async def backfill(
             continue
 
         try:
-            existing = await cache.lookup(acoustid)
+            # **`raise_on_error` is what keeps this script's promise.** Its
+            # docstring says it never re-sends what is already there, and without
+            # this it could not tell "the corpus does not have it" from "the corpus
+            # did not answer". A rate-limited lookup returns None after its retries,
+            # which would read as absent and contribute a duplicate — incrementing a
+            # contributor count and filing a `submission_agreement` row that says one
+            # installation independently agreed with itself. Raising instead lands in
+            # the per-track handler below, which records an error and moves on.
+            existing = await cache.lookup(acoustid, raise_on_error=True)
+            await asyncio.sleep(lookup_interval)
             if existing is not None:
                 tally.already_present += 1
                 continue
@@ -206,6 +222,15 @@ def main() -> None:
     p.add_argument("--dry-run", action="store_true",
                    help="report what would be sent, contact the corpus only to check presence")
     p.add_argument("--limit", type=int, help="stop after this many tracks — for a first run")
+    p.add_argument(
+        "--lookup-rate",
+        type=int,
+        default=250,
+        help=(
+            "lookups per minute, paced under the server's allowance. Every track "
+            "costs one whether or not it is contributed"
+        ),
+    )
     p.add_argument("--rate", type=int, default=25,
                    help="contributions per minute (server allows 30; default leaves headroom)")
     p.add_argument("--url", help="contribute here instead of community_cache_url — for a host move")
@@ -228,6 +253,7 @@ def main() -> None:
             per_minute=args.rate,
             url=args.url,
             declare_pipeline=args.declare_pipeline,
+            lookup_per_minute=args.lookup_rate,
         )
     )
 
