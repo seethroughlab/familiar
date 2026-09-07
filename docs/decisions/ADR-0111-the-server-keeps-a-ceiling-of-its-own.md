@@ -14,8 +14,21 @@ Implementation:
   with `FileResponseLimiter` and `FileResponseConcurrencyMiddleware`, installed in `main.py` inside
   `TokenAuthMiddleware`; ten tests in `backend/tests/test_file_response_bound.py`. The client half
   of point 3 is in `familiar-apple`'s `DownloadManager`.
-- **Not deployed.** Nothing here has run on the NAS, and the ceiling has never been reached by real
-  traffic — only by a stub that holds a response open for 50 ms.
+- **Deployed to the NAS on 2026-09-07** via `scripts/deploy-dev.sh --backend-only` (rsync,
+  `docker cp`, restart; 208 files verified against the container). Measured there afterwards, with
+  1 KB range requests so the load was negligible:
+
+  | check | result |
+  | --- | --- |
+  | 24 concurrent sync stream requests | 4 served, 20 refused with `Retry-After: 30` |
+  | playback while sync saturated its share | 206 in 54 ms |
+  | 40 concurrent cover requests | 40 served, none refused |
+  | covers while audio was over its ceiling | 20 of 20 served |
+
+  Load on the box went 0.40 → 1.43 for the duration and back. No errors in the container log.
+- **The first deploy found the defect in point 6**, which is recorded there rather than quietly
+  fixed: covers shared the audio budget and 8 of 24 were refused. It is the one thing in this record
+  that reasoning did not catch and one command against the real server did.
 
 ## Context
 
@@ -92,10 +105,22 @@ refuses the rest explicitly.
    the server serving files at all, silently — worse than the failure being fixed, and asserted
    against in the suite.
 
-6. **Artwork is inside the same budget.** 3,458 of the requests in that window were `/artwork`, and
-   a ceiling covering only audio leaves the same exhaustion reachable by another route. One budget
-   rather than two because a cover cycles through its slot in milliseconds and costs a stream almost
-   nothing, while a thousand at once is the same thread-pool exhaustion under another name.
+6. **Artwork is bounded on a budget of its own — sixteen — and it waits rather than being
+   refused.** 3,458 of the requests in that window were `/artwork`, so a ceiling covering only audio
+   leaves the same exhaustion reachable by another route.
+
+   This point originally put covers in the audio budget, on the argument that a cover cycles through
+   its slot in milliseconds and costs a stream almost nothing. **The deploy disproved it in one
+   command**: 24 concurrent cover requests against the live ceiling produced 8 refusals, and a
+   refused cover is a permanent hole in a grid, because nothing retries an `<img>`. The two are
+   different work — 9–88 KB out of the artwork cache against a whole-file read scattered over 16 TB
+   of spinning disk — and sixteen of the former is not sixteen of the latter.
+
+   The waiting is the same rule as point 4 rather than an exception to it: **refuse when waiting
+   would be indistinguishable from broken.** A stream lasts minutes, so a queued request tells a
+   client nothing; a cover lasts milliseconds, so a two-second ceiling on waiting is invisible to a
+   person and strictly better than a hole. Past two seconds it is refused, because a wait with no
+   end is the failure this whole record replaces.
 
 7. **The limiter counts refusals and its own high-water mark.** Both incidents were diagnosed from
    the outside, by counting route hits in the NAS's syslog, because the server recorded nothing
@@ -156,10 +181,11 @@ mislabels every browser prefetch, and one that is wrong in the unsafe direction 
   client; the web player and anything else that fetches `/stream` will see a 503 they have never
   seen before, and the honest position is that this has not been checked. A 503 is at least an
   ordinary error to any HTTP client, where a 424-second response is not.
-- **Not deployed, and not measured under real load.** The ceiling has been exercised only by a stub
-  holding responses open for 50 ms. What it does to a real `FileResponse` streaming 40 MB off a
-  spinning disk to a phone over Tailscale is untested, and the first deploy should watch
-  `refused_interactive` — anything above zero during ordinary listening means twelve is too low.
+- **Deployed, but not yet observed under a real sync.** The measurements above are 1 KB range
+  requests, which prove the accounting and nothing about a 40 MB `FileResponse` held open for
+  minutes over Tailscale. The number to watch is `refused_interactive`: above zero during ordinary
+  listening means twelve is too low. The first genuine test is the next favourites sync from a
+  phone running the client half — which is not shipped yet.
 - **Follow-up.** The counters are readable in the process and reported nowhere. A line in `/health`
   or the metrics collector would make the next incident diagnosable from inside the server rather
   than from the NAS's syslog, which is where both of these came from.

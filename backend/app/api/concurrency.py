@@ -34,6 +34,7 @@ easier to handle correctly than a timeout.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import Awaitable, Callable
@@ -46,7 +47,7 @@ Message = dict[str, Any]
 Receive = Callable[[], Awaitable[Message]]
 Send = Callable[[Message], Awaitable[None]]
 
-#: Total file responses in flight at once, of every kind.
+#: Audio responses in flight at once.
 #:
 #: Twelve against anyio's 40 threads. The number is chosen to keep the disk usefully busy while
 #: leaving most of the pool for everything else — during the incident, ``/health`` was answering
@@ -54,7 +55,32 @@ Send = Callable[[Message], Awaitable[None]]
 #: a server concern rather than only a client one. The library lives on one 7,200 RPM disk that
 #: serves on the order of 150 seeks a second, so twelve scattered whole-file reads is already
 #: generous; the ceiling is here to stop forty, not to tune throughput.
-MAX_CONCURRENT_FILE_RESPONSES = 12
+MAX_CONCURRENT_STREAM_RESPONSES = 12
+
+#: Artwork responses in flight at once, on a budget of its own.
+#:
+#: **Found by deploying, not by reasoning**, and the first version of this file got it wrong. Covers
+#: shared the audio budget on the argument that a cover cycles through its slot in milliseconds and
+#: therefore costs a stream almost nothing. That is true and it is not the point: 24 concurrent
+#: cover requests against the deployed ceiling produced **8 refusals**, and a refused cover is a
+#: permanent hole in a grid. Nothing retries an ``<img>``.
+#:
+#: So the two are separated, and the difference in the numbers follows the difference in the work.
+#: A cover is 9–88 KB from the artwork cache, usually already in the page cache; a track is a
+#: whole-file read scattered across a 16 TB spinning disk. Sixteen of the former is not sixteen of
+#: the latter, and 12 + 16 still sits comfortably under the 40-token pool because artwork holds its
+#: thread for milliseconds.
+MAX_CONCURRENT_ARTWORK_RESPONSES = 16
+
+#: How long a cover may wait for a slot before it is refused.
+#:
+#: **Artwork waits where audio does not, and the asymmetry is the principle rather than an
+#: exception.** The rule underneath both is the same: refuse when waiting would be indistinguishable
+#: from broken. A stream response lasts minutes, so a queued request tells a client nothing and
+#: holds a connection while doing it. A cover response lasts milliseconds, so a two-second ceiling
+#: on waiting is invisible to a person and strictly better than the alternative, which is a
+#: placeholder where an album used to be.
+ARTWORK_WAIT_SECONDS = 2.0
 
 #: How many of those may be background sync.
 #:
@@ -83,22 +109,24 @@ SYNC_RETRY_AFTER = 30
 INTERACTIVE_RETRY_AFTER = 5
 
 
-def _is_file_response_path(path: str) -> bool:
-    """Whether this path serves a file off the library disk.
+def classify_path(path: str) -> str | None:
+    """Which budget this path draws on, or ``None`` if it is not bounded here.
 
-    Both endpoints, because both were in the incident: 4,849 ``/stream`` requests and **3,458
-    ``/artwork`` requests** in the same window. Artwork is small and fast, which is an argument for
-    a shared budget rather than a separate one — a cover cycles through its slot in milliseconds,
-    so it costs a stream almost nothing, while a thousand of them at once is the same thread-pool
-    exhaustion by another name.
+    Both endpoints are bounded, because both were in the incident: 4,849 ``/stream`` requests and
+    **3,458 ``/artwork`` requests** in the same window. They are bounded separately for the reason
+    given at ``MAX_CONCURRENT_ARTWORK_RESPONSES``.
     """
-    return path.startswith("/api/v1/tracks/") and (
-        path.endswith("/stream") or path.endswith("/artwork")
-    )
+    if not path.startswith("/api/v1/tracks/"):
+        return None
+    if path.endswith("/stream"):
+        return "stream"
+    if path.endswith("/artwork"):
+        return "artwork"
+    return None
 
 
 class FileResponseLimiter:
-    """The two budgets, and the accounting for them.
+    """The budgets, and the accounting for them.
 
     Split out from the middleware so the suite can drive it without an ASGI app, and so the
     counters have somewhere to live that a health check could read later.
@@ -106,13 +134,24 @@ class FileResponseLimiter:
 
     def __init__(
         self,
-        total: int = MAX_CONCURRENT_FILE_RESPONSES,
+        total: int = MAX_CONCURRENT_STREAM_RESPONSES,
         sync: int = MAX_CONCURRENT_SYNC_RESPONSES,
+        artwork: int = MAX_CONCURRENT_ARTWORK_RESPONSES,
+        artwork_wait: float = ARTWORK_WAIT_SECONDS,
     ) -> None:
         self.total_limit = total
         self.sync_limit = sync
+        self.artwork_limit = artwork
+        self.artwork_wait = artwork_wait
         self.in_flight = 0
         self.sync_in_flight = 0
+        self.artwork_in_flight = 0
+        self.peak_artwork_in_flight = 0
+        self.refused_artwork = 0
+        # A semaphore here and counters above, because this is the one budget anybody waits on.
+        # Loop-agnostic since Python 3.10, so constructing it at import time is safe; the container
+        # runs 3.11.
+        self._artwork = asyncio.Semaphore(artwork)
         #: The high-water mark, which is the number worth having: it says what the server was
         #: actually asked to do, where a refusal count only says when it said no.
         self.peak_in_flight = 0
@@ -161,6 +200,25 @@ class FileResponseLimiter:
         if is_sync:
             self.sync_in_flight -= 1
 
+    async def acquire_artwork(self) -> bool:
+        """Wait briefly for a cover slot, and refuse only if the wait runs out.
+
+        See ``ARTWORK_WAIT_SECONDS``: a cover that waits 20 ms is invisible, and a cover that is
+        refused is a hole in a grid that nothing will fill, because no ``<img>`` retries.
+        """
+        try:
+            await asyncio.wait_for(self._artwork.acquire(), self.artwork_wait)
+        except TimeoutError:
+            self.refused_artwork += 1
+            return False
+        self.artwork_in_flight += 1
+        self.peak_artwork_in_flight = max(self.peak_artwork_in_flight, self.artwork_in_flight)
+        return True
+
+    def release_artwork(self) -> None:
+        self.artwork_in_flight -= 1
+        self._artwork.release()
+
 
 #: One per process. ``--workers 1`` is pinned in the Dockerfile because CLAP needs ~1.5 GB, so a
 #: module-level limiter really does bound the whole API rather than one worker's share of it. If
@@ -184,22 +242,30 @@ class FileResponseConcurrencyMiddleware:
         # Reads only. The same `/artwork` path takes an upload, which is a small write that touches
         # neither the library disk nor the read path this bounds — and spending a slot on it would
         # let editing a cover be refused because somebody else is listening.
-        if (
-            scope["type"] != "http"
-            or scope.get("method") not in ("GET", "HEAD")
-            or not _is_file_response_path(scope.get("path", ""))
-        ):
+        kind = (
+            classify_path(scope.get("path", ""))
+            if scope["type"] == "http" and scope.get("method") in ("GET", "HEAD")
+            else None
+        )
+        if kind is None:
             await self.app(scope, receive, send)
             return
 
         is_sync = self._is_sync(scope)
-        if not self.limiter.try_acquire(is_sync=is_sync):
+        if kind == "artwork":
+            admitted = await self.limiter.acquire_artwork()
+        else:
+            admitted = self.limiter.try_acquire(is_sync=is_sync)
+
+        if not admitted:
             logger.warning(
-                "Refused %s file response: %d in flight, limit %d (path=%s)",
+                "Refused %s %s response: %d streams and %d covers in flight (limits %d/%d)",
                 "sync" if is_sync else "interactive",
+                kind,
                 self.limiter.in_flight,
+                self.limiter.artwork_in_flight,
                 self.limiter.total_limit,
-                scope.get("path", ""),
+                self.limiter.artwork_limit,
             )
             await self._refuse(scope, send, is_sync=is_sync)
             return
@@ -210,7 +276,10 @@ class FileResponseConcurrencyMiddleware:
             nonlocal released
             if not released:
                 released = True
-                self.limiter.release(is_sync=is_sync)
+                if kind == "artwork":
+                    self.limiter.release_artwork()
+                else:
+                    self.limiter.release(is_sync=is_sync)
 
         async def send_and_release(message: Message) -> None:
             await send(message)

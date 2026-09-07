@@ -76,11 +76,57 @@ class TestTheBound:
     async def test_artwork_is_bounded_too(self):
         """3,458 artwork requests rode along with the 4,849 stream requests. A ceiling that covers
         only audio leaves the same thread-pool exhaustion reachable by another route."""
-        limiter = FileResponseLimiter(total=3, sync=1)
+        limiter = FileResponseLimiter(artwork=3)
         await get_all(build_app(limiter), "/api/v1/tracks/x/artwork", 24)
 
-        assert limiter.peak_in_flight <= 3
-        assert limiter.refused_interactive > 0
+        assert limiter.peak_artwork_in_flight <= 3
+        assert limiter.peak_artwork_in_flight > 1
+
+
+class TestArtworkWaitsWhereAudioRefuses:
+    """**The correction the deploy produced, and the reason it is a rule rather than an exception.**
+
+    Covers first shared the audio budget and were refused like anything else. Against the deployed
+    ceiling, 24 concurrent cover requests produced 8 refusals — and a refused cover is a permanent
+    hole in a grid, because nothing retries an `<img>`. The principle underneath both behaviours is
+    the same: refuse when waiting would be indistinguishable from broken. A stream lasts minutes, so
+    waiting tells a client nothing; a cover lasts milliseconds, so waiting is invisible.
+    """
+
+    async def test_a_burst_of_covers_is_served_rather_than_refused(self):
+        limiter = FileResponseLimiter(artwork=4)
+        responses = await get_all(build_app(limiter, hold=0.02), "/api/v1/tracks/x/artwork", 40)
+
+        assert all(r.status_code == 200 for r in responses), "a grid must not come back full of holes"
+        assert limiter.peak_artwork_in_flight <= 4, "and it is still bounded while it does that"
+        assert limiter.refused_artwork == 0
+
+    async def test_a_cover_is_still_refused_if_the_wait_runs_out(self):
+        """The wait is a ceiling, not a promise. A server that is genuinely saturated says so rather
+        than holding connections open indefinitely — which is the failure this whole file replaces.
+        """
+        limiter = FileResponseLimiter(artwork=1, artwork_wait=0.05)
+        responses = await get_all(build_app(limiter, hold=0.2), "/api/v1/tracks/x/artwork", 10)
+
+        assert any(r.status_code == 503 for r in responses)
+        assert limiter.refused_artwork > 0
+        assert limiter.peak_artwork_in_flight == 1
+
+    async def test_covers_and_audio_do_not_share_a_budget(self):
+        """Two different kinds of work on two different parts of the disk: a cover is 9–88 KB out of
+        the artwork cache, a track is a whole-file read scattered across 16 TB of spinning rust."""
+        limiter = FileResponseLimiter(total=2, sync=1, artwork=4)
+        app = build_app(limiter, hold=0.1)
+
+        streams, covers = await asyncio.gather(
+            get_all(app, "/api/v1/tracks/x/stream", 12),
+            get_all(app, "/api/v1/tracks/x/artwork", 12),
+        )
+
+        assert any(r.status_code == 503 for r in streams), "audio is over its own ceiling"
+        assert all(r.status_code == 200 for r in covers), "and the covers are unaffected by that"
+        assert limiter.peak_in_flight <= 2
+        assert limiter.peak_artwork_in_flight <= 4
 
     async def test_only_file_responses_are_bounded(self):
         """Browsing must not queue behind a sync. The bound is about the library disk, and a JSON
