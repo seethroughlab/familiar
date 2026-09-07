@@ -232,9 +232,11 @@ app reads.
   Last.fm URLs the server enriched, on a CDN — a different host, not the one 7,200 RPM disk this
   ADR is about. Putting a grid of 3,475 circles behind a gate sized for a spinning disk would slow
   the app to protect a machine that is not being asked for anything.
-- **Follow-up, server side.** A semaphore around `/stream`, and a way for a client to mark sync
-  traffic so it can be deprioritised — a header or a query parameter, since the two are
-  indistinguishable today. Both live in `familiar`.
+- **Follow-up, server side — now taken up by
+  [ADR-0111](ADR-0111-the-server-keeps-a-ceiling-of-its-own.md).** A bound on concurrent file
+  responses, and a way for a client to mark sync traffic so it can be deprioritised, since the two
+  are indistinguishable today. The client half of that marker — `X-Familiar-Intent: sync` on every
+  download, and a refusal treated as an appointment rather than a failure — landed here with it.
 - **Follow-up, ops.** The NAS's monit five-minute load threshold was raised 8.0 → 16.0 earlier on
   2026-09-07 for unrelated reasons, and that is why this event produced fewer alerts than it should
   have. It should come back down once the bound is in.

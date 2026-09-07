@@ -464,6 +464,20 @@ from app.mcp.server import build_asgi_app as _build_mcp_app  # noqa: E402
 _mcp_asgi_app = _build_mcp_app()
 app.add_middleware(MCPDispatch, mcp_app=_mcp_asgi_app)
 
+# A ceiling on concurrent file responses (ADR-0110, server half).
+#
+# **Position, again, is the design.** Added before `TokenAuthMiddleware` and therefore *inside* it,
+# so an unauthenticated request cannot spend a slot — and inside `RequestIDMiddleware`, so a 503
+# carries the `x-request-id` that correlates it with the request that was turned away.
+#
+# It is here and not on the route because the resource is held for as long as the *body* is being
+# sent. A dependency releases when the handler returns, which for a 40 MB file is the beginning of
+# the transfer rather than the end — the same mistake the 2026-08-02 fix was correcting one layer
+# down.
+from app.api.concurrency import FileResponseConcurrencyMiddleware  # noqa: E402
+
+app.add_middleware(FileResponseConcurrencyMiddleware)
+
 # Inbound authentication (ADR-0045 point 1).
 #
 # **The position in this file is the whole design.** `add_middleware` prepends, so the *last* one
