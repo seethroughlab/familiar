@@ -38,6 +38,8 @@ import types
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from app.config import EMBEDDING_VERSION
 from app.services import analysis
 from app.services.app_settings import AppSettingsService
@@ -423,3 +425,75 @@ class TestTheDefaultAddressIsOneThatAnswers:
         from app.services.community_cache import DEFAULT_CACHE_URL
 
         assert DEFAULT_CACHE_URL.startswith("https://")
+
+
+class TestAnUnansweredLookupIsNotAMiss:
+    """"The corpus does not have it" and "the corpus did not answer" are different
+    facts, and `lookup` returns None for both.
+
+    The analysis pipeline is right not to care — either way it computes locally,
+    which is correct and costs only CPU. **A caller that decides whether to write
+    must care.** Treating unanswered as absent means contributing a vector the corpus
+    already holds, which increments its contributor count and files a
+    `submission_agreement` row: evidence that one installation independently agreed
+    with itself, in the table clapback's `ADR-0008` is built on.
+    """
+
+    def _service_returning(self, response):
+        service = CommunityCacheService(cache_url="http://cache")
+        service._request_with_retry = AsyncMock(return_value=response)
+        return service
+
+    def test_a_real_404_is_still_a_miss(self):
+        """Absent is absent, and must stay cheap to express."""
+
+        class NotFound:
+            status_code = 404
+
+        service = self._service_returning(NotFound())
+        assert asyncio.run(service.lookup("fp", raise_on_error=True)) is None
+
+    def test_an_exhausted_request_raises_rather_than_reporting_absence(self):
+        from app.services.community_cache import CommunityCacheUnavailable
+
+        service = self._service_returning(None)
+        with pytest.raises(CommunityCacheUnavailable):
+            asyncio.run(service.lookup("fp", raise_on_error=True))
+
+    def test_an_unexpected_status_raises_too(self):
+        """A 500 or a 429 that slipped through is not a statement about the corpus."""
+        from app.services.community_cache import CommunityCacheUnavailable
+
+        class ServerError:
+            status_code = 500
+
+        service = self._service_returning(ServerError())
+        with pytest.raises(CommunityCacheUnavailable):
+            asyncio.run(service.lookup("fp", raise_on_error=True))
+
+    def test_the_default_stays_silent_for_the_analysis_path(self):
+        """`analysis_pipeline` calls this without the flag and must keep getting
+        None rather than an exception it would have to catch."""
+        service = self._service_returning(None)
+        assert asyncio.run(service.lookup("fp")) is None
+
+    def test_the_backfill_asks_for_the_distinction(self):
+        source = (
+            Path(__file__).resolve().parents[1]
+            / "scripts/backfill_community_cache.py"
+        ).read_text()
+        assert "raise_on_error=True" in source
+
+    def test_the_backfill_paces_every_lookup_not_only_its_writes(self):
+        """Every track costs a lookup whether or not it costs a contribution. Pacing
+        only the writes leaves tens of thousands of reads to go out as fast as the
+        loop can issue them, which earns the 429s the distinction above exists to
+        survive."""
+        source = (
+            Path(__file__).resolve().parents[1]
+            / "scripts/backfill_community_cache.py"
+        ).read_text()
+        loop = source[source.index("for i, (acoustid, embedding)") :]
+        assert "await asyncio.sleep(lookup_interval)" in loop
+        # ...and before the `continue` that skips an already-present track.
+        assert loop.index("sleep(lookup_interval)") < loop.index("already_present")
