@@ -50,6 +50,17 @@ Implementation:
   predating that phase ignores the parameter, so asking correctly does not make the answer right. A
   vector declaring *nothing* is still accepted, because refusing it would break this client against
   a server that is merely older.
+- **The backfill can declare, opt-in, and only for rows at the current counter** (2026-09-07,
+  `--declare-pipeline`). It exists because of a loss rather than a plan: on 2026-09-06 a settings
+  write reset `community_cache_contribute` to false partway through the phase 3 re-analysis, and
+  **8,772 tracks were recomputed, marked at the current version, and contributed nothing**. The
+  pipeline offers a track only after computing it, so those were unreachable — the alternative was
+  bumping `EMBEDDING_VERSION` again and spending another day of CPU re-deriving vectors already
+  measured identical to 5e-16. The claim it makes is narrower than relabelling: a row at the
+  *current* `EMBEDDING_VERSION` was written by the code carrying that counter, which delegates to
+  the `clapback-embed` installed now. Its one weak point is an embedder upgraded between the
+  recompute and the run, which nothing records and nothing can check. A flag rather than a default,
+  so the assertion is visible in the command somebody typed.
 
 ## Context
 
