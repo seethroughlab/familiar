@@ -31,7 +31,13 @@ from app.api.exceptions import FamiliarError, NotFoundError
 from app.api.ratelimit import limiter
 from app.api.routes import api_router
 from app.api.routes.compat import DeprecatedPathHeaders
-from app.config import AUDIO_EXTENSIONS, MUSIC_LIBRARY_PATH, get_app_version
+from app.config import (
+    API_CONTRACT_VERSION,
+    AUDIO_EXTENSIONS,
+    MIN_CLIENT_CONTRACT,
+    MUSIC_LIBRARY_PATH,
+    get_app_version,
+)
 from app.config import settings as app_config
 from app.logging_config import get_logger, setup_logging
 
@@ -756,6 +762,13 @@ def _openapi_with_global_security() -> dict[str, Any]:
     # is no constructor argument for it. `/redoc` renders it as the left-hand navigation; a
     # generator that does not understand the key ignores it, which is the intended failure mode.
     schema["x-tagGroups"] = OPENAPI_TAG_GROUPS
+
+    # The contract numbers travel *inside* the schema so the client that generates from it can
+    # derive its own contract mechanically instead of anyone maintaining the number twice
+    # (ADR-0113). `familiar-apple`'s `scripts/vendor-schema.sh` reads these two keys and writes a
+    # Swift constant from them in the same run that copies this file.
+    schema["info"]["x-contract-version"] = API_CONTRACT_VERSION
+    schema["info"]["x-min-client-contract"] = MIN_CLIENT_CONTRACT
 
     app.openapi_schema = schema
     return schema

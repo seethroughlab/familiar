@@ -27,6 +27,7 @@ from app.api.routes import (
     background,
     commands,
     compat,
+    contract,
     diagnostics,
     download,
     export_import,
@@ -65,6 +66,7 @@ DEFAULT_ERROR_RESPONSES = error_responses(400, 401, 404, 422, 500)
 api_router = APIRouter(responses=DEFAULT_ERROR_RESPONSES)
 
 api_router.include_router(health.router)
+api_router.include_router(contract.router)
 api_router.include_router(auth_routes.router)
 api_router.include_router(tracks.router)
 api_router.include_router(library.router)

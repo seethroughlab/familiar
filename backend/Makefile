@@ -1,4 +1,4 @@
-.PHONY: install dev run reset-db migrate test test-contract lint lint-contracts openapi openapi-check format backfill-artists backfill-albums
+.PHONY: install dev run reset-db migrate test test-contract lint lint-contracts openapi openapi-check contract-lock contract-lock-check format backfill-artists backfill-albums
 
 # Install dependencies
 install:
@@ -48,6 +48,16 @@ openapi:
 # Fail if the committed schema no longer matches the app (CI gate).
 openapi-check:
 	uv run python scripts/dump_openapi.py --check
+
+# Record the current API shape against API_CONTRACT_VERSION (ADR-0113). Run after any schema
+# change: either the change is compatible and this just re-locks, or it is not and you bump
+# API_CONTRACT_VERSION in app/config.py first.
+contract-lock:
+	uv run python scripts/check_contract_bump.py
+
+# Fails when the shape moved but nobody decided what it means for shipped clients.
+contract-lock-check:
+	uv run python scripts/check_contract_bump.py --check
 
 # Format code
 format:
