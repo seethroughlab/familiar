@@ -1,4 +1,12 @@
 {
   "contract_version": 1,
-  "schema_hash": "sha256:46d613d3e80c9e41a2391f093fb351706c941f2bb96a16c9f52ba06b8b97f01e"
+  "min_client_contract": 1,
+  "schema_hash": "sha256:46d613d3e80c9e41a2391f093fb351706c941f2bb96a16c9f52ba06b8b97f01e",
+  "client_floor_history": [
+    {
+      "floor": 1,
+      "satisfied_by": "initial floor \u2014 refuses nothing",
+      "date": "2026-09-08"
+    }
+  ]
 }

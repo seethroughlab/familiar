@@ -52,8 +52,11 @@ openapi-check:
 # Record the current API shape against API_CONTRACT_VERSION (ADR-0113). Run after any schema
 # change: either the change is compatible and this just re-locks, or it is not and you bump
 # API_CONTRACT_VERSION in app/config.py first.
+# `SATISFIED_BY` is required only when raising MIN_CLIENT_CONTRACT — the one change that can
+# refuse an app already on a device (ADR-0113 point 10):
+#   make contract-lock SATISFIED_BY="iOS/macOS build 41"
 contract-lock:
-	uv run python scripts/check_contract_bump.py
+	uv run python scripts/check_contract_bump.py $(if $(SATISFIED_BY),--satisfied-by "$(SATISFIED_BY)")
 
 # Fails when the shape moved but nobody decided what it means for shipped clients.
 contract-lock-check:

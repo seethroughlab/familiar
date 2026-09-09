@@ -24,9 +24,21 @@ can bury a real `$ref` rename inside text it discarded. A false alarm costs one 
 contract-lock`; a missed breaking change costs a build in the field. If it starts firing constantly,
 revisit — do not quietly weaken it.
 
+`MIN_CLIENT_CONTRACT` gets a second, stricter gate. ADR-0113 point 10 states the rule — never raise
+the floor until the client build satisfying it is installed everywhere — and states it as prose,
+because no mechanism can verify that a build is on a device. What a mechanism *can* do is refuse to
+let the floor move as a silent one-line diff. Raising it requires naming the build that satisfies
+it, in the lock file, where a reviewer sees it:
+
+    make contract-lock SATISFIED_BY="iOS/macOS build 41"
+
+Not proof. But the failure mode this guards against is nobody noticing, and an unnamed build cannot
+pass.
+
 Usage:
     python scripts/check_contract_bump.py            # re-lock: record the current shape
     python scripts/check_contract_bump.py --check    # exit 1 if the shape moved unacknowledged
+    python scripts/check_contract_bump.py --satisfied-by "build 41"   # required to raise the floor
 """
 
 from __future__ import annotations
@@ -34,6 +46,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sys
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -60,12 +73,23 @@ def fingerprint(rendered: str) -> str:
     return "sha256:" + hashlib.sha256(canonical.encode()).hexdigest()
 
 
+def _satisfied_by(argv: list[str]) -> str | None:
+    """The client build a floor raise is justified by, if one was given."""
+    if "--satisfied-by" not in argv:
+        return None
+    index = argv.index("--satisfied-by")
+    if index + 1 >= len(argv):
+        return None
+    return argv[index + 1].strip() or None
+
+
 def main() -> int:
     check_only = "--check" in sys.argv
+    satisfied_by = _satisfied_by(sys.argv)
 
     from dump_openapi import STATIC_DIR, render
 
-    from app.config import API_CONTRACT_VERSION
+    from app.config import API_CONTRACT_VERSION, MIN_CLIENT_CONTRACT
 
     if STATIC_DIR.exists():
         print(
@@ -85,6 +109,27 @@ def main() -> int:
             print(f"{LOCK_PATH.name} is missing — run `make contract-lock`.", file=sys.stderr)
             return 1
         locked = json.loads(LOCK_PATH.read_text())
+
+        # The floor is checked before the shape, because it is the one that can break something
+        # already installed. A shape change is a build failure; a floor raise is a device that
+        # stops working in the field.
+        locked_floor = locked.get("min_client_contract")
+        if locked_floor != MIN_CLIENT_CONTRACT:
+            history = locked.get("client_floor_history") or []
+            named = history[-1].get("satisfied_by") if history else None
+            print(
+                f"MIN_CLIENT_CONTRACT is {MIN_CLIENT_CONTRACT} but the lock records "
+                f"{locked_floor}.\n\n"
+                "Raising the floor refuses every client below it — including builds already on\n"
+                "devices, and whatever is live on the App Store, since merging to main redeploys\n"
+                "familiar-demo. ADR-0113 point 10.\n\n"
+                "Name the client build that satisfies it:\n"
+                '    make contract-lock SATISFIED_BY="iOS/macOS build NN"\n\n'
+                f"(the last recorded raise names: {named or 'nothing'})",
+                file=sys.stderr,
+            )
+            return 1
+
         if locked.get("schema_hash") == current:
             print(f"API shape matches contract version {API_CONTRACT_VERSION}.")
             return 0
@@ -109,11 +154,64 @@ def main() -> int:
         )
         return 1
 
+    previous = json.loads(LOCK_PATH.read_text()) if LOCK_PATH.exists() else {}
+    history = list(previous.get("client_floor_history") or [])
+    previous_floor = previous.get("min_client_contract")
+
+    if previous_floor is not None and MIN_CLIENT_CONTRACT > previous_floor:
+        if not satisfied_by:
+            print(
+                f"Refusing to raise the client floor from {previous_floor} to "
+                f"{MIN_CLIENT_CONTRACT} without naming what satisfies it.\n\n"
+                "This is the one change here that can break an app already on a device, and no\n"
+                "check can confirm a build is installed — so the record is the control:\n\n"
+                '    make contract-lock SATISFIED_BY="iOS/macOS build NN"\n\n'
+                "Confirm against App Store Connect, not just TestFlight: merging to main\n"
+                "redeploys familiar-demo, which is the server App Review connects to.",
+                file=sys.stderr,
+            )
+            return 1
+        history.append(
+            {
+                "floor": MIN_CLIENT_CONTRACT,
+                "satisfied_by": satisfied_by,
+                "date": date.today().isoformat(),
+            }
+        )
+    elif previous_floor is None:
+        history = [
+            {
+                "floor": MIN_CLIENT_CONTRACT,
+                "satisfied_by": satisfied_by or "initial floor — refuses nothing",
+                "date": date.today().isoformat(),
+            }
+        ]
+    elif MIN_CLIENT_CONTRACT < previous_floor:
+        # Lowering is always safe: it admits clients that were refused.
+        history.append(
+            {
+                "floor": MIN_CLIENT_CONTRACT,
+                "satisfied_by": satisfied_by or "lowered — admits more clients",
+                "date": date.today().isoformat(),
+            }
+        )
+
     LOCK_PATH.write_text(
-        json.dumps({"contract_version": API_CONTRACT_VERSION, "schema_hash": current}, indent=2)
+        json.dumps(
+            {
+                "contract_version": API_CONTRACT_VERSION,
+                "min_client_contract": MIN_CLIENT_CONTRACT,
+                "schema_hash": current,
+                "client_floor_history": history,
+            },
+            indent=2,
+        )
         + "\n"
     )
-    print(f"Locked contract version {API_CONTRACT_VERSION} at {current[:19]}…")
+    print(
+        f"Locked contract version {API_CONTRACT_VERSION}, client floor "
+        f"{MIN_CLIENT_CONTRACT}, at {current[:19]}…"
+    )
     return 0
 
 
