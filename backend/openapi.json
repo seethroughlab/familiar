@@ -2423,6 +2423,30 @@
         "title": "CommonValuesResponse",
         "type": "object"
       },
+      "ContractInfo": {
+        "description": "What a client needs to decide whether it can talk to this server.",
+        "properties": {
+          "contract_version": {
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "min_client_contract": {
+            "title": "Min Client Contract",
+            "type": "integer"
+          },
+          "server_version": {
+            "title": "Server Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contract_version",
+          "min_client_contract",
+          "server_version"
+        ],
+        "title": "ContractInfo",
+        "type": "object"
+      },
       "ConvertToStaticResponse": {
         "description": "Response for converting a smart playlist to a static playlist.",
         "properties": {
@@ -11289,7 +11313,9 @@
   "info": {
     "description": "LLM-powered local music player API",
     "title": "Familiar",
-    "version": "dev"
+    "version": "dev",
+    "x-contract-version": 1,
+    "x-min-client-contract": 1
   },
   "openapi": "3.1.0",
   "paths": {
@@ -13052,6 +13078,78 @@
         "summary": "Playback Commands",
         "tags": [
           "commands"
+        ]
+      }
+    },
+    "/api/v1/contract": {
+      "get": {
+        "description": "Report the API contract this server implements, and the oldest client it serves.",
+        "operationId": "system_get_api_contract",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get Api Contract",
+        "tags": [
+          "system"
         ]
       }
     },

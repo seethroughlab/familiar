@@ -153,6 +153,21 @@ class Settings(BaseSettings):
         return urlunsplit(parts._replace(query=urlencode(kept)))
 
 
+# The API contract between this server and its clients (ADR-0113).
+#
+# `API_CONTRACT_VERSION` is bumped when a change alters what an already-shipped client can assume.
+# Purely additive changes do not bump it — they re-lock `contract.lock.json` and nothing else.
+#
+# `MIN_CLIENT_CONTRACT` is the oldest client this server still serves. Raising it is the only
+# action here that can break something in the field, so it has a rule of its own: never raise it
+# until the client build satisfying it is installed everywhere that talks to this server. Merging a
+# raise to main auto-deploys familiar-demo, which is the server App Review connects to.
+#
+# API contract history:
+#   v1: Initial handshake — GET /api/v1/contract (ADR-0113)
+API_CONTRACT_VERSION = 1
+MIN_CLIENT_CONTRACT = 1
+
 # Per-phase analysis version constants
 # Bump ONLY the phase that changed; other phases won't re-run
 #

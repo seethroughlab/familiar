@@ -47,6 +47,9 @@ PUBLIC_PATHS = frozenset(
     {
         "/health",
         "/api/v1/health",
+        # The compatibility handshake runs before a profile or a token exists, so it cannot be
+        # behind the gate (ADR-0113).
+        "/api/v1/contract",
         "/docs",
         "/redoc",
         "/openapi.json",

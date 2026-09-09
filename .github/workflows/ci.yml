@@ -311,6 +311,12 @@ jobs:
       - name: Check committed OpenAPI schema is current
         run: uv run python scripts/dump_openapi.py --check
 
+      # The step above proves the artifact is current. This one proves somebody *looked* at what
+      # changed: it fails when the API shape moved while API_CONTRACT_VERSION stayed put, so a
+      # change that breaks an already-shipped app cannot land as a silent diff (ADR-0113).
+      - name: Check the API contract version was considered
+        run: uv run python scripts/check_contract_bump.py --check
+
   backend-test-contract:
     name: Backend Test (Contract)
     runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}

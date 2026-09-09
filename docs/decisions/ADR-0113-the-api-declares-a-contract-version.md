@@ -1,0 +1,177 @@
+# ADR-0113: The API Declares a Contract Version
+
+Status: proposed
+
+Date: 2026-09-08
+
+Extends [ADR-0007](ADR-0007-clients-are-generated-from-openapi.md), which made the Swift client a
+generated artifact, and [ADR-0078](ADR-0078-the-schema-copy-is-verified-not-trusted.md), which stopped the
+schema being copied by hand. Both secured the *build*. Neither says anything about the moment a
+running app meets a server it was not built against.
+
+Covers two repositories. `familiar-apple` has no `docs/decisions/`; it cites this series.
+
+## Context
+
+The Apple client is compiled against a snapshot of `backend/openapi.json`. Nothing — at build time,
+at launch, or on any request — checks that the server it actually reaches matches that snapshot.
+
+The two halves move at incomparable speeds:
+
+| channel | cadence | version stamp |
+| --- | --- | --- |
+| `familiar-demo` on fly.io | automatic on every push to `main` touching `backend/**` | always the literal `"demo"` |
+| the NAS | manual `scripts/deploy-dev.sh --backend-only` rsync | none at all |
+| a tagged release | on `push: tags: v*` | the git tag |
+| the app | TestFlight review, days | `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` |
+
+Release v95 of the demo landed 60 seconds after its commit. A TestFlight build takes days and then
+sits on a device for weeks. Drift is not a risk here, it is the resting state.
+
+When it happens, nothing says so. `ServerErrorMessage.describe(_:)` in the app understands only
+transport-level `URLError`s; an unexpected status code is handled ad hoc at a few call sites and
+otherwise falls through to "Couldn't reach the server." ADR-0078 records the same class of failure
+already occurring once — a hand-copied schema left a four-path gap that was *"invisible until a call
+fails at runtime against a shape the backend stopped returning."*
+
+Two premises that turned out to be false, recorded because they shaped the design:
+
+1. **"There is already a version to compare."** There is not. `get_app_version()` reads
+   `/app/VERSION`, which `fly-deploy-demo.yml` never sets — so every demo deploy since the workflow
+   was written reports `"demo"`, regardless of commit. The NAS rsync writes no image at all.
+   `info.version` in the committed schema is therefore whatever the machine that last ran
+   `make openapi` happened to be, which is `"dev"`. A version check built on any of this would
+   compare two strings that mean nothing.
+2. **"CI would catch a schema change."** The backend's `dump_openapi.py --check` catches a *stale
+   artifact*. It passes happily when the schema and the committed file move together and no client
+   is told. On the app side, `scripts/vendor-schema.sh` has had a `--check` mode since it was
+   written and **no workflow has ever invoked it** — the one mechanism that reaches across the repo
+   boundary was never wired up.
+
+There is one real user. Breaking changes are cheap; the thing worth buying is a loud, early signal,
+not a compatibility guarantee.
+
+## Decision
+
+1. **The backend owns a hand-bumped integer, `API_CONTRACT_VERSION`, in `app/config.py`.** It sits
+   beside `FEATURES_VERSION` and the other per-phase constants and follows their established shape:
+   an int under a numbered history comment, bumped deliberately. It is a source-level constant
+   precisely so that it is correct on all three deploy channels, unlike every version string the
+   server currently reports.
+
+2. **A second constant, `MIN_CLIENT_CONTRACT`, names the oldest client the server still serves.**
+   Two numbers rather than one, because "the API moved" and "old clients are now refused" are
+   different events and only the second can break something in the field.
+
+3. **`GET /api/v1/contract` publishes both, plus `server_version` as informational text.** A
+   dedicated route, not an addition to `/api/v1/health` — `main.py` states that one is a container
+   probe and stays as it is — and emphatically not `/api/v1/health/system`, which takes a
+   `DbSession` and therefore fails during dependency injection when Postgres is down. The check that
+   gates every other call must not be unable to distinguish "the database is down" from "your app is
+   too old". This handler depends on nothing that can fail while the process is up.
+
+4. **It is exempt from the token gate**, added to `PUBLIC_PATHS` beside `/api/v1/health`. The
+   handshake necessarily runs before a profile or a token exists.
+
+5. **The numbers travel inside the schema, as `info.x-contract-version` and
+   `info.x-min-client-contract`**, set in the existing `_openapi_with_global_security()` hook that
+   already post-processes `x-tagGroups`. This is what lets the client derive its own number
+   mechanically instead of anyone maintaining it in two places.
+
+6. **`scripts/vendor-schema.sh` writes `Sources/FamiliarAPI/ContractVersion.swift` in the same run
+   that copies `openapi.json`**, from the same payload. One script, one fetch, two outputs: there is
+   no sequence of steps that updates one and not the other, because there is nowhere to try.
+   `--check` compares both and names whichever is stale.
+
+7. **`scripts/check_contract_bump.py` and `contract.lock.json` make an unconsidered change fail
+   CI.** The lock records `{contract_version, schema_hash}`. `--check` fails when the hash moved
+   while `API_CONTRACT_VERSION` did not, and its message names the two ways out: re-lock if old
+   clients are unaffected, or bump first if they are not. It asks *"has anyone looked at this?"* —
+   a question `dump_openapi.py --check` cannot ask.
+
+   The fingerprint is a byte-hash of the rendered schema with exactly three keys removed:
+   `info.version` (environment-dependent, as the Context explains) and the two contract keys
+   themselves (hashing them would mean a bump changed the hash, so a bump would demand another
+   bump). It is deliberately **not** a docstring-stripped structural hash: stripping prose is
+   recursive logic that can bury a real `$ref` rename inside text it discarded, and a false alarm
+   costs one `make contract-lock` where a missed break costs a build in the field.
+
+8. **The app blocks only when it is too old, and always offers a way through.** The verdict matrix:
+
+   | situation | behaviour |
+   | --- | --- |
+   | `app >= server.min_client_contract` | silent |
+   | `app < server.min_client_contract` | **blocking screen naming both numbers**, plus *Connect anyway* |
+   | server's contract behind the app's | non-blocking banner |
+   | `/api/v1/contract` returns 404 | silent — the server predates this ADR |
+   | network failure | silent — a connectivity problem, not a compatibility one |
+
+   Asymmetric on purpose. The NAS lags by design, and blocking on a stale server would lock the one
+   real user out of his own library every time he installed a build before rsyncing. *Connect
+   anyway* is unconditional rather than debug-only, because the check ships inside a TestFlight
+   build that cannot be hotfixed — a bug in the gate must not be able to strand the app.
+
+9. **The check runs at launch and on return from foreground**, not at setup only. The demo
+   redeploys on every push while an iOS app sits backgrounded for days; a launch-only gate would
+   leave open exactly the window this ADR exists to close.
+
+10. **Two rules govern bumping, and the second one has teeth.** Bump `API_CONTRACT_VERSION` when a
+    change alters what a shipped client may assume. **Never raise `MIN_CLIENT_CONTRACT` until the
+    build satisfying it is installed on everything that talks to that server** — and check the App
+    Store build, not just TestFlight, because merging to `main` auto-deploys `familiar-demo`, which
+    is the server `SetupView` prefills and App Review connects to. A floor above the live build's
+    contract breaks review the moment a pull request merges, with no deploy step in between to
+    catch it.
+
+## Alternatives Considered
+
+- **Reuse `get_app_version()` / `info.version`.** The obvious move, and it cannot work: it reports
+  `"demo"` for every fly deploy ever made and nothing at all on the NAS. Rejected on the evidence in
+  the Context, not on taste.
+- **Semantic versioning with a minimum client version.** Couples the gate to `MARKETING_VERSION`,
+  which moves for UI work having nothing to do with the API, and invites a judgement about
+  major/minor on every change. An integer that means one thing is smaller and harder to get wrong.
+- **A hash of the schema the client was generated from.** Catches every drift with no human
+  judgement at all — and flags purely additive changes as incompatible, which would train the one
+  user to click through the block. Kept as the CI tripwire (point 7), rejected as the shipping gate.
+- **A response header on every request, like `X-Familiar-Intent`.** That pattern is right for
+  per-request intent and wrong here: the app needs the answer before it has decided to make any
+  other request, and a missing header is ambiguous between an old server, a stripping proxy, and a
+  real zero.
+- **Adding the fields to `/api/v1/health`.** Rejected by `main.py`'s own statement that the probe
+  stays as it is, and because a liveness probe acquiring a second job is how probes stop being
+  trustworthy.
+- **Blocking in both directions.** Rejected: the NAS is manually deployed and routinely behind, so
+  a symmetric gate would make every app update require a deploy before the library was usable
+  again.
+- **Automating the re-vendoring with a bot PR on `familiar-apple`.** Deferred rather than rejected.
+  Report drift first; automate once it is known how often it actually fires.
+
+## Consequences
+
+- **Positive.** A schema change that breaks a shipped client can no longer land as a silent diff in
+  either repo — the backend fails on an unconsidered bump, the app fails on a stale vendored copy.
+- **Positive.** `vendor-schema.sh --check` finally runs somewhere. It was written for this job and
+  has never been invoked by a workflow.
+- **Positive.** The failure a user sees becomes a sentence naming two numbers instead of "Couldn't
+  reach the server."
+- **Positive.** Nothing already installed can be locked out. The handshake is client-initiated and
+  additive; no shipped build calls `/api/v1/contract`, and there is no server-side request-time gate.
+  Build 35 and everything before it are unaffected however far the constants move.
+- **Tradeoff.** The byte-hash fires on docstring edits. The remedy is one `make contract-lock`, and
+  the alternative buries real changes; revisit only if it becomes constant, and do not weaken it
+  quietly.
+- **Tradeoff.** `MIN_CLIENT_CONTRACT` is a loaded gun pointed at App Review, mitigated by point 10
+  and by nothing else. It is written down because there is no mechanism that can enforce it.
+- **Tradeoff.** The app-side CI step needs network access to GitHub from the `jeffbook` runner, so
+  it can fail for reasons unrelated to the code under test.
+- **Risk.** The gate compares against `familiar`'s `main`. It says nothing about what fly or the NAS
+  are actually running, which can differ from `main` in both directions.
+- **Follow-up.** `GET /api/v1/profiles` is **not** in `PUBLIC_PATHS`, despite both the route and the
+  app's `SetupView` describing it as deliberately unauthenticated. It works only because
+  `TokenAuthMiddleware` no-ops while no server token is configured. If ADR-0045's deferred "on by
+  default" lands, first-run setup breaks. Found while placing `/api/v1/contract`; deliberately not
+  fixed here.
+- **Follow-up.** Nothing stamps a git SHA into any deployed image from this repo. The fly image
+  carries a `GH_SHA` label only because the deploy action adds one. Stamping it deliberately would
+  make `server_version` worth reading.
