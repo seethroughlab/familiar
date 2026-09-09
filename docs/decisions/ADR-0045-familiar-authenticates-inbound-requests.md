@@ -101,6 +101,17 @@ Implementation:
   **On a tailnet it is close to zero security for real feature breakage.** If Familiar is ever
   exposed publicly, media authentication becomes mandatory — and so does everything else in point
   6's ADR.
+- **Correction, 2026-09-08: the Apple app is not one of the clients holding it.** The line below
+  says phase 2 is built, and for the web client and the MCP bridge it is —
+  `App/MCPHelper/StreamableHTTP.swift` sets `X-Familiar-Token`. But the app's own API client does
+  not: `FamiliarAPI.makeClient` is built with `middlewares: [ProfileHeaderMiddleware(profileID:)]`
+  and nothing else, and `X-Familiar-Token` appears nowhere else in `App/` or `Sources/`. **So point
+  5 would not merely break first-run setup on iOS and macOS — it would take the whole app offline**,
+  every request, since `PROTECTED_PREFIXES` covers all of `/api/`. That is a second blocker on point
+  5 alongside the demo-server question in note 2, and it is larger: the demo needs an exemption, the
+  app needs a feature. Found while placing `GET /api/v1/contract` for
+  [ADR-0113](ADR-0113-the-api-declares-a-contract-version.md), whose first draft misdiagnosed it as
+  a missing `PUBLIC_PATHS` entry.
 - **Where execution stands, and this ADR is not finished.** Phase 1 (the token and the gate) and
   phase 2 (clients holding it) are built. **Point 4 (CORS narrowing) is not started, point 5 (on by
   default) is deliberately deferred, and point 2's profile allowlist — the large half — has not
