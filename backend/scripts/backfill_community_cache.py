@@ -12,13 +12,21 @@ happen. This is the backfill that closes it.
 
 Two things it is careful about, both of which would corrupt the corpus quietly:
 
-**The fingerprint is hashed as stored, not decoded.** `track_analysis.acoustid`
-holds a hex-escaped string (`\\x4151…`) rather than raw bytes, because the
-fingerprint crosses a JSON boundary in the chromaprint subprocess. The corpus was
-built by hashing that string. Measured against 500 local tracks: hashing the
-string matched 232 rows in the corpus, hashing the decoded bytes matched 1. This
-script therefore hands the stored value to `hash_fingerprint` untouched, which is
-the same path the pipeline takes.
+**The fingerprint is hashed as chromaprint produced it — no longer as stored.**
+This paragraph used to say the opposite, and said it with a measurement: hashing
+the stored string matched 232 of 500 local tracks in the corpus against 1 for the
+decoded bytes. That was true and it was the wrong lesson. `track_analysis.acoustid`
+holds the same fingerprint two ways — 14,284 rows hex-escaped (`\\x4151…`) and
+11,364 raw, measured 2026-09-10 — so hashing as stored matched a corpus this
+application had built by hashing as stored, and guaranteed nobody else could ever
+match it. `ADR-0114` and clapback's `ADR-0010` reverse the rule;
+`hash_fingerprint` now canonicalises, and this script still hands it the stored
+value untouched because the canonicalising is its job rather than this one's.
+
+**Running this after that change is what re-keys the escaped rows.** They are
+looked up under their new key, missed, and contributed from the vectors already
+stored here — a re-send rather than a recompute. The rows under the old keys stay
+until they are deleted, which is `ADR-0114` point 5 and is not this script.
 
 **It never re-sends what is already there.** A repeat POST of an existing vector
 increments `contributor_count` and records a `submission_agreement` row — so a
