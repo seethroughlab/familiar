@@ -209,16 +209,55 @@ class CommunityCacheService:
         return None
 
     @staticmethod
+    def canonical_fingerprint(acoustid_fingerprint: str | bytes) -> bytes:
+        """The bytes to hash: the fingerprint as chromaprint produced it.
+
+        clapback's `ADR-0010` point 2 — hash what you computed, not what you
+        stored. The one transformation undone here is Postgres's hex output
+        format: `track_analysis.acoustid` is a `text` column that once held
+        `bytea`, so 14,284 of its rows render as `\\x` followed by hex while
+        11,364 hold the base64 string itself (measured 2026-09-10). They are the
+        same fingerprint — decode the first and you get the second — but they
+        hash differently, so the corpus key became a fact about this column's
+        migration history rather than about the recording.
+
+        The check is deliberately narrow: `\\x`, an even length, and a decode to
+        printable ASCII. A chromaprint fingerprint is base64 and cannot begin
+        with a backslash, so this cannot misfire on a real one, and anything
+        unrecognised is left alone rather than guessed at.
+        """
+        raw = (
+            acoustid_fingerprint
+            if isinstance(acoustid_fingerprint, bytes)
+            else acoustid_fingerprint.encode()
+        )
+        if raw.startswith(b"\\x") and len(raw) % 2 == 0:
+            try:
+                decoded = bytes.fromhex(raw[2:].decode("ascii"))
+            except (ValueError, UnicodeDecodeError):
+                return raw
+            if decoded and all(32 <= b < 127 for b in decoded):
+                return decoded
+        return raw
+
+    @staticmethod
     def hash_fingerprint(acoustid_fingerprint: str | bytes) -> str:
         """Hash an AcoustID fingerprint for privacy.
 
         Uses SHA256 to create a one-way hash. The original fingerprint
         cannot be recovered, preserving user privacy while still
         allowing cache lookups.
+
+        **Canonicalised first, since clapback's `ADR-0010`.** This used to hash
+        whatever it was handed, which was correct code that was never given a
+        canonical input — see `canonical_fingerprint`. The rule matters because
+        the failure is silent: a wrong key is a well-formed 64-character hex
+        string that simply matches nothing, so the corpus holds two rows for one
+        recording and they can never confirm each other.
         """
-        if isinstance(acoustid_fingerprint, bytes):
-            return hashlib.sha256(acoustid_fingerprint).hexdigest()
-        return hashlib.sha256(acoustid_fingerprint.encode()).hexdigest()
+        return hashlib.sha256(
+            CommunityCacheService.canonical_fingerprint(acoustid_fingerprint)
+        ).hexdigest()
 
     async def lookup(
         self,
