@@ -1,8 +1,20 @@
 # ADR-0114: A Contribution Is Keyed on the Fingerprint, Not the Column
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-10
+
+Implementation:
+- **Accepted 2026-09-10.** Points 1, 2 and 3 are built and tested; points 4 and 5 are operations
+  that follow the deploy, and point 6 is deliberately unowned.
+- The rule is reimplemented independently in `backend/tests/test_canonical_fingerprint.py` rather
+  than imported from clapback's CLI, because what must hold is that two implementations of one
+  written rule produce one key. Sharing an import would test agreement with a function rather than
+  agreement with the rule, which is the thing that actually broke.
+- **Measured before landing**, against the deployed corpus: of 120 escaped-form tracks, 120 of 120
+  old keys are present and 1 of 120 canonical keys is. So the backfill re-contributes essentially
+  the whole escaped half, and the single hit is a recording this library also holds in raw form —
+  consistent with the ~49 duplicate fingerprints found while measuring `ADR-0006` phase 4.
 
 Extends [ADR-0102](ADR-0102-the-community-cache-gains-a-recording-key.md), which chose the AcoustID
 fingerprint hash as the community cache's key, and adopts clapback's
