@@ -4,6 +4,32 @@ Status: accepted
 
 Date: 2026-08-31
 
+Implementation:
+- **This record had no Implementation block for two weeks, and nothing was built.** Accepted
+  2026-08-31; the first code landed 2026-09-13. Recorded because a living record that goes quiet is
+  indistinguishable from one that is done.
+- **The corpus side was built by clapback's
+  [`ADR-0012`](https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0012-a-contribution-can-name-its-recording.md)
+  (2026-09-13), and it changed point 1's shape.** Not an optional `recording_mbid` column but a
+  `recording_claims` table, one row per (hash, mbid, installation), with the row's recording derived
+  as the id the most distinct installations assert. The reasoning is that record's: the corpus cannot
+  verify an id (point 2, still true), two installations can disagree, and a value on a shared row
+  cannot be revoked per installation. Points 2, 3, 6 and 7 stand exactly as written; point 4 was
+  superseded on the corpus side by its `ADR-0006` (the pipeline identity replaced the model pin).
+- **`musicbrainz_track_id` is the recording entity, confirmed 2026-09-13.** Three ids drawn at random
+  resolved at `musicbrainz.org/ws/2/recording/{id}` as recordings. The column is misnamed — as is
+  beets' `mb_trackid`, for the same historical reason — and it is what this record meant.
+- **Coverage is still 6.8% — 1,791 of 26,518 — unchanged since the Context measured it.** Point 5's
+  backfill through AcoustID has not been built. What was built instead is the cheap half:
+  `CommunityCacheService.claim_recording` and `scripts/claim_recordings.py`, which send the ids this
+  installation *already has* through the corpus's claims endpoint — one request per track, no vector,
+  no recompute. **Never re-send a vector to name it**: a repeat contribution is recorded as
+  agreement, and an installation must not be made to agree with itself by tagging its library.
+- **The premise this record was written under has inverted.** It assumed this installation would
+  supply the ids. clapback's `ADR-0011` shipped a beets plugin (2026-09-13) whose users tag against
+  MusicBrainz as a matter of course; the ids will mostly come from there. What this installation
+  contributes is the 6.8% and, once point 5 is built, whatever AcoustID can resolve.
+
 Extends [ADR-0101](ADR-0101-discovery-ranks-against-the-listening-model.md), whose point 6 named this
 as the way past its own limit, and the community cache introduced alongside
 [ADR-0029](ADR-0029-the-server-stores-no-listener-preferences.md)'s rule about where secrets live.

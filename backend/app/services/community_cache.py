@@ -259,6 +259,55 @@ class CommunityCacheService:
             CommunityCacheService.canonical_fingerprint(acoustid_fingerprint)
         ).hexdigest()
 
+    async def claim_recording(
+        self,
+        acoustid_fingerprint: str | bytes,
+        recording_mbid: str,
+    ) -> bool:
+        """Tell the corpus which MusicBrainz recording a fingerprint it holds is.
+
+        clapback's `ADR-0012` point 4, second write path. This attaches an id to a
+        row the corpus already has and touches nothing else — **never re-send the
+        vector to do this**, because a repeat `POST /v1/embeddings` increments the
+        contributor count and files an agreement row, which is one installation
+        agreeing with itself.
+
+        The id is `tracks.musicbrainz_track_id`, which despite the name is the
+        MusicBrainz *recording* entity — confirmed 2026-09-13 by resolving three
+        at random against musicbrainz.org. Sending it makes this installation's
+        contribution legible to the corpus operator (that client X holds
+        recording Y), which is why it goes out under `community_cache_contribute`
+        and nothing weaker.
+
+        Returns True if the corpus recorded the claim, False otherwise. A 404
+        means the corpus does not hold the row yet; contribute the vector first.
+        """
+        if not self.client_id:
+            logger.warning("Cannot claim a recording without a client_id")
+            return False
+        response = await self._request_with_retry(
+            "POST",
+            f"{self.cache_url}/v1/recordings/claims",
+            json={
+                "fingerprint_hash": self.hash_fingerprint(acoustid_fingerprint),
+                "recording_mbid": recording_mbid,
+                "client_id": self.client_id,
+            },
+        )
+        if response is None:
+            return False
+        if response.status_code == 201:
+            return True
+        if response.status_code == 404:
+            logger.debug("Corpus has no row to claim for %s…", recording_mbid[:8])
+            return False
+        logger.warning(
+            "Community cache refused a recording claim: %s %s",
+            response.status_code,
+            response.text[:200],
+        )
+        return False
+
     async def lookup(
         self,
         acoustid_fingerprint: str | bytes,
