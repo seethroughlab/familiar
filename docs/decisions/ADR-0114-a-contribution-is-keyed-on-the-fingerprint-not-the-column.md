@@ -15,6 +15,27 @@ Implementation:
   old keys are present and 1 of 120 canonical keys is. So the backfill re-contributes essentially
   the whole escaped half, and the single hit is a recording this library also holds in raw form —
   consistent with the ~49 duplicate fingerprints found while measuring `ADR-0006` phase 4.
+- **Point 4 ran 2026-09-11**, deployed from a separate `git worktree` so the shared checkout was not
+  disturbed, detached inside `familiar-api` with an exit code appended — the discipline the
+  2026-09-07 sweep's silent death bought. 84 minutes, `EXIT=0`: 26,431 considered, 11,415 already
+  present, **14,192 contributed**, 824 with no fingerprint, 0 refused, 0 errors. A 20-track dry run
+  and a 20-track real run preceded it, and the corpus moved by exactly the 11 the trial promised.
+  **`--declare-pipeline` is mandatory here, not optional**: clapback requires `pipeline_version`
+  since its `ADR-0006` phase 4, and this script declares none by default, so without the flag every
+  POST is a 422. It is legitimate for the same reason it was for the sweep — these rows are at the
+  current `EMBEDDING_VERSION` and were already declared under their old keys.
+- **Point 5 ran 2026-09-13.** The old keys were derived here — `sha256` of the stored string, the
+  thing this record stopped computing — as 14,260 distinct hashes from 14,284 rows; 14,246 were
+  present in the corpus and **14,246 were removed**, through clapback's admin endpoint from inside
+  its container, 0 failures. Proved safe first: 0 recordings would be orphaned, 0 old keys collided
+  with any new one, 0 `features` or `analysis_details` rows were keyed on them. The corpus is 25,515
+  rows, one pipeline, one contributor, zero under a key no other client can reproduce.
+- **What this cost Familiar, measured rather than assumed.** The net change to the corpus across the
+  whole operation was −43 rows: recordings this library holds in both encodings collapsed to one.
+  Point 7's temporary cache misses lasted the 84 minutes of point 4 and no longer. Nothing about any
+  embedding changed.
+- **Point 6 remains unowned**, as decided. The column still holds both encodings; the key no longer
+  cares.
 
 Extends [ADR-0102](ADR-0102-the-community-cache-gains-a-recording-key.md), which chose the AcoustID
 fingerprint hash as the community cache's key, and adopts clapback's
