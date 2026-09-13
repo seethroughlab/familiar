@@ -111,11 +111,16 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     p.add_argument("--dry-run", action="store_true", help="count, send nothing")
     p.add_argument("--limit", type=int, default=None, help="stop after this many tracks")
+    # The corpus's contribution limit is 30/minute and a claim is a write. The
+    # first run of this script paced at 200 and lost 45 of its first 500 claims
+    # to exhausted retries on 429 — silently, since the client gives up after
+    # three attempts and the tally called them "refused". Under the limit, with
+    # room for the retries a shared limit still needs.
     p.add_argument(
         "--per-minute",
         type=int,
-        default=200,
-        help="claims per minute, paced under the corpus's contribution allowance",
+        default=25,
+        help="claims per minute; the corpus allows 30 writes a minute, so stay under it",
     )
     p.add_argument("--url", help="claim here instead of community_cache_url")
     args = p.parse_args()
