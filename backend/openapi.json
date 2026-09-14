@@ -8549,6 +8549,10 @@
             "title": "Queue Sync Enabled",
             "type": "boolean"
           },
+          "recording_backfill_enabled": {
+            "title": "Recording Backfill Enabled",
+            "type": "boolean"
+          },
           "s3_backup_bucket": {
             "title": "S3 Backup Bucket",
             "type": [
@@ -8596,6 +8600,7 @@
           "community_cache_enabled",
           "community_cache_contribute",
           "community_cache_url",
+          "recording_backfill_enabled",
           "playlist_discovery_mode",
           "s3_backup_enabled",
           "s3_backup_bucket",
@@ -8707,6 +8712,13 @@
           },
           "queue_sync_enabled": {
             "title": "Queue Sync Enabled",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "recording_backfill_enabled": {
+            "title": "Recording Backfill Enabled",
             "type": [
               "boolean",
               "null"
