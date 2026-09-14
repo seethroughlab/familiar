@@ -19,6 +19,24 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: Ceiling for `create_playlist_from_items(tracks_per_album=...)`. Kept in step with the schema
+#: description in `llm/tools.py`; a test asserts they agree.
+MAX_TRACKS_PER_ALBUM = 100
+
+
+def clamp_tracks_per_album(value: Any) -> int:
+    """Coerce a host's `tracks_per_album` into 1..MAX_TRACKS_PER_ALBUM, defaulting to 3.
+
+    The ceiling was 10, which silently truncated any album longer than that — a host asking
+    for whole albums (`tracks_per_album=100`) got 10 of Mezzanine's 19 with nothing in the
+    result saying so. 100 covers any single release short of a box set.
+    """
+    try:
+        n = int(float(value)) if value else 3
+    except (ValueError, TypeError):
+        return 3
+    return max(1, min(n, MAX_TRACKS_PER_ALBUM))
+
 
 class PlaylistHandlersMixin:
     """Mixin providing playlist-related tool handlers.
@@ -330,12 +348,7 @@ class PlaylistHandlersMixin:
         if not items:
             return {"error": "No items provided", "created": False}
 
-        # Validate tracks_per_album
-        try:
-            tracks_per_album = int(float(tracks_per_album)) if tracks_per_album else 3
-            tracks_per_album = max(1, min(tracks_per_album, 10))  # Clamp 1-10
-        except (ValueError, TypeError):
-            tracks_per_album = 3
+        tracks_per_album = clamp_tracks_per_album(tracks_per_album)
 
         # Create the playlist
         playlist = Playlist(
