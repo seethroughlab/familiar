@@ -7,6 +7,20 @@ Date: 2026-09-14
 Implementation:
 - **Accepted 2026-09-14**, the day it was proposed, as written. Building started the same day, in
   point 12's order.
+- **Built 2026-09-14, points 1–10.** `services/recording_resolution.py` is point 3 as a pure
+  function, tested over the probes' response shapes (`tests/test_recording_resolution.py`);
+  `services/tasks/recording_backfill.py` is the two phases, with their gates, health rows, markers
+  and pacing (`tests/test_recording_backfill.py`, offline — the database is a list and AcoustID a
+  function); `scripts/backfill_recording_ids.py` is point 10; the job is registered in
+  `background/manager.py` on `RECORDING_BACKFILL_INTERVAL_MINUTES = 10`. Two things turned out
+  slightly differently: `CommunityCacheService.claim_recording` gained a sibling,
+  `claim_recording_outcome`, because the boolean could not tell a 404 (recheck in six months)
+  from a failed request (retry next tick); and `/health/discovery-sources` routes the two new
+  rows to their own gates through `_row_enabled`, since `source_enabled` would have rendered a
+  running backfill as `disabled` whenever discovery was off. The title threshold's own comment was
+  corrected while writing tests: at 0.8, "The Ageing Young Rebel" does *not* match "Ageing Young
+  Rebel" (3 of 4 tokens is 0.75) — the rule is what the measurement was taken at, not what a
+  person would say, and the test records that.
 
 Extends [ADR-0102](ADR-0102-the-community-cache-gains-a-recording-key.md), whose point 5 decided
 that this installation backfills recording ids "in the background, bounded", under

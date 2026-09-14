@@ -10,6 +10,7 @@ Owns background job orchestration: library sync, analysis pipeline.
 - **analysis_queue**: `queue_tracks_for_*`, `queue_unanalyzed_tracks`
 - **new_releases**: `run_new_releases_check`, `run_prioritized_new_releases_check`, `NewReleasesProgressReporter`, `get_new_releases_progress`, `clear_new_releases_progress`
 - **common**: `get_redis`, failure tracking, memory logging
+- **recording_backfill** (not re-exported; imported by path): `run_recording_backfill`, `run_resolve_phase`, `run_claim_phase` — ADR-0115, one tick of naming recordings through AcoustID and claiming them in the corpus
 
 ## Does NOT handle
 

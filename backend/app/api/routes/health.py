@@ -557,6 +557,24 @@ def _source_state(row: Any, now: datetime, enabled: bool = True) -> str:
     return "working"
 
 
+def _row_enabled(source: str, discovery_source_enabled: Any) -> bool:
+    """Which switch a health row answers to.
+
+    ADR-0115's two rows are not discovery sources — the backfill enriches music you
+    own, which ADR-0099 scoped out of discovery — so they must not read `disabled`
+    because `discovery_enabled` is off, nor `working` after their own gate is closed.
+    Each answers to the gate its phase checks.
+    """
+    from app.services.app_settings import get_app_settings_service
+    from app.services.tasks.recording_backfill import SOURCE_ACOUSTID, SOURCE_CLAIMS
+
+    if source == SOURCE_ACOUSTID:
+        return bool(get_app_settings_service().get().recording_backfill_enabled)
+    if source == SOURCE_CLAIMS:
+        return bool(get_app_settings_service().get().community_cache_contribute)
+    return bool(discovery_source_enabled(source))
+
+
 @router.get("/health/discovery-sources", response_model=DiscoveryHealthResponse)
 async def discovery_source_health(db: DbSession) -> DiscoveryHealthResponse:
     """Report whether each discovery source is working.
@@ -580,7 +598,7 @@ async def discovery_source_health(db: DbSession) -> DiscoveryHealthResponse:
     sources = [
         DiscoverySourceHealthResponse(
             source=row.source,
-            state=_source_state(row, now, enabled=source_enabled(row.source)),
+            state=_source_state(row, now, enabled=_row_enabled(row.source, source_enabled)),
             last_success_at=row.last_success_at.isoformat() if row.last_success_at else None,
             last_failure_at=row.last_failure_at.isoformat() if row.last_failure_at else None,
             last_failure_kind=row.last_failure_kind,

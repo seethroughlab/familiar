@@ -281,10 +281,27 @@ class CommunityCacheService:
 
         Returns True if the corpus recorded the claim, False otherwise. A 404
         means the corpus does not hold the row yet; contribute the vector first.
+        `claim_recording_outcome` says which of those it was.
+        """
+        return await self.claim_recording_outcome(acoustid_fingerprint, recording_mbid) == "claimed"
+
+    async def claim_recording_outcome(
+        self,
+        acoustid_fingerprint: str | bytes,
+        recording_mbid: str,
+    ) -> str:
+        """`claim_recording`, distinguishing the two ways it can return False.
+
+        ``"claimed"`` — the corpus recorded it (or already had it; the endpoint is
+        idempotent). ``"not_held"`` — a 404: the corpus has no row for this hash,
+        which is a fact about the corpus and not worth retrying tomorrow.
+        ``"failed"`` — anything else: exhausted retries, a refusal, no client id.
+        ADR-0115's backfill needs the difference, because a 404 is rechecked after
+        months and a failure on the next tick.
         """
         if not self.client_id:
             logger.warning("Cannot claim a recording without a client_id")
-            return False
+            return "failed"
         response = await self._request_with_retry(
             "POST",
             f"{self.cache_url}/v1/recordings/claims",
@@ -295,18 +312,18 @@ class CommunityCacheService:
             },
         )
         if response is None:
-            return False
+            return "failed"
         if response.status_code == 201:
-            return True
+            return "claimed"
         if response.status_code == 404:
             logger.debug("Corpus has no row to claim for %s…", recording_mbid[:8])
-            return False
+            return "not_held"
         logger.warning(
             "Community cache refused a recording claim: %s %s",
             response.status_code,
             response.text[:200],
         )
-        return False
+        return "failed"
 
     async def lookup(
         self,

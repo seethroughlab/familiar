@@ -1,4 +1,4 @@
-import { Database, Cloud, Upload } from 'lucide-react';
+import { Database, Cloud, Upload, Fingerprint } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { appSettingsApi } from '../../api';
 import { queryKeys } from '../../api/queryKeys';
@@ -84,10 +84,36 @@ export function CommunityCache() {
         </label>
       </div>
 
+      {/* Recording-id backfill (ADR-0115). Its own switch, off by default: this sends
+          every unnamed fingerprint to AcoustID once, unprompted, which is a different
+          posture from the per-track lookup a person asks for. */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Fingerprint className="w-5 h-5 text-accent" />
+          <div>
+            <p className="text-sm text-white">Name recordings through AcoustID</p>
+            <p className="text-xs text-zinc-500">
+              Send stored fingerprints to AcoustID to find each track's MusicBrainz recording id
+            </p>
+          </div>
+        </div>
+        <label className="relative inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            checked={settings?.recording_backfill_enabled ?? false}
+            onChange={(e) => updateMutation.mutate({ recording_backfill_enabled: e.target.checked })}
+            disabled={updateMutation.isPending}
+            className="sr-only peer"
+          />
+          <div className="w-11 h-6 bg-zinc-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500 peer-disabled:opacity-50" />
+        </label>
+      </div>
+
       {/* Privacy note */}
       <p className="text-xs text-zinc-500">
-        Only audio fingerprint hashes are shared — no filenames, metadata, or personal info.
-        Helps speed up analysis for everyone in the community.
+        Contributing shares a one-way fingerprint hash and a vector — and, for tracks that have
+        one, the MusicBrainz recording id — never filenames or other tags. Naming recordings
+        sends the fingerprint itself to AcoustID, with nothing else attached.
       </p>
     </div>
   );

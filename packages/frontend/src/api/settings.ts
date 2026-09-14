@@ -20,6 +20,7 @@ export interface AppSettingsResponse {
   queue_sync_enabled: boolean;
   community_cache_enabled: boolean;
   community_cache_contribute: boolean;
+  recording_backfill_enabled: boolean;
   // Analysis settings
   clap_embeddings_enabled: boolean | null;
   clap_status: ClapStatus;
@@ -44,6 +45,7 @@ export interface AppSettingsUpdate {
   queue_sync_enabled?: boolean;
   community_cache_enabled?: boolean;
   community_cache_contribute?: boolean;
+  recording_backfill_enabled?: boolean;
   // Analysis settings
   clap_embeddings_enabled?: boolean | null;
   // Playlist generation
