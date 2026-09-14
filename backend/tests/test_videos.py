@@ -425,6 +425,33 @@ class TestSearchFailureIsNotAnEmptyResult:
             await VideoService().search("anything")
 
     @pytest.mark.asyncio
+    async def test_one_failed_entry_does_not_lose_the_others(self, monkeypatch):
+        """An age-gated result makes yt-dlp exit 1 after printing the rest."""
+        from app.services.video import VideoService
+
+        good = (b'{"id": "abc", "title": "Interpol - Evil", "channel": "Interpol", '
+                b'"duration": 221, "thumbnail": "t"}\n')
+
+        async def fake_exec(*args, **kwargs):
+            class Proc:
+                returncode = 1
+
+                async def communicate(self):
+                    return good, b"ERROR: [youtube] xyz: Sign in to confirm your age."
+
+                def kill(self):
+                    pass
+
+                async def wait(self):
+                    pass
+
+            return Proc()
+
+        monkeypatch.setattr("asyncio.create_subprocess_exec", fake_exec)
+        results = await VideoService().search("interpol evil")
+        assert [r.video_id for r in results] == ["abc"]
+
+    @pytest.mark.asyncio
     async def test_a_genuinely_empty_search_still_returns_empty(self, monkeypatch):
         """The other half: success with no matches is an empty list, not an error."""
         from app.services.video import VideoService

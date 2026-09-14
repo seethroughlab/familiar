@@ -133,8 +133,19 @@ class VideoService:
                 raise VideoSearchUnavailable("search timed out after 30s") from None
 
             stderr_text = stderr.decode().strip() if stderr else ""
+            stdout_text = stdout.decode().strip() if stdout else ""
 
-            if process.returncode != 0:
+            if process.returncode != 0 and stdout_text:
+                # One entry failing is not the search failing. yt-dlp carries on past an entry it
+                # cannot extract — an age-gated video says "Sign in to confirm your age" — prints
+                # the rest, and still exits non-zero. Seven of a batch's four hundred searches
+                # came back that way with five good results apiece. The results are the answer;
+                # the exit code is a footnote.
+                logger.warning(
+                    "yt-dlp search had errors (rc=%d) for query %r but returned results: %s",
+                    process.returncode, query, stderr_text[:300]
+                )
+            elif process.returncode != 0:
                 # Raised, not swallowed. Returning `[]` here made a broken search look exactly
                 # like an empty one — the defect ADR-0077 records for `search_bandcamp`, which
                 # "answered 'no results' for every query, for however long it had been". A
@@ -149,7 +160,7 @@ class VideoService:
                 logger.debug("yt-dlp search warnings for %r: %s", query, stderr_text[:500])
 
             results = []
-            for line in stdout.decode().strip().split('\n'):
+            for line in stdout_text.split('\n'):
                 if not line:
                     continue
                 try:
