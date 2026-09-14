@@ -429,7 +429,7 @@ class TestSearchFailureIsNotAnEmptyResult:
         """An age-gated result makes yt-dlp exit 1 after printing the rest."""
         from app.services.video import VideoService
 
-        good = (b'{"id": "abc", "title": "Interpol - Evil", "channel": "Interpol", '
+        good = (b'{"id": "abc", "title": "Interpol - Evil", "channel": null, "uploader": null, '
                 b'"duration": 221, "thumbnail": "t"}\n')
 
         async def fake_exec(*args, **kwargs):
@@ -450,6 +450,7 @@ class TestSearchFailureIsNotAnEmptyResult:
         monkeypatch.setattr("asyncio.create_subprocess_exec", fake_exec)
         results = await VideoService().search("interpol evil")
         assert [r.video_id for r in results] == ["abc"]
+        assert results[0].channel == ""  # null, not None: every reader treats it as text
 
     @pytest.mark.asyncio
     async def test_a_genuinely_empty_search_still_returns_empty(self, monkeypatch):

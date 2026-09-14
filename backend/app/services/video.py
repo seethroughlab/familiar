@@ -171,9 +171,13 @@ class VideoService:
                         # Get the first thumbnail from the array
                         thumbnail_url = data['thumbnails'][0].get('url', '')
                     results.append(VideoSearchResult(
-                        video_id=data.get('id', ''),
-                        title=data.get('title', ''),
-                        channel=data.get('channel', data.get('uploader', '')),
+                        # `or ''` on each: yt-dlp emits `"channel": null` for an upload whose
+                        # channel is gone, and a key that is present with None is not a
+                        # missing key to `.get`. The batch matcher fell over on the 411th
+                        # track of its first run for exactly that.
+                        video_id=data.get('id') or '',
+                        title=data.get('title') or '',
+                        channel=data.get('channel') or data.get('uploader') or '',
                         duration=data.get('duration', 0) or 0,
                         description=data.get('description') or '',
                         thumbnail_url=thumbnail_url,

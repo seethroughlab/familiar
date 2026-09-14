@@ -86,9 +86,9 @@ _LETTER_FOLDS = str.maketrans({
 })
 
 
-def normalise(text: str) -> str:
+def normalise(text: str | None) -> str:
     """Lowercase ASCII words separated by single spaces; accents folded, punctuation gone."""
-    folded = unicodedata.normalize("NFKD", text.translate(_LETTER_FOLDS)).encode("ascii", "ignore").decode()
+    folded = unicodedata.normalize("NFKD", (text or "").translate(_LETTER_FOLDS)).encode("ascii", "ignore").decode()
     return " ".join(re.sub(r"[^a-z0-9]+", " ", folded.lower()).split())
 
 

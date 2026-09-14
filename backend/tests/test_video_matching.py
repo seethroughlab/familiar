@@ -168,6 +168,11 @@ class TestRanking:
         v = pick([far, near])
         assert v.result is near
 
+    def test_a_result_with_no_channel_is_refused_not_a_crash(self):
+        """yt-dlp emits `"channel": null` for an upload whose channel is gone."""
+        v = pick([result("Interpol - Evil", None, 221)])
+        assert not v.matched
+
     def test_no_results_is_its_own_reason(self):
         assert pick([]).reason == "no results"
 
