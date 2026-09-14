@@ -52,8 +52,10 @@ class VideoDownloadStatus:
 class VideoService:
     """Service for searching and downloading music videos from YouTube."""
 
-    def __init__(self) -> None:
-        self.videos_dir = settings.videos_path
+    def __init__(self, videos_dir: Path | None = None) -> None:
+        # Overridable so a test can watch what a download leaves on disk in a directory of its
+        # own; the app never passes one.
+        self.videos_dir = videos_dir or settings.videos_path
         self.videos_dir.mkdir(parents=True, exist_ok=True)
         self._downloads: dict[str, VideoDownloadStatus] = {}
 
@@ -177,6 +179,27 @@ class VideoService:
         playable even if its row was lost, which matters because the file is what the stream serves.
         """
         return self.get_video_path(track_id) is not None
+
+    def get_poster_path(self, track_id: str) -> Path | None:
+        """The poster frame saved beside a track's video, or None.
+
+        Kept beside the mp4 as `{track_id}.jpg` rather than in the artwork tree: it is a fact about
+        the video (which frame the source chose to advertise it with), not about the album, and it
+        should leave with the video. `adopt_orphan_videos` globs `*.mp4`, so a poster is never
+        mistaken for an orphan.
+        """
+        poster_path = self.videos_dir / f"{track_id}.jpg"
+        if poster_path.exists():
+            return poster_path
+        return None
+
+    def has_poster(self, track_id: str) -> bool:
+        """Whether a poster exists, answered from disk the way `has_video` is.
+
+        Synchronous and cheap on purpose: the list endpoint asks this once per row so a grid of
+        tiles knows which posters to request instead of finding out with a 404 apiece.
+        """
+        return self.get_poster_path(track_id) is not None
 
     async def get_video_record(
         self, session: AsyncSession, track_id: str
@@ -316,6 +339,15 @@ class VideoService:
 
         output_path = self.videos_dir / f"{track_id}.mp4"
         temp_path = self.videos_dir / f"{track_id}.temp.mp4"
+        poster_path = self.videos_dir / f"{track_id}.jpg"
+        # The thumbnail template has no extension, and that is what makes its output name
+        # predictable. yt-dlp derives the thumbnail's name by replacing the template's extension
+        # *only when it equals the video's* — so `-o {id}.temp.mp4` alone yields `{id}.temp.jpg`
+        # for a merged mp4 but `{id}.temp.mp4.jpg` when the `/best` fallback lands on webm. With
+        # `{id}.temp` the suffix is never a video extension, so the converter always writes
+        # `{id}.temp.jpg` (yt-dlp 2026.02, `_write_thumbnails` / `FFmpegThumbnailsConvertorPP`).
+        temp_poster_base = self.videos_dir / f"{track_id}.temp"
+        temp_poster = self.videos_dir / f"{track_id}.temp.jpg"
 
         status = VideoDownloadStatus(
             track_id=track_id,
@@ -335,7 +367,15 @@ class VideoService:
                 "--no-playlist",
                 "--progress",
                 "--newline",
+                # The poster frame, fetched from the source alongside the video so the Videos
+                # grid has something to draw. Converted to jpg because YouTube's best thumbnail
+                # is webp and every artwork consumer here speaks jpeg; the conversion needs the
+                # ffmpeg the merge above already requires. yt-dlp treats a thumbnail failure as a
+                # warning, never a non-zero exit, and so does the success branch below.
+                "--write-thumbnail",
+                "--convert-thumbnails", "jpg",
                 "-o", str(temp_path),
+                "-o", f"thumbnail:{temp_poster_base}",
                 video_url
             ]
 
@@ -374,6 +414,13 @@ class VideoService:
             if process.returncode == 0 and temp_path.exists():
                 # Move temp file to final location
                 temp_path.rename(output_path)
+                # A missing poster never fails a download. But a poster left over from a previous
+                # download of this track would describe a different video, so it goes either way.
+                if temp_poster.exists():
+                    temp_poster.replace(poster_path)
+                else:
+                    poster_path.unlink(missing_ok=True)
+                self._sweep_temp_files(track_id)
                 status.status = 'complete'
                 status.progress = 100
                 status.file_path = str(output_path)
@@ -387,16 +434,24 @@ class VideoService:
                 # Use the last (most specific) yt-dlp error, or generic fallback
                 error_msg = error_lines[-1] if error_lines else 'Download failed'
                 status.error = error_msg[:300]
-                if temp_path.exists():
-                    temp_path.unlink()
+                self._sweep_temp_files(track_id)
 
         except Exception as e:
             status.status = 'error'
             status.error = str(e)
-            if temp_path.exists():
-                temp_path.unlink()
+            self._sweep_temp_files(track_id)
 
         return status
+
+    def _sweep_temp_files(self, track_id: str) -> None:
+        """Remove whatever yt-dlp left under the temp name.
+
+        A glob rather than the two names we expect: a failed `--convert-thumbnails` leaves the
+        original `.temp.webp` behind, and a future format fallback could leave something else.
+        Anything under `{track_id}.temp.*` is ours and is not a finished artefact.
+        """
+        for leftover in self.videos_dir.glob(f"{track_id}.temp.*"):
+            leftover.unlink(missing_ok=True)
 
     async def delete_video(self, session: AsyncSession, track_id: str) -> bool:
         """Delete a downloaded video, and the row that says what it was.
@@ -410,6 +465,10 @@ class VideoService:
         if video_path:
             video_path.unlink()
             deleted = True
+        # The poster leaves with the video. It does not count towards `deleted`: a poster with no
+        # video and no row was never something the client could see.
+        if poster_path := self.get_poster_path(track_id):
+            poster_path.unlink()
 
         if track_id in self._downloads:
             del self._downloads[track_id]

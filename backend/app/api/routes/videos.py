@@ -70,6 +70,10 @@ class VideoListItem(TrackResponse):
     source_url: str | None = None
     file_size_bytes: int | None = None
     downloaded_at: UTCDateTime | None = None
+    # Answered from disk like `has_video`, so a client drawing a grid knows which posters to ask
+    # for rather than discovering it with a 404 per tile. False for anything downloaded before
+    # posters were saved.
+    has_poster: bool = False
 
 
 class VideoListResponse(BaseModel):
@@ -112,6 +116,7 @@ async def list_videos(
         .limit(page_size)
     )
 
+    video_service = get_video_service()
     items = [
         VideoListItem(
             **TrackResponse.model_validate(track, from_attributes=True).model_dump(),
@@ -120,6 +125,7 @@ async def list_videos(
             source_url=video.source_url,
             file_size_bytes=video.file_size_bytes,
             downloaded_at=video.downloaded_at,
+            has_poster=video_service.has_poster(str(track.id)),
         )
         for video, track in result.all()
     ]
@@ -317,6 +323,41 @@ async def stream_video(
     # file from byte 0 every time. **Do not reintroduce a hand-rolled parser here** — `stream_file`'s
     # docstring records the five defects the audio one had, and the incident they caused.
     return await stream_file(video_path, request, "video/mp4")
+
+
+@router.get(
+    "/{track_id}/poster",
+    # Declared as an image for the same reason `/stream` declares itself a video: the schema must
+    # not claim JSON for bytes. Built by hand on the client, as every media URL is (ADR-0007 point
+    # 8), so this stays out of `VENDORED_OPERATIONS` in `scripts/lint_openapi.py`.
+    response_class=FileResponse,
+    responses={
+        200: {"content": {"image/jpeg": {}}, "description": "The poster frame saved beside the video."},
+    },
+)
+async def get_video_poster(track_id: UUID) -> FileResponse:
+    """
+    The poster frame yt-dlp fetched from the source when the video was downloaded.
+
+    **No database session, on purpose.** `/stream` opens one to 404 an unknown track, and pays for
+    it once per video watched. A grid asks for two hundred of these at once, and answering a
+    `stat` should not cost two hundred connections — `get_artwork_by_hash` takes the same view of
+    covers. An unknown track and a known track without a poster are the same answer here.
+
+    Media, so it inherits ADR-0086 point 6's exemption from the auth gate alongside `/stream`.
+    """
+    poster_path = get_video_service().get_poster_path(str(track_id))
+    if not poster_path:
+        raise NotFoundError("No poster available")
+
+    # A poster only changes when the video is re-downloaded, and the client puts the download time
+    # in the query string for exactly that case — so a year is honest, and it is what every cover
+    # already says.
+    return FileResponse(
+        poster_path,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=31536000"},
+    )
 
 
 class VideoDeleteResponse(BaseModel):

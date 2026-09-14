@@ -10784,6 +10784,11 @@
               "null"
             ]
           },
+          "has_poster": {
+            "default": false,
+            "title": "Has Poster",
+            "type": "boolean"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -33749,6 +33754,86 @@
           }
         },
         "summary": "Download Video",
+        "tags": [
+          "videos"
+        ]
+      }
+    },
+    "/api/v1/videos/{track_id}/poster": {
+      "get": {
+        "description": "The poster frame yt-dlp fetched from the source when the video was downloaded.\n\n**No database session, on purpose.** `/stream` opens one to 404 an unknown track, and pays for\nit once per video watched. A grid asks for two hundred of these at once, and answering a\n`stat` should not cost two hundred connections \u2014 `get_artwork_by_hash` takes the same view of\ncovers. An unknown track and a known track without a poster are the same answer here.\n\nMedia, so it inherits ADR-0086 point 6's exemption from the auth gate alongside `/stream`.",
+        "operationId": "videos_get_video_poster",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "track_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Track Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/jpeg": {}
+            },
+            "description": "The poster frame saved beside the video."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get Video Poster",
         "tags": [
           "videos"
         ]
