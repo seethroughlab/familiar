@@ -17,6 +17,13 @@ What a match requires, all at once:
 4. **Nothing in the result says it is not the video** — live, cover, lyric video, official audio,
    remix, reaction, karaoke and the rest. A word the *track's own title* carries is exempt: a
    song called "Remix" may match a result called "Remix".
+5. **It is not an art track.** YouTube generates an upload for every track a label delivers —
+   the album cover, the audio, the bare title, on the artist's own channel, exactly the album
+   length. They pass every rule above and are not videos. Their description opens "Provided to
+   YouTube by", which is the tell; a channel ending "- Topic" is the older form of the same thing.
+6. **Somebody credible uploaded it** — the title says official video, or the channel is the
+   artist's or a VEVO/official one. A bare "Song - Artist" from a stranger's channel is a
+   re-upload of the audio with a picture more often than it is the video.
 
 Among results that pass, "official video" in the title and an official-looking channel rank first,
 then the closest duration. A result that passes nothing is reported with the first rule it broke,
@@ -45,11 +52,12 @@ REJECT_PHRASES: tuple[tuple[str, ...], ...] = tuple(
     )
 )
 
-# Words that say "official video" — the positive signal, used only for ranking and for the case
-# where the track's own duration is unknown.
+# Words that say "official video" — the positive signal: credibility from a stranger's channel,
+# ranking, and the whole case when the track's own duration is unknown. "Music video" on its own
+# is not here: a fan-made video says that too, and did in the dry run.
 OFFICIAL_PHRASES: tuple[tuple[str, ...], ...] = tuple(
     tuple(p.split())
-    for p in ("official video", "official music video", "music video", "official hd video")
+    for p in ("official video", "official music video", "official hd video", "official 4k video")
 )
 
 # Parenthetical noise stripped from a track title before its tokens are required.
@@ -161,6 +169,23 @@ def _official_channel(result: VideoSearchResult) -> bool:
     return "vevo" in channel or "official" in channel
 
 
+def _artist_channel(artist: str, result: VideoSearchResult) -> bool:
+    wanted = artist_tokens(artist)
+    channel = normalise(result.channel).replace(" ", "")
+    return bool(wanted) and "".join(wanted) in channel
+
+
+def is_art_track(result: VideoSearchResult) -> bool:
+    """YouTube's auto-generated audio upload, which is the song but not a video of it."""
+    if normalise(result.description).startswith("provided to youtube by"):
+        return True
+    return normalise(result.channel).endswith(" topic")
+
+
+def _credible(artist: str, result: VideoSearchResult) -> bool:
+    return _looks_official(result) or _artist_channel(artist, result) or _official_channel(result)
+
+
 @dataclass(frozen=True)
 class Verdict:
     """What the chooser decided, and in words a log reader can act on."""
@@ -202,6 +227,12 @@ def choose(
         phrase = _rejecting_phrase(title, result)
         if phrase:
             fail(f"says {phrase!r}: {result.title!r}")
+            continue
+        if is_art_track(result):
+            fail(f"is an art track (audio with the cover): {result.title!r} ({result.channel})")
+            continue
+        if not _credible(artist, result):
+            fail(f"not called official and not the artist's channel: {result.title!r} ({result.channel})")
             continue
         if duration_seconds:
             off = abs(result.duration - duration_seconds)

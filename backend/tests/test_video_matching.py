@@ -9,10 +9,11 @@ from app.services.video_matching import (
 )
 
 
-def result(title, channel="SomeChannel", duration=240, video_id="v1"):
+def result(title, channel="SomeChannel", duration=240, video_id="v1", description=""):
     return VideoSearchResult(
         video_id=video_id, title=title, channel=channel, duration=duration,
         thumbnail_url="", url=f"https://www.youtube.com/watch?v={video_id}",
+        description=description,
     )
 
 
@@ -82,10 +83,39 @@ class TestWhatIsNotTheVideo:
                  title="Bangarang Remix", artist="Skrillex", duration=215)
         assert v.matched
 
-    def test_a_topic_upload_that_only_says_the_name_still_passes(self):
-        """Topic uploads are audio-only but titled plainly; the duration rule is what catches
-        the ones that are not the song, and a plain title is not a reason on its own."""
+    def test_an_art_track_is_refused_by_its_description(self):
+        """The dry run's first fifteen "matches" were all of these: bare title, the artist's own
+        channel, exactly the album length. Nothing but the description gives them away."""
+        v = pick([result("Into The Magic Land", "Boards of Canada", 275,
+                         description="Provided to YouTube by IIP-DDS\n\nInto The Magic Land · Boards of Canada")],
+                 title="Into The Magic Land", artist="Boards of Canada", duration=275)
+        assert not v.matched
+        assert "art track" in v.reason
+
+    def test_a_topic_channel_is_the_older_art_track(self):
         v = pick([result("Evil", "Interpol - Topic", 221)])
+        assert not v.matched
+        assert "art track" in v.reason
+
+    def test_a_strangers_bare_upload_is_refused(self):
+        v = pick([result("Everything Is Wrong - Interpol", "Camilo 8", 221)],
+                 title="Everything Is Wrong", artist="Interpol", duration=221)
+        assert not v.matched
+        assert "not called official" in v.reason
+
+    def test_music_video_alone_is_not_credible_from_a_stranger(self):
+        v = pick([result("Boards of Canada - Left Side Drive (Music Video)", "Xavier LeBlanc", 300)],
+                 title="Left Side Drive", artist="Boards of Canada", duration=300)
+        assert not v.matched
+
+    def test_a_strangers_upload_that_says_official_video_passes(self):
+        """Labels and fans both title them that way; the duration and the reject words are what
+        keep this honest, and a hand-picked match would have taken it too."""
+        v = pick([result("Interpol - Evil (Official Video)", "randomuploader", 221)])
+        assert v.matched
+
+    def test_the_artists_own_channel_is_credible_without_the_word_official(self):
+        v = pick([result("PDA (2012 Remaster)", "Interpol", 221)], title="PDA", duration=220)
         assert v.matched
 
 

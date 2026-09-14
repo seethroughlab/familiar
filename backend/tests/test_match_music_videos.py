@@ -110,16 +110,21 @@ class TestRun:
 
     @pytest.mark.asyncio
     async def test_dry_run_decides_but_downloads_and_logs_nothing(self, tmp_path):
+        """Skips included: the first dry run on the NAS logged its skips, and the real run that
+        followed would have passed over every track it had already looked at."""
         async def search(query):
-            return [result("Interpol - Evil (Official Video)", duration=221)]
+            if "Evil" in query:
+                return [result("Interpol - Evil (Official Video)", duration=221)]
+            return [result("Interpol - PDA (Live)", duration=221)]
 
         async def download(track_id, url):
             raise AssertionError("dry run must not download")
 
         log = tmp_path / "match-log.jsonl"
-        tally = await run([candidate()], search=search, download=download, log_path=log, dry_run=True)
+        picks = [candidate(), candidate(track_id="00000000-0000-0000-0000-000000000002", title="PDA")]
+        tally = await run(picks, search=search, download=download, log_path=log, dry_run=True)
 
-        assert tally.matched == 1
+        assert (tally.matched, tally.skipped) == (1, 1)
         assert not log.exists()
 
     @pytest.mark.asyncio

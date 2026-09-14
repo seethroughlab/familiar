@@ -167,7 +167,13 @@ def already_logged(log_path: Path) -> set[str]:
     return seen
 
 
-def _log(log_path: Path, candidate: Candidate, decision: str, reason: str, video_id: str | None) -> None:
+def _log(
+    log_path: Path | None, candidate: Candidate, decision: str, reason: str, video_id: str | None
+) -> None:
+    # `None` is the dry run: it decides out loud and remembers nothing, so the real run that
+    # follows asks every question again.
+    if log_path is None:
+        return
     entry = {
         "track_id": str(candidate.track_id),
         "artist": candidate.artist,
@@ -194,6 +200,7 @@ async def run(
     tally = Tally()
     seen = set() if retry else already_logged(log_path)
     consecutive_failures = 0
+    write_to = None if dry_run else log_path
 
     for candidate in picks:
         if str(candidate.track_id) in seen:
@@ -205,7 +212,7 @@ async def run(
         except VideoSearchUnavailable as exc:
             consecutive_failures += 1
             print(f"  fail   {candidate.label}  (search: {exc})")
-            _log(log_path, candidate, "failed", f"search: {exc}", None)
+            _log(write_to, candidate, "failed", f"search: {exc}", None)
             tally.failed += 1
             if consecutive_failures >= CONSECUTIVE_FAILURES_TO_STOP:
                 print(f"\n{consecutive_failures} searches failed in a row — stopping rather than pressing on.")
@@ -222,7 +229,7 @@ async def run(
         )
         if not verdict.matched or verdict.result is None:
             print(f"  skip   {candidate.label}  ({verdict.reason})")
-            _log(log_path, candidate, "skipped", verdict.reason, None)
+            _log(write_to, candidate, "skipped", verdict.reason, None)
             tally.skipped += 1
             await asyncio.sleep(pause)
             continue
@@ -236,11 +243,11 @@ async def run(
 
         status = await download(str(candidate.track_id), picked.url)
         if status.status == "complete":
-            _log(log_path, candidate, "matched", verdict.reason, picked.video_id)
+            _log(write_to, candidate, "matched", verdict.reason, picked.video_id)
             tally.matched += 1
         else:
             print(f"  fail   {candidate.label}  (download: {status.error})")
-            _log(log_path, candidate, "failed", f"download: {status.error}", picked.video_id)
+            _log(write_to, candidate, "failed", f"download: {status.error}", picked.video_id)
             tally.failed += 1
         await asyncio.sleep(pause)
 

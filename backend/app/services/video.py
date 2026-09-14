@@ -36,6 +36,9 @@ class VideoSearchResult:
     duration: int  # seconds
     thumbnail_url: str
     url: str
+    # The upload's description. Not shown anywhere; `video_matching` reads its first line, which
+    # is how YouTube's auto-generated audio uploads announce themselves.
+    description: str = ""
 
 
 @dataclass
@@ -148,6 +151,7 @@ class VideoService:
                         title=data.get('title', ''),
                         channel=data.get('channel', data.get('uploader', '')),
                         duration=data.get('duration', 0) or 0,
+                        description=data.get('description') or '',
                         thumbnail_url=thumbnail_url,
                         url=f"https://www.youtube.com/watch?v={data.get('id', '')}"
                     ))
