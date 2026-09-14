@@ -18,6 +18,19 @@ from app.db.session import async_session_maker
 from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
+# What the Mac can decode (ADR-0085 point 3: the video is an `AVPlayer` backdrop). VP9 and AV1
+# are not on this list because AVFoundation does not decode them, whatever the container says.
+PLAYABLE_CODECS = frozenset({"h264", "hevc"})
+
+H264_FORMAT = (
+    "bestvideo[height<=1080][vcodec^=avc1]+bestaudio[ext=m4a]"
+    "/bestvideo[height<=1080][vcodec^=avc1]+bestaudio"
+    "/best[height<=1080][vcodec^=avc1]"
+    "/bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]"
+    "/best[height<=1080][ext=mp4]/best"
+)
+
+
 class VideoSearchUnavailable(Exception):
     """YouTube could not be searched — as distinct from having nothing to return.
 
@@ -183,6 +196,22 @@ class VideoService:
         playable even if its row was lost, which matters because the file is what the stream serves.
         """
         return self.get_video_path(track_id) is not None
+
+    async def video_codec(self, path: Path) -> str | None:
+        """The name of the file's first video stream's codec, as ffprobe reports it, or None.
+
+        What decides whether the Mac can show it — see `PLAYABLE_CODECS`. ffprobe ships with
+        the ffmpeg the download's merge step already requires.
+        """
+        process = await asyncio.create_subprocess_exec(
+            "ffprobe", "-v", "error", "-select_streams", "v:0",
+            "-show_entries", "stream=codec_name", "-of", "csv=p=0", str(path),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await process.communicate()
+        codec = stdout.decode().strip().splitlines()
+        return codec[0].strip() if codec and codec[0].strip() else None
 
     def get_poster_path(self, track_id: str) -> Path | None:
         """The poster frame saved beside a track's video, or None.
@@ -366,7 +395,13 @@ class VideoService:
             cmd = [
                 "yt-dlp",
                 *self._base_ytdlp_args(),
-                "-f", "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best",
+                # H.264 by name, not "mp4" by extension. `ext=mp4` was satisfied by YouTube's VP9
+                # and AV1 streams in an MP4 container, and AVFoundation decodes neither: the Mac
+                # played the audio track under AVKit's audio-only glyph. On 2026-09-13, 67 of the
+                # library's 114 videos were like that and 47 had ever shown a frame. YouTube has
+                # an avc1 rendition of practically everything at 1080p and below; the last
+                # fallback is there for the rest and is what `PLAYABLE_CODECS` exists to catch.
+                "-f", H264_FORMAT,
                 "--merge-output-format", "mp4",
                 "--no-playlist",
                 "--progress",
