@@ -66,6 +66,35 @@ class QualityScore:
             return " ".join(parts) if parts else "Unknown"
 
 
+#: File formats (by suffix) that are lossless. **One set, two readers**: the quality score below and
+#: `is_lossless_source`, which decides whether `/stream?format=aac` encodes a track or passes it
+#: through (ADR-0118 point 2). They must agree, so there is one of them.
+LOSSLESS_FORMATS = frozenset({"flac", "alac", "wav", "aiff", "aif"})
+
+#: Codecs that are lossless whatever container they arrive in. `format` is the file suffix, and an
+#: ALAC file is `.m4a` — the same suffix as AAC — so the suffix alone would call it lossy and
+#: `?format=aac` would hand it back untouched at 30 MB. ffprobe names these; `Track.codec` stores
+#: what it said.
+LOSSLESS_CODECS = frozenset({"flac", "alac", "wavpack", "ape", "tta", "truehd", "mlp"})
+
+
+def is_lossless_source(suffix: str | None, codec: str | None) -> bool:
+    """Whether a library file is lossless — by codec when known, by suffix otherwise.
+
+    The codec wins because it is the truth and the suffix is a convention: ``.m4a`` holds both
+    AAC and ALAC, and ``pcm_*`` is what ffprobe calls the audio inside a WAV or AIFF.
+    """
+    if codec:
+        c = codec.lower()
+        if c in LOSSLESS_CODECS or c.startswith("pcm_"):
+            return True
+        # A known lossy codec is lossy even in a container the suffix table calls lossless —
+        # there is no such file in practice, but the suffix should not overrule ffprobe.
+        if c in ("aac", "mp3", "vorbis", "opus", "wmav2", "wmav1"):
+            return False
+    return (suffix or "").lower().lstrip(".") in LOSSLESS_FORMATS
+
+
 def calculate_quality_score(
     format: str | None,
     bitrate: int | None,
@@ -92,7 +121,7 @@ def calculate_quality_score(
         bitrate = bitrate // 1000
 
     # Lossless formats
-    is_lossless = format_lower in ("flac", "alac", "wav", "aiff", "aif")
+    is_lossless = format_lower in LOSSLESS_FORMATS
 
     if is_lossless:
         # Determine lossless tier based on bit depth and sample rate

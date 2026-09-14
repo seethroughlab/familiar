@@ -5,11 +5,22 @@ Status: proposed
 Date: 2026-09-14
 
 Implementation:
-- **Written before the code**, in the order ADR-0111 and ADR-0112 established. Nothing below is
-  built yet. The server half is `?format=aac` on `/tracks/{id}/stream` as a second branch of the
-  transcode path that already exists for AIFF; the client half is a device-local preference and one
-  query parameter in `familiar-apple`'s `DownloadManager`. The plan across both repos is
-  `familiar-apple/PLAN-lossy-downloads.md`.
+- **Written before the code**, in the order ADR-0111 and ADR-0112 established, and the server half
+  built the same day on this branch: `?format=aac` on `/tracks/{id}/stream`
+  (`routes/tracks/streaming.py`), `TranscodeTarget` with `FLAC` and `AAC` in `services/flac_remux.py`,
+  `is_lossless_source` beside the quality score it shares a set with (`services/quality.py`), and
+  `EncoderLimiter` next to the file-response limiter in `api/concurrency.py`, sized from
+  `TRANSCODE_CONCURRENCY`. Fifteen tests in `tests/test_stream_format_aac.py`, which drive the real
+  endpoint with files ffmpeg made; the three lossy pass-through cases were run against the route
+  with the lossless check removed and all three failed, so they guard the thing they claim to.
+  Additive to the contract — the parameter is optional — so `contract.lock.json` was re-locked at
+  v1 rather than bumped (ADR-0113 point 10). **Not yet deployed.** The client half is a
+  device-local preference and one query parameter in `familiar-apple`'s `DownloadManager`; the
+  plan across both repos is `familiar-apple/PLAN-lossy-downloads.md`.
+- **One thing the code decided that the first draft of this record did not**: lossless is judged by
+  *codec* first and suffix second. An ALAC file is `.m4a` — the same suffix as AAC — so a suffix
+  rule would have handed a 30 MB ALAC back untouched with a straight face. `Track.codec` is what
+  ffprobe said; `quality.py`'s own score still goes by suffix and now shares the set.
 - **One measurement, taken on the NAS before writing** (`familiar-api` container, eight cores, load
   1.1, ffmpeg's built-in `aac` encoder — the image has no `libfdk_aac`):
 
@@ -82,8 +93,9 @@ is unchanged.
    cache key. Here the bytes differ, so the URL must too — `URLCache`, `nsurlsessiond`'s resume
    data and anything between the app and the server key on it.
 
-2. **Only a lossless source is encoded.** The decision is `quality.py`'s `is_lossless` — flac, alac,
-   wav, aiff, aif — and nothing else. A lossy source served with `?format=aac` is served as it is,
+2. **Only a lossless source is encoded.** The decision is `quality.py`'s lossless set — flac, alac,
+   wav, aiff, aif by suffix, and `alac`, `flac`, `pcm_*` and friends by codec, the codec winning
+   because `.m4a` holds both ALAC and AAC — and nothing else. A lossy source served with `?format=aac` is served as it is,
    with its own MIME type: an MP3 stays an MP3. Re-encoding lossy to lossy is a generation loss for
    no saving, and the parameter means "no larger than AAC", not "AAC". The client must therefore
    name the file from the response, not from the request, which is what `AudioFileExtension`

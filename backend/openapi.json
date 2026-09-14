@@ -33231,6 +33231,21 @@
               "title": "Track Id",
               "type": "string"
             }
+          },
+          {
+            "description": "Ask for the track no larger than AAC (ADR-0118). A lossless source is encoded to 256 kbps AAC in an MP4 container, once, and cached; a lossy source is served exactly as it is, with its own media type \u2014 an MP3 stays an MP3. Name the file from the response, not from this parameter. Omit it and the library file is served.",
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "const": "aac",
+              "description": "Ask for the track no larger than AAC (ADR-0118). A lossless source is encoded to 256 kbps AAC in an MP4 container, once, and cached; a lossy source is served exactly as it is, with its own media type \u2014 an MP3 stays an MP3. Name the file from the response, not from this parameter. Omit it and the library file is served.",
+              "title": "Format",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
           }
         ],
         "responses": {

@@ -11,17 +11,21 @@ from fastapi import APIRouter, Query, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
+from app.api.concurrency import encoder_limiter
 from app.api.deps import DbSession, release_connection
 from app.api.exceptions import NotFoundError, TrackNotFoundError, TranscodeError, ValidationError
 from app.db.models import Track
 from app.services.artwork import album_key_for_track, get_artwork_path
+from app.services.flac_remux import AAC, FLAC, TranscodeTarget, transcode_to_file
+from app.services.quality import is_lossless_source
 
 from . import AUDIO_MIME_TYPES
 
 logger = logging.getLogger(__name__)
 
-# Per-track locks to prevent redundant concurrent transcodes
-_transcode_locks: dict[UUID, asyncio.Lock] = {}
+# Per-(track, target) locks to prevent redundant concurrent transcodes. Keyed on the target too,
+# since ADR-0118: a track's FLAC remux and its AAC encode are different files and may run at once.
+_transcode_locks: dict[tuple[UUID, str], asyncio.Lock] = {}
 _locks_lock = asyncio.Lock()
 
 router = APIRouter()
@@ -85,6 +89,15 @@ async def stream_track(
     db: DbSession,
     track_id: UUID,
     request: Request,
+    format: Literal["aac"] | None = Query(
+        None,
+        description=(
+            "Ask for the track no larger than AAC (ADR-0118). A lossless source is encoded to "
+            "256 kbps AAC in an MP4 container, once, and cached; a lossy source is served exactly "
+            "as it is, with its own media type — an MP3 stays an MP3. Name the file from the "
+            "response, not from this parameter. Omit it and the library file is served."
+        ),
+    ),
 ) -> FileResponse:
     """Stream audio file with range request support for seeking."""
     from sqlalchemy import select
@@ -117,15 +130,27 @@ async def stream_track(
     codec = track.codec
     await release_connection(db)
 
+    # **ADR-0118: a phone asks for AAC and gets it only if the source is lossless.** Checked before
+    # the two browser branches below so an AIFF asked for as AAC goes AIFF → AAC directly rather
+    # than AIFF → FLAC → AAC. Decided by codec first and suffix second (`is_lossless_source`),
+    # because an ALAC file is `.m4a` — the same suffix as the AAC it is not.
+    #
+    # A lossy source falls through to exactly what it got before this parameter existed. That is
+    # point 2 of the decision and the property the tests guard hardest: the parameter means "no
+    # larger than AAC", never "re-encode".
+    if format == "aac" and is_lossless_source(file_path.suffix, codec):
+        logger.debug("Encoding track_id=%s path=%s to AAC for download", track_id, file_path)
+        return await _get_or_transcode(track_id, file_path, request, AAC)
+
     # Transcode tracks with browser-unsupported codecs
     if needs_transcode:
         logger.info("Transcoding (unsupported codec=%s) track_id=%s", codec, track_id)
-        return await _get_or_transcode(track_id, file_path, request)
+        return await _get_or_transcode(track_id, file_path, request, FLAC)
 
     # Transcode formats that browsers can't natively decode
     if file_path.suffix.lower() in TRANSCODE_EXTENSIONS:
         logger.debug("Transcoding track_id=%s path=%s to FLAC", track_id, file_path)
-        return await _get_or_transcode(track_id, file_path, request)
+        return await _get_or_transcode(track_id, file_path, request, FLAC)
 
     mime_type = get_audio_mime_type(file_path)
     logger.debug("Streaming track_id=%s path=%s type=%s", track_id, file_path, mime_type)
@@ -134,27 +159,30 @@ async def stream_track(
     return await stream_file(file_path, request, mime_type)
 
 
-async def _get_or_transcode(track_id: UUID, file_path: Path, request: Request) -> FileResponse:
-    """Transcode audio to FLAC (cached to disk), then serve via stream_file().
+async def _get_or_transcode(
+    track_id: UUID, file_path: Path, request: Request, target: TranscodeTarget
+) -> FileResponse:
+    """Transcode audio to ``target`` (cached to disk), then serve via stream_file().
 
-    Caching to disk ensures the served file has complete FLAC headers (streaminfo +
-    seektable), Content-Length, and range request support — fixing PTS errors during
-    crossfade that occurred with the previous chunked-stream approach.
+    Caching to disk ensures the served file has complete headers (FLAC's streaminfo +
+    seektable, MP4's moov), Content-Length, and range request support — fixing PTS errors
+    during crossfade that occurred with the previous chunked-stream approach. It is also
+    why ADR-0118 declined to stream an encode as it runs.
 
-    Uses per-track locking to prevent redundant concurrent transcodes.
+    Uses per-(track, target) locking to prevent redundant concurrent transcodes.
     """
     from app.api.streaming import stream_file
-    from app.services.flac_remux import transcode_to_file
 
     cache_dir = Path("data/transcode_cache")
     cache_dir.mkdir(parents=True, exist_ok=True)
-    cached = cache_dir / f"{track_id}.flac"
+    cached = cache_dir / f"{track_id}{target.cache_suffix}"
 
-    # Acquire per-track lock to prevent redundant concurrent transcodes
+    # Acquire per-(track, target) lock to prevent redundant concurrent transcodes
+    key = (track_id, target.name)
     async with _locks_lock:
-        if track_id not in _transcode_locks:
-            _transcode_locks[track_id] = asyncio.Lock()
-        lock = _transcode_locks[track_id]
+        if key not in _transcode_locks:
+            _transcode_locks[key] = asyncio.Lock()
+        lock = _transcode_locks[key]
 
     async with lock:
         # Re-transcode if source is newer or cache doesn't exist
@@ -165,19 +193,24 @@ async def _get_or_transcode(track_id: UUID, file_path: Path, request: Request) -
             needs_transcode = True
 
         if needs_transcode:
+            # The encoder bound wraps the ffmpeg run only — not the lock, not the serve — so a
+            # cache hit never waits on it and a waiter for the same track holds no encoder slot.
+            await encoder_limiter.acquire()
             try:
-                await transcode_to_file(file_path, cached)
+                await transcode_to_file(file_path, cached, target)
             except RuntimeError:
                 logger.exception("Transcode failed: track_id=%s path=%s", track_id, file_path)
                 cached.unlink(missing_ok=True)
                 raise TranscodeError(f"Failed to transcode {file_path.name}")
+            finally:
+                encoder_limiter.release()
 
     # Clean up lock if no one else is waiting
     async with _locks_lock:
-        if track_id in _transcode_locks and not lock.locked():
-            del _transcode_locks[track_id]
+        if key in _transcode_locks and not lock.locked():
+            del _transcode_locks[key]
 
-    return await stream_file(cached, request, "audio/flac")
+    return await stream_file(cached, request, target.mime_type)
 
 
 class PlaybackErrorResponse(BaseModel):

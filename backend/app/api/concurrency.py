@@ -226,6 +226,59 @@ class FileResponseLimiter:
 limiter = FileResponseLimiter()
 
 
+#: ffmpeg encodes running at once (ADR-0118 point 5).
+#:
+#: **A third bound, on a third resource.** The file-response ceiling above assumes a slot is held
+#: for a network transfer. An AAC encode holds a *core* — 12.4 s for a 4:32 FLAC, measured on the
+#: NAS, one core each — before the transfer even begins. The finding this whole module records is
+#: that a ceiling on one resource moves the queue to the next; the encoder is the next. Four of
+#: eight cores leaves the API, Postgres and analysis the rest.
+#:
+#: Waits rather than refuses, which is the opposite of the stream budget and for the same rule —
+#: refuse only when waiting would be indistinguishable from broken. A wait here is a few encodes,
+#: seconds, and only ever on the *first* request for a track; after that the cache answers.
+MAX_CONCURRENT_ENCODES = 4
+
+
+class EncoderLimiter:
+    """The bound on concurrent ffmpeg runs, and the accounting for it.
+
+    Acquired around the encode only, never around the serve, so a cache hit never touches it.
+    """
+
+    def __init__(self, limit: int = MAX_CONCURRENT_ENCODES) -> None:
+        self.limit = limit
+        self._slots = asyncio.Semaphore(limit)
+        self.in_flight = 0
+        #: The high-water mark, for the same reason the stream limiter keeps one.
+        self.peak_in_flight = 0
+        #: How many encodes had to wait for a slot. Above zero during a first sync is expected;
+        #: above zero during ordinary listening means the bound is too low or the cache is cold.
+        self.waited = 0
+
+    async def acquire(self) -> None:
+        if self._slots.locked():
+            self.waited += 1
+        await self._slots.acquire()
+        self.in_flight += 1
+        self.peak_in_flight = max(self.peak_in_flight, self.in_flight)
+
+    def release(self) -> None:
+        self.in_flight -= 1
+        self._slots.release()
+
+
+#: One per process, for the reason ``limiter`` is. Sized from settings so the first real sync can
+#: be tuned without a deploy (``TRANSCODE_CONCURRENCY``); the constant above is the default.
+def _configured_encoder_limiter() -> EncoderLimiter:
+    from app.config import settings
+
+    return EncoderLimiter(settings.transcode_concurrency)
+
+
+encoder_limiter = _configured_encoder_limiter()
+
+
 class FileResponseConcurrencyMiddleware:
     """Hold a slot for the whole of a file response, and refuse when there are none.
 
