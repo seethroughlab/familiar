@@ -97,6 +97,17 @@ class TestWhatIsNotTheVideo:
         assert not v.matched
         assert "art track" in v.reason
 
+    def test_a_channel_that_merely_contains_the_name_is_not_the_artist(self):
+        v = pick([result("Modest Mouse - Fire It Up", "Modest Mouse Man", 250)],
+                 title="Fire It Up", artist="Modest Mouse", duration=250)
+        assert not v.matched
+
+    def test_conventional_channel_suffixes_are_the_artist(self):
+        for channel in ("Pinback", "pinbackmusic", "PinbackVEVO", "Pinback Official", "The Pinback"):
+            v = pick([result("Pinback - Good to Sea", channel, 250)],
+                     title="Good to Sea", artist="Pinback", duration=250)
+            assert v.matched, channel
+
     def test_a_strangers_bare_upload_is_refused(self):
         v = pick([result("Everything Is Wrong - Interpol", "Camilo 8", 221)],
                  title="Everything Is Wrong", artist="Interpol", duration=221)

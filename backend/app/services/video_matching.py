@@ -133,10 +133,11 @@ def _names_artist(artist: str, result: VideoSearchResult) -> bool:
     in_title = tokens(result.title)
     if all(w in in_title for w in wanted):
         return True
-    # "InterpolVEVO", "thecureofficial", "The Cure - Topic": the name runs through the channel
-    # with its spaces gone.
+    # "InterpolVEVO", "thecureofficial": the channel is the artist. Naming is looser than
+    # credibility — a "- Topic" channel names the artist too, and is refused later for what it is.
     channel = normalise(result.channel).replace(" ", "")
-    return "".join(wanted) in channel
+    is_topic = channel.startswith("".join(wanted)) and channel.endswith("topic")
+    return _artist_channel(artist, result) or is_topic
 
 
 def _names_title(title: str, result: VideoSearchResult) -> bool:
@@ -174,10 +175,20 @@ def _official_channel(artist: str, result: VideoSearchResult) -> bool:
     return "official" in channel and _artist_channel(artist, result)
 
 
+# What an artist's own channel may add to the name: "InterpolVEVO", "pinbackmusic", "The Cure
+# Official". Not an open substring test — "Modest Mouse Man" contains the name and is a fan.
+CHANNEL_SUFFIXES = ("", "vevo", "official", "music", "tv", "band", "records", "videos", "hq", "channel")
+
+
 def _artist_channel(artist: str, result: VideoSearchResult) -> bool:
-    wanted = artist_tokens(artist)
+    """The channel *is* the artist: the name, with at most a conventional suffix."""
+    wanted = "".join(artist_tokens(artist))
+    if not wanted:
+        return False
     channel = normalise(result.channel).replace(" ", "")
-    return bool(wanted) and "".join(wanted) in channel
+    if channel.startswith("the") and not wanted.startswith("the"):
+        channel = channel[3:]
+    return any(channel == wanted + suffix for suffix in CHANNEL_SUFFIXES)
 
 
 def is_art_track(result: VideoSearchResult) -> bool:
