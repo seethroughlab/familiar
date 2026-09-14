@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from typing import Any
 
@@ -70,6 +71,14 @@ _active_phase: str | None = None
 
 #: Indirection so a test can move this module's clock without moving asyncio's.
 _clock = time.monotonic
+
+#: AcoustID requests run on their own thread, not the loop's default executor.
+#: On 2026-09-14 from 14:30 a burst of MusicBrainz work — hundreds of 503s, each
+#: retried with a blocking backoff sleep — filled the shared pool, and every
+#: `to_thread` lookup waited ~45 s for a thread while the request itself took
+#: 0.3 s. Resolve phases hit their deadline after four tracks with zero errors.
+#: One thread is the right size: the pace is sequential by design.
+_acoustid_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="acoustid-lookup")
 
 
 def _now_iso() -> str:
@@ -208,8 +217,8 @@ async def run_resolve_phase(
                 stats["considered"] += 1
                 fingerprint = CommunityCacheService.canonical_fingerprint(analysis.acoustid).decode()
                 try:
-                    data = await asyncio.to_thread(
-                        _lookup, api_key, fingerprint, int(track.duration_seconds)
+                    data = await asyncio.get_running_loop().run_in_executor(
+                        _acoustid_executor, _lookup, api_key, fingerprint, int(track.duration_seconds)
                     )
                 except Exception as exc:
                     if _is_per_track(exc):
