@@ -1,4 +1,4 @@
-.PHONY: install dev run reset-db migrate test test-contract lint lint-contracts openapi openapi-check contract-lock contract-lock-check format backfill-artists backfill-albums
+.PHONY: install dev run reset-db migrate test test-contract lint lint-contracts openapi openapi-check contract-lock contract-lock-check format backfill-artists backfill-albums adopt-videos backfill-video-posters
 
 # Install dependencies
 install:
@@ -71,6 +71,9 @@ format:
 # ADR-0086 says the file on disk wins for existence; this is the half it did not build.
 adopt-videos:
 	uv run python -m app.cli.adopt_orphan_videos $(ARGS)
+
+backfill-video-posters:
+	uv run python -m app.cli.backfill_video_posters $(ARGS)
 
 # One-shot backfill: populate canonical artists/aliases from existing tracks.
 # Pass ARGS="--dry-run" or ARGS="--no-mb --limit 50" for variants.
