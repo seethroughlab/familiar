@@ -47,6 +47,7 @@ from app.api.routes import (
     proposed_changes,
     s3_backup,
     smart_playlists,
+    soulseek,
     tracks,
     updates,
     videos,
@@ -72,6 +73,7 @@ api_router.include_router(tracks.router)
 api_router.include_router(library.router)
 api_router.include_router(videos.router)
 api_router.include_router(lastfm.router)
+api_router.include_router(soulseek.router)
 api_router.include_router(settings_routes.router)
 api_router.include_router(smart_playlists.router)
 api_router.include_router(playlists.router)

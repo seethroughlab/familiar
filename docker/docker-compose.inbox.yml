@@ -1,0 +1,16 @@
+# Inbox override (ADR-0117): mount a download folder *inside* the library so new files show up in
+# Pending Review on their own. Typically slskd's completed-downloads folder, but any folder other
+# software writes into works — a Bandcamp download folder, a phone sync target.
+#
+# Read-only like the library: Familiar never moves, renames or deletes what lands here. Accept and
+# skip in Pending Review are database decisions; the files stay where they are. Without this
+# override, the Soulseek tools hand the move off instead — "move the folder into the library,
+# then call start_library_sync" — for the listener or a host with its own shell to do.
+#
+# Set SOULSEEK_INBOX_PATH in .env to the folder on the host, then:
+#   docker compose -f docker-compose.prod.yml -f docker-compose.inbox.yml up -d
+
+services:
+  api:
+    volumes:
+      - ${SOULSEEK_INBOX_PATH:?set SOULSEEK_INBOX_PATH in .env to use the inbox override}:/music/Inbox:ro

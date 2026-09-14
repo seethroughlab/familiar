@@ -215,6 +215,29 @@ Linux" — is required there; **the first pull is ~7 GB**, not the 4 GB three do
 **disabling CLAP costs far more than "semantic search"**, since `TrackAnalysis.embedding` is read by
 eighteen modules including Find Similar and suggested tracks.
 
+**`ADR-0116` lets a host acquire what the discovery tools recommend** (proposed 2026-09-13).
+Familiar talks HTTP to a **slskd** the operator already runs — never the Soulseek protocol — and
+only once `soulseek_url` is set. On a server with none configured the four tools are **withheld
+from `tools/list`** by `app/mcp/server.py`'s `withheld_tools()`, which is ADR-0022 point 3 applied
+to tools: absent, not present and failing. Two slskd facts the schema does not tell you, both
+pinned in `tests/test_soulseek.py`: responses read as `[]` until the search `isComplete` (~15–25 s),
+and `extension` is blank on most files. `find_missing_on_soulseek` checks the library **before** the
+network; `download_from_soulseek` lists the folder before enqueueing, so a one-track match downloads
+the album.
+
+**`ADR-0117` closes the loop without a file move** (proposed 2026-09-13, built with 0116). The
+follow-up 0116 first asked for — "move-and-sync" — would have broken **zero-touch**
+(`docs/ZERO-TOUCH.md`, commit `5fe90d7a`: Familiar never creates, moves or deletes library files).
+Instead slskd's completed folder is bind-mounted **inside** the library at `/music/Inbox:ro`
+(`SOULSEEK_INBOX_PATH`), the ordinary scanner finds new files and puts them in `PENDING_REVIEW`,
+and `background/soulseek.py` polls slskd every two minutes to start a sync when a folder has
+*settled* — every file terminal, at least one success — once per success count. Not per file
+(slskd moves files to `complete` one at a time) and not a watcher (inotify across bind mounts).
+Without an inbox, the tools return a **handoff** — the folder's path as slskd sees it, the
+library path, and "move it, then call `start_library_sync`" — for the listener or a host with
+its own shell to act on; the move never goes through Familiar. The dead `/imports-incoming`
+mount and `GET /import/scan-path` are gone. If you find yourself adding a `shutil.move` for
+downloads, read 0117's Alternatives first.
 
 ## Key Directories
 

@@ -8275,30 +8275,6 @@
         "title": "RuleSchema",
         "type": "object"
       },
-      "ScanPathEntry": {
-        "description": "A directory entry from scan-path.",
-        "properties": {
-          "file_count": {
-            "title": "File Count",
-            "type": "integer"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "total_size_bytes": {
-            "title": "Total Size Bytes",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "name",
-          "file_count",
-          "total_size_bytes"
-        ],
-        "title": "ScanPathEntry",
-        "type": "object"
-      },
       "ScrobbleRequest": {
         "description": "Request to scrobble a track.",
         "properties": {
@@ -8580,6 +8556,25 @@
             "title": "S3 Backup Schedule",
             "type": "string"
           },
+          "soulseek_api_key": {
+            "title": "Soulseek Api Key",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "soulseek_configured": {
+            "default": false,
+            "title": "Soulseek Configured",
+            "type": "boolean"
+          },
+          "soulseek_url": {
+            "title": "Soulseek Url",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "update_channel": {
             "title": "Update Channel",
             "type": "string"
@@ -8733,6 +8728,20 @@
           },
           "s3_backup_schedule": {
             "title": "S3 Backup Schedule",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "soulseek_api_key": {
+            "title": "Soulseek Api Key",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "soulseek_url": {
+            "title": "Soulseek Url",
             "type": [
               "string",
               "null"
@@ -9084,6 +9093,65 @@
           }
         },
         "title": "SmartPlaylistUpdate",
+        "type": "object"
+      },
+      "SoulseekStatusResponse": {
+        "description": "What the configured slskd said when asked, or why it could not be asked.",
+        "properties": {
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "error": {
+            "title": "Error",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "logged_in": {
+            "default": false,
+            "title": "Logged In",
+            "type": "boolean"
+          },
+          "reachable": {
+            "default": false,
+            "title": "Reachable",
+            "type": "boolean"
+          },
+          "shared_files": {
+            "title": "Shared Files",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "url": {
+            "title": "Url",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "username": {
+            "title": "Username",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "title": "Version",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "configured"
+        ],
+        "title": "SoulseekStatusResponse",
         "type": "object"
       },
       "SuggestedTrackResponse": {
@@ -18082,93 +18150,6 @@
           }
         },
         "summary": "Import Preview From Path",
-        "tags": [
-          "ingest"
-        ]
-      }
-    },
-    "/api/v1/library/import/scan-path": {
-      "get": {
-        "description": "List subdirectories at a local path with audio file counts.\n\nUseful for discovering what's available for import at a given path\n(e.g. a mounted volume of downloaded music).\n\nArgs:\n    path: Absolute path inside the container to scan.",
-        "operationId": "ingest_scan_path",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "path",
-            "required": true,
-            "schema": {
-              "title": "Path",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/ScanPathEntry"
-                  },
-                  "title": "Response Ingest Scan Path",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          }
-        },
-        "summary": "Scan Path",
         "tags": [
           "ingest"
         ]
@@ -29361,6 +29342,78 @@
         ]
       }
     },
+    "/api/v1/soulseek/status": {
+      "get": {
+        "description": "Probe the configured slskd. Never errors: an unreachable client is a status, not a failure.",
+        "operationId": "soulseek_get_soulseek_status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SoulseekStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get Soulseek Status",
+        "tags": [
+          "soulseek"
+        ]
+      }
+    },
     "/api/v1/tracks": {
       "get": {
         "description": "List tracks with optional filtering and pagination.\n\n``updated_since`` is the delta cursor for the offline library cache (ADR-0011 points 6 and 7).\nTwo things about it are deliberate and load-bearing:\n\n**It returns rows in every status, not just active.** A cursor query cannot see a deleted row,\nbut Familiar does not delete tracks \u2014 it sets ``status`` away from active, which is an ORM\nupdate, so ``updated_at`` moves. Returning those rows is what lets a client drop them from its\ncache. Filtering to active here would make removals invisible, and a cache would drift in the\none direction nobody notices.\n\n**The comparison is ``>=``, so the boundary row comes back again.** A client passing back the\n``max(updated_at)`` it last saw re-receives the rows carrying exactly that timestamp, which is\nan idempotent re-write on its side. ``>`` would silently skip any row sharing the boundary\ninstant. This does not close the general cursor race \u2014 a row committed during a refresh with a\ntimestamp below the cursor is missed by either comparison \u2014 and the active count from\n``GET /library/fingerprint`` is the backstop that catches that drift.",
@@ -34246,6 +34299,10 @@
       "name": "external-albums"
     },
     {
+      "description": "The slskd instance this server is pointed at, if any (ADR-0116). One status probe; searching and downloading are MCP tools, not endpoints.",
+      "name": "soulseek"
+    },
+    {
       "description": "Tracks awaiting a decision before they enter the library, in groups and in bulk.",
       "name": "pending-review"
     },
@@ -34330,7 +34387,8 @@
         "discover",
         "lastfm",
         "new-releases",
-        "external-albums"
+        "external-albums",
+        "soulseek"
       ]
     },
     {

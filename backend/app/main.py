@@ -392,6 +392,9 @@ OPENAPI_TAGS = [
     {"name": "new-releases", "description": "New releases by artists in the library."},
     {"name": "external-albums", "description":
         "Albums found outside the library, offered as things to acquire."},
+    {"name": "soulseek", "description":
+        "The slskd instance this server is pointed at, if any (ADR-0116). One status probe; "
+        "searching and downloading are MCP tools, not endpoints."},
 
     # Curation — deciding what the collection should become.
     {"name": "pending-review", "description":
@@ -442,7 +445,8 @@ OPENAPI_TAG_GROUPS = [
     {"name": "Playback", "tags": [
         "playback-session", "radio", "offline", "ambient", "commands", "plays", "outputs",
         "videos", "visualizers"]},
-    {"name": "Discovery", "tags": ["discover", "lastfm", "new-releases", "external-albums"]},
+    {"name": "Discovery", "tags": [
+        "discover", "lastfm", "new-releases", "external-albums", "soulseek"]},
     {"name": "Curation", "tags": [
         "ingest", "metadata", "identification", "duplicates",
         "pending-review", "proposed-changes", "organizer", "artists"]},

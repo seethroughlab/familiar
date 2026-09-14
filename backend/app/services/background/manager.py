@@ -9,6 +9,7 @@ from app.services.redis_client import ResilientRedisClient, get_resilient_redis
 from .analysis import AnalysisMixin
 from .backup import BackupMixin
 from .executors import ExecutorMixin
+from .soulseek import SOULSEEK_POLL_MINUTES, SoulseekMixin
 from .sync import SyncMixin
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ LISTENBRAINZ_INTERVAL_HOURS = 3
 RECORDING_BACKFILL_INTERVAL_MINUTES = 10
 
 
-class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
+class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin, SoulseekMixin):
     """Manages background tasks in the API process.
 
     Key features:
@@ -190,6 +191,19 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
                 max_instances=1,
                 coalesce=True,
                 misfire_grace_time=300,
+                replace_existing=True,
+            )
+
+            # A settled Soulseek download triggers a sync (ADR-0117 point 3). Registered whether
+            # or not slskd is configured: the job returns at once when it is not, and that is
+            # cheaper than re-registering from the settings route every time the URL changes.
+            self._scheduler.add_job(
+                self._soulseek_poll,
+                IntervalTrigger(minutes=SOULSEEK_POLL_MINUTES),
+                id="soulseek_poll",
+                max_instances=1,
+                coalesce=True,
+                misfire_grace_time=60,
                 replace_existing=True,
             )
 

@@ -160,3 +160,62 @@ def test_partial_update(
 
     assert data["acoustid_api_key"] is not None  # Still set
     assert data["community_cache_enabled"] is False  # Updated
+
+
+class TestSoulseekSettings:
+    """ADR-0116: the slskd address is a setting like any outbound integration, key masked."""
+
+    def test_unconfigured_by_default(self, client: TestClient, mock_settings_service) -> None:
+        data = client.get("/api/v1/settings").json()
+        assert data["soulseek_configured"] is False
+        assert data["soulseek_url"] is None
+
+    def test_url_and_key_round_trip_with_the_key_masked(
+        self, client: TestClient, mock_settings_service: AppSettingsService
+    ) -> None:
+        response = client.put(
+            "/api/v1/settings",
+            json={"soulseek_url": "http://slskd:5030", "soulseek_api_key": "abcdefghijklmnop"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["soulseek_configured"] is True
+        assert data["soulseek_url"] == "http://slskd:5030"
+        assert data["soulseek_api_key"] == "abcd" + "•" * 8
+        assert mock_settings_service.get().soulseek_api_key == "abcdefghijklmnop"
+
+    def test_an_empty_url_clears_it(
+        self, client: TestClient, mock_settings_service: AppSettingsService
+    ) -> None:
+        mock_settings_service.update(soulseek_url="http://slskd:5030")
+        data = client.put("/api/v1/settings", json={"soulseek_url": ""}).json()
+        assert data["soulseek_configured"] is False
+
+    def test_status_reports_unconfigured_without_probing(
+        self, client: TestClient, mock_settings_service
+    ) -> None:
+        with patch("app.api.routes.soulseek.get_app_settings_service", return_value=mock_settings_service):
+            data = client.get("/api/v1/soulseek/status").json()
+        assert data == {
+            "configured": False, "url": None, "reachable": False, "logged_in": False,
+            "username": None, "version": None, "shared_files": None, "error": None,
+        }
+
+    def test_status_probes_the_configured_address(
+        self, client: TestClient, mock_settings_service: AppSettingsService
+    ) -> None:
+        from app.services.soulseek import SoulseekStatus
+
+        mock_settings_service.update(soulseek_url="http://slskd:5030", soulseek_api_key="k")
+        with (
+            patch("app.api.routes.soulseek.get_app_settings_service", return_value=mock_settings_service),
+            patch(
+                "app.api.routes.soulseek.SoulseekService.status",
+                return_value=SoulseekStatus(reachable=True, logged_in=True, username="otterbad", version="0.23.1", shared_files=25575),
+            ),
+        ):
+            data = client.get("/api/v1/soulseek/status").json()
+        assert data["configured"] is True
+        assert data["url"] == "http://slskd:5030"
+        assert data["logged_in"] is True
+        assert data["username"] == "otterbad"

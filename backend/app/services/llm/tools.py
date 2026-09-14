@@ -790,6 +790,117 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
     }
 ]
 
+MUSIC_TOOLS.append(
+    {
+        "name": "start_library_sync",
+        "description": (
+            "Ask Familiar to scan the library for new, changed or removed files now, instead of "
+            "waiting for the two-hourly sync. Runs in the background; new files enter Pending Review. "
+            "Use it after files have been added to the library by hand — for example after a "
+            "finished Soulseek download has been moved in. Nothing on disk is touched."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    }
+)
+
+#: Acquisition through a slskd instance the operator runs (ADR-0116). Kept in their own list and
+#: appended to MUSIC_TOOLS so `ToolExecutor` dispatches them like any other tool, while
+#: `app.mcp.server.exposed_tools` can withhold the whole set when no slskd is configured — a host
+#: that cannot see the tools cannot be told "not configured" after the listener has asked.
+SOULSEEK_TOOLS: list[dict[str, Any]] = [
+    {
+        "name": "search_soulseek",
+        "description": (
+            "Search the Soulseek network (via the operator's slskd client) for music that is not in "
+            "the library. Returns shared FOLDERS ranked best-first — lossless before lossy, sharers "
+            "with a free upload slot before those with a queue — each listing the files that matched. "
+            "Use it for a specific album or track ('artist album' works best); a folder returned here "
+            "is what download_from_soulseek takes. Takes 15-25 seconds: the network answers slowly and "
+            "results are only readable once the search completes. Never call it for music the library "
+            "already has — check with search_library first."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "What to search for — artist and album, or artist and track title",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max folders to return (default 8)",
+                    "default": 8,
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "download_from_soulseek",
+        "description": (
+            "Queue every audio file in one sharer's folder for download through slskd. Pass the "
+            "username and directory exactly as search_soulseek returned them. The folder's full "
+            "listing is fetched first, so a search that matched one track still downloads the whole "
+            "album. Familiar never moves files. The result's `handoff` says what happens next: if an "
+            "inbox is mounted the tracks reach Pending Review on their own; otherwise the folder "
+            "must be moved into the library — by the listener, or by you if you have shell access "
+            "— and then start_library_sync called. Relay that. "
+            "Confirm with the listener before calling this: it starts a transfer from a stranger's "
+            "machine on their behalf."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "username": {"type": "string", "description": "Sharer's Soulseek username"},
+                "directory": {
+                    "type": "string",
+                    "description": "Remote directory path, verbatim from search_soulseek",
+                },
+            },
+            "required": ["username", "directory"],
+        },
+    },
+    {
+        "name": "get_soulseek_transfers",
+        "description": (
+            "What slskd is downloading right now and what it has finished, one line per folder with "
+            "completed/failed/in-progress/queued counts, a percentage, whether the folder has settled "
+            "and whether its library sync has been triggered, plus where the folder is as slskd sees it "
+            "and whether an inbox is mounted (if not, a settled folder needs moving into the library "
+            "and then start_library_sync). Also reports whether slskd is reachable and logged in — "
+            "call it first if a search returns nothing, to tell 'no one has it' from 'the client is "
+            "down'."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "find_missing_on_soulseek",
+        "description": (
+            "The one-call version of 'you don't have X — go get it'. Checks the library for the "
+            "artist (and album, if given) first; if it is already there, says so and searches nothing. "
+            "Otherwise searches Soulseek for it and returns the best folders. Use this after "
+            "recommending an artist the library lacks, or when the listener names an album they want. "
+            "Does not download — hand the best folder to download_from_soulseek once the listener "
+            "agrees."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "artist": {"type": "string", "description": "Artist name"},
+                "album": {
+                    "type": "string",
+                    "description": "Album title. Omit to check for the artist at all and search by name.",
+                },
+            },
+            "required": ["artist"],
+        },
+    },
+]
+
+SOULSEEK_TOOL_NAMES: frozenset[str] = frozenset(t["name"] for t in SOULSEEK_TOOLS)
+
+MUSIC_TOOLS.extend(SOULSEEK_TOOLS)
+
 SYSTEM_PROMPT = """You are Familiar, a music assistant for a personal music library.
 
 ## CRITICAL: SEARCH ONCE, THEN QUEUE

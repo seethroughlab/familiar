@@ -39,6 +39,15 @@ INSTRUCTIONS = (
 # Appended to the tool's own MUSIC_TOOLS description. Keep each one about *this* tool: MCP gives no
 # other channel, and a host may show only the tool it is about to call.
 GUIDANCE: dict[str, str] = {
+    "get_discovery_recommendations": (
+        "\n\nIf find_missing_on_soulseek is among your tools, this server can acquire what it "
+        "recommends: offer it for artists marked in_library=false, and only download once the "
+        "listener says yes."
+    ),
+    "get_similar_artists_in_library": (
+        "\n\nIf find_missing_on_soulseek is among your tools, the artists this reports as absent "
+        "can be fetched — offer, don't assume."
+    ),
     "filter_tracks": (
         "\n\nCALIBRATE BEFORE YOU THRESHOLD. Do not guess numeric bounds. Call "
         "get_feature_distribution for a feature first and pick bounds from this library's actual "

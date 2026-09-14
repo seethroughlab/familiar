@@ -94,7 +94,9 @@ services:
         tag: "familiar-api"
     volumes:
       - ${MUSIC_LIBRARY_PATH:-/data/music}:/music:ro  # Read-only: Familiar never writes to the library
-      - ${IMPORTS_INCOMING_PATH:-/data/downloads}:/imports-incoming:ro  # External files available for local-path import
+      # An inbox for downloads (ADR-0117) is opt-in: docker-compose.inbox.yml. Not here with a
+      # default, because a default path would mount an empty /music/Inbox on every installation
+      # and the Soulseek tools would then report "inbox mounted, nothing to move" — wrongly.
       - app_data:/app/data  # Persists settings.json
       - art_data:/data/art
       - videos_data:/data/videos
@@ -148,6 +150,10 @@ services:
       - LASTFM_API_KEY=${LASTFM_API_KEY:-}
       - LASTFM_API_SECRET=${LASTFM_API_SECRET:-}
       - ACOUSTID_API_KEY=${ACOUSTID_API_KEY:-}
+      # Soulseek via slskd (ADR-0116). Settings UI wins over these; leave unset to have no
+      # Soulseek tools at all. The URL must be reachable from inside this container.
+      - SOULSEEK_URL=${SOULSEEK_URL:-}
+      - SOULSEEK_API_KEY=${SOULSEEK_API_KEY:-}
       - TURN_SERVER_URL=${TURN_SERVER_URL:-}
       - TURN_SERVER_USERNAME=${TURN_SERVER_USERNAME:-}
       - TURN_SERVER_CREDENTIAL=${TURN_SERVER_CREDENTIAL:-}

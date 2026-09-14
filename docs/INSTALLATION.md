@@ -60,6 +60,16 @@ On macOS you can also double-click **Update Familiar.command** in the `docker` f
    - `MUSIC_LIBRARY_PATH` - path to your music library on the host
    - `FRONTEND_URL` - your server's URL (e.g., `http://myserver:4400`)
 
+   Optional, if you run [slskd](https://github.com/slskd/slskd) (a Soulseek client):
+   - `SOULSEEK_INBOX_PATH` - slskd's completed-downloads folder, used with the inbox override
+     (`-f docker-compose.inbox.yml`). It is mounted read-only at `/music/Inbox`, so anything that
+     lands there shows up in **Pending Review** within a few minutes; Familiar never moves,
+     renames or deletes the files. Without the override, finished downloads are yours to move into
+     the library, after which the `start_library_sync` tool (or a sync from Settings) picks them up.
+   - `SOULSEEK_URL` / `SOULSEEK_API_KEY` - lets your MCP host (Claude Desktop, Claude Code) search
+     Soulseek and queue downloads through slskd. Also settable under **Server → Integrations**. The
+     URL must be reachable from inside the container — not `localhost`.
+
 3. **Start the services:**
    ```bash
    docker compose -f docker-compose.prod.yml up -d

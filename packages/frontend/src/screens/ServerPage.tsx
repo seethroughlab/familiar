@@ -17,6 +17,7 @@ import { ApiKeyStatus } from '../panels/server/ApiKeyStatus';
 import { ServerTokenSettings } from '../panels/server/ServerTokenSettings';
 import { ProfileSettings } from '../panels/server/ProfileSettings';
 import { LastfmSettings } from '../panels/server/LastfmSettings';
+import { SoulseekSettings } from '../panels/server/SoulseekSettings';
 import { DebugSettings } from '../panels/server/DebugSettings';
 import { RemoteLogsPanel } from '../panels/server/RemoteLogsPanel';
 import { BackupSettings } from '../panels/server/BackupSettings';
@@ -67,6 +68,7 @@ export function ServerPage() {
 
       <AdminSection title="Integrations">
         <LastfmSettings />
+        <SoulseekSettings />
       </AdminSection>
 
       {showDevTools && (
