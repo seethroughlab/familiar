@@ -23,6 +23,7 @@ vi.mock('../../panels/server/ApiKeyStatus', () => ({ ApiKeyStatus: () => null })
 vi.mock('../../panels/server/ServerTokenSettings', () => ({ ServerTokenSettings: () => null }));
 vi.mock('../../panels/server/ProfileSettings', () => ({ ProfileSettings: () => null }));
 vi.mock('../../panels/server/LastfmSettings', () => ({ LastfmSettings: () => null }));
+vi.mock('../../panels/server/SoulseekSettings', () => ({ SoulseekSettings: () => null }));
 vi.mock('../../panels/server/DebugSettings', () => ({ DebugSettings: () => null }));
 vi.mock('../../panels/server/RemoteLogsPanel', () => ({ RemoteLogsPanel: () => null }));
 vi.mock('../../panels/server/BackgroundJobs', () => ({ BackgroundJobs: () => null }));
