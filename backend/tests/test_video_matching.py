@@ -103,6 +103,22 @@ class TestWhatIsNotTheVideo:
         assert not v.matched
         assert "not called official" in v.reason
 
+    def test_a_bare_audio_upload_on_the_artists_channel_is_refused(self):
+        v = pick([result("M83 - Road Blaster (Audio)", "M83", 250)],
+                 title="Road Blaster", artist="M83", duration=250)
+        assert not v.matched
+        assert "'audio'" in v.reason
+
+    def test_official_in_a_channel_name_needs_the_artist_in_it_too(self):
+        v = pick([result("Holy ghost wait and see (Music)", "MusicStationOfficial", 240)],
+                 title="Wait And See", artist="Holy Ghost!", duration=240)
+        assert not v.matched
+
+    def test_a_performance_clip_is_refused(self):
+        v = pick([result("Cyclical Cyclical situation performance #2 by pictureplane", "PICTUREPLANE", 250)],
+                 title="Cyclical Cyclical", artist="Pictureplane", duration=240)
+        assert not v.matched
+
     def test_music_video_alone_is_not_credible_from_a_stranger(self):
         v = pick([result("Boards of Canada - Left Side Drive (Music Video)", "Xavier LeBlanc", 300)],
                  title="Left Side Drive", artist="Boards of Canada", duration=300)

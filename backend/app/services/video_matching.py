@@ -44,7 +44,8 @@ REJECT_PHRASES: tuple[tuple[str, ...], ...] = tuple(
     tuple(p.split())
     for p in (
         "live", "cover", "covers", "karaoke", "lyric video", "lyrics video", "lyrics", "lyric",
-        "official audio", "audio only", "full album", "reaction", "reacts", "instrumental",
+        "official audio", "audio only", "audio", "full album", "reaction", "reacts", "instrumental",
+        "performance", "session", "sessions", "rehearsal", "soundcheck",
         "acoustic version", "acoustic", "slowed", "sped up", "nightcore", "8d", "remix", "mashup",
         "parody", "tutorial", "lesson", "visualizer", "visualiser", "teaser", "trailer",
         "behind the scenes", "making of", "interview", "extended mix", "extended version",
@@ -164,9 +165,13 @@ def _looks_official(result: VideoSearchResult) -> bool:
     return any(_contains_phrase(words, p) for p in OFFICIAL_PHRASES)
 
 
-def _official_channel(result: VideoSearchResult) -> bool:
+def _official_channel(artist: str, result: VideoSearchResult) -> bool:
+    """VEVO, or "official" *with the artist's name* — `MusicStationOfficial` is a re-upload
+    channel that the word alone let through."""
     channel = normalise(result.channel).replace(" ", "")
-    return "vevo" in channel or "official" in channel
+    if "vevo" in channel:
+        return True
+    return "official" in channel and _artist_channel(artist, result)
 
 
 def _artist_channel(artist: str, result: VideoSearchResult) -> bool:
@@ -183,7 +188,7 @@ def is_art_track(result: VideoSearchResult) -> bool:
 
 
 def _credible(artist: str, result: VideoSearchResult) -> bool:
-    return _looks_official(result) or _artist_channel(artist, result) or _official_channel(result)
+    return _looks_official(result) or _artist_channel(artist, result) or _official_channel(artist, result)
 
 
 @dataclass(frozen=True)
@@ -246,7 +251,7 @@ def choose(
                 fail(f"no track duration and not called an official video: {result.title!r}")
                 continue
             off = 0.0
-        rank = (int(_looks_official(result)), int(_official_channel(result)), -off)
+        rank = (int(_looks_official(result)), int(_official_channel(artist, result)), -off)
         note = f"{'official video' if rank[0] else 'named'}, {off:.0f}s off, {result.channel}"
         passing.append((rank, result, note))
 
