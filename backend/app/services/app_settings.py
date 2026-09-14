@@ -18,6 +18,7 @@ Settings by Source
 
 **Admin UI with env fallback**:
 - lastfm_api_key, lastfm_api_secret, acoustid_api_key
+- soulseek_url, soulseek_api_key
 - s3_backup_access_key_id, s3_backup_secret_access_key
 - s3_backup_bucket, s3_backup_region, s3_backup_prefix
 
@@ -50,6 +51,13 @@ class AppSettings(BaseModel):
 
     # Audio fingerprinting
     acoustid_api_key: str | None = None  # Get free key at https://acoustid.org/new-application
+
+    # Soulseek, through a slskd instance the operator runs (ADR-0116). Unset means the feature
+    # does not exist on this server: the MCP tools are not listed, not merely failing. Familiar
+    # never speaks the Soulseek protocol itself and holds no Soulseek credentials — only the
+    # slskd API key, which is an outbound credential like the ones above.
+    soulseek_url: str | None = None  # e.g. http://slskd:5030 or http://192.168.1.50:5030
+    soulseek_api_key: str | None = None
 
     # Analysis settings
     clap_embeddings_enabled: bool | None = None  # None = auto-detect based on RAM (6GB+ required)
@@ -254,6 +262,7 @@ class AppSettingsService:
         secret_keys = {
             "lastfm_api_key", "lastfm_api_secret",
             "acoustid_api_key",
+            "soulseek_api_key",
             "s3_backup_access_key_id", "s3_backup_secret_access_key",
         }
 
@@ -285,6 +294,10 @@ class AppSettingsService:
     def has_acoustid_key(self) -> bool:
         """Check if AcoustID API key is configured (from settings.json or env vars)."""
         return bool(self.get_effective("acoustid_api_key"))
+
+    def has_soulseek_configured(self) -> bool:
+        """Is a slskd URL set (from settings.json or env)? The key is optional — slskd can run without one."""
+        return bool(self.get_effective("soulseek_url"))
 
     def has_s3_credentials(self) -> bool:
         """Check if S3 backup credentials are configured (from settings.json or env vars)."""
@@ -340,6 +353,8 @@ class AppSettingsService:
             "lastfm_api_key",
             "lastfm_api_secret",
             "acoustid_api_key",
+            "soulseek_url",
+            "soulseek_api_key",
             "s3_backup_access_key_id",
             "s3_backup_secret_access_key",
             "s3_backup_bucket",

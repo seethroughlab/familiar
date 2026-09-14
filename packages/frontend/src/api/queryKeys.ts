@@ -106,6 +106,9 @@ export const queryKeys = {
   lastfmStatus: {
     all: ['lastfm-status'] as const,
   },
+  soulseekStatus: {
+    all: ['soulseek-status'] as const,
+  },
   s3Backup: {
     all: ['s3-backup'] as const,
     status: ['s3-backup', 'status'] as const,

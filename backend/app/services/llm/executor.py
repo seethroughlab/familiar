@@ -18,6 +18,7 @@ from .handlers import (
     PlaybackHandlersMixin,
     PlaylistHandlersMixin,
     SearchHandlersMixin,
+    SoulseekHandlersMixin,
 )
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,7 @@ class ToolExecutor(
     DiscoveryHandlersMixin,
     MetadataHandlersMixin,
     PlaylistHandlersMixin,
+    SoulseekHandlersMixin,
 ):
     """Executes tools called by the LLM."""
 
@@ -94,6 +96,13 @@ class ToolExecutor(
             "identify_track": self._identify_track,
             # Analysis tools
             "get_track_analysis": self._get_track_analysis,
+            # Soulseek acquisition (ADR-0116) — hidden from MCP hosts until slskd is configured
+            "search_soulseek": self._search_soulseek,
+            "download_from_soulseek": self._download_from_soulseek,
+            "get_soulseek_transfers": self._get_soulseek_transfers,
+            "find_missing_on_soulseek": self._find_missing_on_soulseek,
+            # ADR-0117 point 7: the step after someone has moved files into the library by hand
+            "start_library_sync": self._start_library_sync,
         }
 
         handler = handlers.get(tool_name)
@@ -102,7 +111,7 @@ class ToolExecutor(
 
         try:
             # Handle methods that take no args vs those that do
-            if tool_name == "get_library_stats":
+            if tool_name in ("get_library_stats", "get_soulseek_transfers", "start_library_sync"):
                 return await handler()  # type: ignore[operator]
             return await handler(**tool_input)  # type: ignore[operator]
         except Exception as e:

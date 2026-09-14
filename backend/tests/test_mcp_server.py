@@ -30,8 +30,10 @@ from app.mcp.server import (
     ProfileNotBound,
     exposed_tools,
     resolve_profile,
+    withheld_tools,
 )
-from app.services.llm.tools import MUSIC_TOOLS
+from app.services.app_settings import AppSettingsService
+from app.services.llm.tools import MUSIC_TOOLS, SOULSEEK_TOOL_NAMES
 
 
 def _ctx(headers: dict[str, str] | None = None) -> SimpleNamespace:
@@ -91,9 +93,13 @@ class TestToolSurface:
         assert MCP_ONLY_TOOLS <= {t.name for t in exposed_tools()}
 
     def test_exposes_everything_else(self):
-        """The surface is MUSIC_TOOLS minus exclusions, plus the MCP-only tool — never a list."""
+        """The surface is MUSIC_TOOLS minus exclusions and withholdings, plus the MCP-only tools.
+
+        Never a list. `withheld_tools()` is the installation-dependent half (ADR-0116 point 2):
+        subtracted here so the rule stays "everything with a handler that this server can answer".
+        """
         names = {t.name for t in exposed_tools()}
-        expected = ({t["name"] for t in MUSIC_TOOLS} - EXCLUDED) | MCP_ONLY_TOOLS
+        expected = ({t["name"] for t in MUSIC_TOOLS} - EXCLUDED - withheld_tools()) | MCP_ONLY_TOOLS
         assert names == expected
 
     def test_schemas_come_from_music_tools_unchanged(self):
@@ -132,6 +138,60 @@ class TestToolSurface:
         """ADR-0043 point 3. Measured: without it a model filters energy>=0.6 and gets 92.5%."""
         tool = next(t for t in exposed_tools() if t.name == "filter_tracks")
         assert "get_feature_distribution" in tool.description
+
+
+class TestSoulseekIsWithheldUntilConfigured:
+    """ADR-0116 point 2: on a server with no slskd, the acquisition tools are absent, not failing.
+
+    The same rule ADR-0022 point 3 set for chat. A host that lists a tool and then gets "not
+    configured" after the listener has asked is the "Listening Ideas" defect (#76) again.
+    """
+
+    @pytest.fixture
+    def settings(self, tmp_path, monkeypatch):
+        svc = AppSettingsService(settings_path=tmp_path / "settings.json")
+        monkeypatch.setattr("app.mcp.server.get_app_settings_service", lambda: svc)
+        # The env fallback must not leak a developer's own slskd into the test.
+        monkeypatch.setattr("app.config.settings.soulseek_url", None)
+        return svc
+
+    def test_unconfigured_server_lists_none_of_them(self, settings):
+        names = {t.name for t in exposed_tools()}
+        assert not (names & SOULSEEK_TOOL_NAMES)
+        assert withheld_tools() == SOULSEEK_TOOL_NAMES
+
+    def test_configured_server_lists_all_of_them(self, settings):
+        settings.update(soulseek_url="http://slskd:5030")
+        names = {t.name for t in exposed_tools()}
+        assert SOULSEEK_TOOL_NAMES <= names
+        assert withheld_tools() == frozenset()
+
+    def test_the_url_alone_is_enough(self, settings):
+        """slskd can run with no API key at all; requiring one would hide a working setup."""
+        settings.update(soulseek_url="http://slskd:5030", soulseek_api_key=None)
+        assert withheld_tools() == frozenset()
+
+    def test_every_soulseek_tool_has_a_handler(self):
+        """Withheld is not the same as unimplemented — configure it and every one must dispatch."""
+        from app.services.llm.executor import ToolExecutor
+
+        for name in SOULSEEK_TOOL_NAMES:
+            assert hasattr(ToolExecutor, f"_{name}"), name
+
+    @pytest.mark.asyncio
+    async def test_a_stale_host_is_told_why(self, settings):
+        """A listing from before slskd was unconfigured gets the reason, not 'unknown tool'."""
+        import mcp.types as types
+
+        from app.mcp.server import on_call_tool
+
+        result = await on_call_tool(
+            _ctx({}), types.CallToolRequestParams(name="search_soulseek", arguments={"query": "x"})
+        )
+        assert result.is_error
+        text = result.content[0].text
+        assert "no Soulseek client is configured" in text
+        assert "Unknown tool" not in text
 
 
 class TestSpaCatchAll:
