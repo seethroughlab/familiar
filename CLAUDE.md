@@ -239,6 +239,18 @@ its own shell to act on; the move never goes through Familiar. The dead `/import
 mount and `GET /import/scan-path` are gone. If you find yourself adding a `shutil.move` for
 downloads, read 0117's Alternatives first.
 
+**`ADR-0118` makes a phone download AAC when the source is lossless** (proposed 2026-09-14, not
+yet built). `GET /tracks/{id}/stream?format=aac` encodes a lossless file once — 256 kbps, ffmpeg's
+native `aac` (the image has no `libfdk_aac`), cached beside the AIFF remux in `data/transcode_cache`
+— and serves a **lossy source untouched**, with its own MIME type: the parameter means "no larger
+than AAC", never "re-encode". Playback never sends it; only `familiar-apple`'s `DownloadManager`
+does, from a device-local preference (ADR-0029) that defaults to AAC on the phone and to originals
+on the Mac. A query parameter rather than a header, the inverse of ADR-0112's reasoning: the bytes
+differ, so the URL must. One number decides the risk — **12.4 s per 4:32 FLAC on the NAS, one
+core** — so encodes run under their own semaphore of four, separate from the file-response
+ceiling, and the first sync after it ships is the thing to watch. Plan in
+`familiar-apple/PLAN-lossy-downloads.md`.
+
 ## Key Directories
 
 ```
