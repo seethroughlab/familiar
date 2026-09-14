@@ -6,7 +6,8 @@ survived since Phase 5: a stream that advertised `Accept-Ranges` and ignored `Ra
 nothing read or wrote, and no way to ask which tracks have a video.
 
 The video file lives at `settings.videos_path / f"{track_id}.mp4"`, because that filename *is* the
-persistence model the service uses to answer "is there a video".
+persistence model the service uses to answer "is there a video". The poster frame beside it,
+`{track_id}.jpg`, answers "is there a poster" the same way.
 """
 
 import pytest
@@ -21,17 +22,21 @@ from tests.factories import insert_test_track
 # Deterministic, and large enough that ranges are meaningful.
 CONTENT = bytes(range(256)) * 64  # 16 KiB
 CONTENT_LEN = len(CONTENT)
+# Not a real JPEG; nothing here decodes it. Distinct from CONTENT so a test cannot pass by serving
+# the video where the poster should be.
+POSTER = b"\xff\xd8" + bytes(range(255, -1, -1)) * 4
 
 
-@pytest.fixture()
-async def track_with_video(async_db):
-    """A track with a real .mp4 on disk where the service looks for it, and its row."""
-    track = await insert_test_track(async_db, title="Watchable", artist="Someone")
+async def _insert_video(async_db, *, title, poster):
+    track = await insert_test_track(async_db, title=title, artist="Someone")
     await async_db.flush()
 
     settings.videos_path.mkdir(parents=True, exist_ok=True)
     path = settings.videos_path / f"{track.id}.mp4"
     path.write_bytes(CONTENT)
+    poster_path = settings.videos_path / f"{track.id}.jpg"
+    if poster:
+        poster_path.write_bytes(POSTER)
 
     async_db.add(
         TrackVideo(
@@ -46,9 +51,25 @@ async def track_with_video(async_db):
         )
     )
     await async_db.commit()
+    return track, path, poster_path
 
+
+@pytest.fixture()
+async def track_with_video(async_db):
+    """A track with a real .mp4 on disk where the service looks for it, its poster, and its row."""
+    track, path, poster_path = await _insert_video(async_db, title="Watchable", poster=True)
     yield track
     path.unlink(missing_ok=True)
+    poster_path.unlink(missing_ok=True)
+
+
+@pytest.fixture()
+async def track_without_poster(async_db):
+    """A video downloaded before posters were saved: the mp4 and the row, and nothing beside it."""
+    track, path, poster_path = await _insert_video(async_db, title="Unposted", poster=False)
+    yield track
+    path.unlink(missing_ok=True)
+    poster_path.unlink(missing_ok=True)
 
 
 class TestRanges:
@@ -162,6 +183,67 @@ class TestListEndpoint:
         assert client.get("/api/v1/videos", params={"page": 0}).status_code == 422
 
 
+class TestPoster:
+    """The poster frame is fetched with the video and served beside it.
+
+    Answered from disk, like the video itself: a jpg beside the mp4 is the whole persistence model,
+    which is what lets the list say `has_poster` without a column and lets a poster leave with its
+    video without a second delete.
+    """
+
+    @pytest.mark.asyncio
+    async def test_serves_the_jpeg_with_a_long_cache_life(self, track_with_video, client):
+        r = client.get(f"/api/v1/videos/{track_with_video.id}/poster")
+        assert r.status_code == 200
+        assert r.headers["content-type"].startswith("image/jpeg")
+        assert "max-age=31536000" in r.headers["cache-control"]
+        assert r.content == POSTER
+
+    @pytest.mark.asyncio
+    async def test_404_when_there_is_no_poster(self, track_without_poster, client):
+        r = client.get(f"/api/v1/videos/{track_without_poster.id}/poster")
+        assert r.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_the_list_says_whether_a_poster_exists(
+        self, track_with_video, track_without_poster, client
+    ):
+        """So a grid asks only for posters that exist, rather than finding out with a 404 apiece."""
+        items = client.get("/api/v1/videos").json()["items"]
+        by_id = {i["id"]: i for i in items}
+        assert by_id[str(track_with_video.id)]["has_poster"] is True
+        assert by_id[str(track_without_poster.id)]["has_poster"] is False
+
+    @pytest.mark.asyncio
+    async def test_delete_removes_the_poster_too(self, track_with_video, client):
+        track_id = str(track_with_video.id)
+        assert client.delete(f"/api/v1/videos/{track_id}").status_code == 200
+        assert not (settings.videos_path / f"{track_id}.jpg").exists()
+
+
+async def _no_record(*args, **kwargs):
+    """Stand-in for `_record_download`: the row is point 1's concern, tested above."""
+
+
+def _fake_yt_dlp(monkeypatch, videos_dir, *, writes: list[str], seen: list[list[str]]):
+    """A yt-dlp that exits 0 after writing the named temp files, recording the command it got."""
+
+    class FakeProcess:
+        returncode = 0
+        stdout = None
+
+        async def wait(self):
+            for name in writes:
+                (videos_dir / name).write_bytes(POSTER if name.endswith(".jpg") else CONTENT)
+            return 0
+
+    async def fake_exec(*args, **kwargs):
+        seen.append(list(args))
+        return FakeProcess()
+
+    monkeypatch.setattr("asyncio.create_subprocess_exec", fake_exec)
+
+
 class TestDownloadWritesItsRow:
     """ADR-0086 point 1. yt-dlp is a subprocess, so the binary is never needed here."""
 
@@ -175,19 +257,8 @@ class TestDownloadWritesItsRow:
         output_path = service.videos_dir / f"{track_id}.mp4"
         temp_path = service.videos_dir / f"{track_id}.temp.mp4"
 
-        class FakeProcess:
-            returncode = 0
-            stdout = None
-
-            async def wait(self):
-                # yt-dlp's side of the contract: the temp file exists when it exits 0.
-                temp_path.write_bytes(CONTENT)
-                return 0
-
-        async def fake_exec(*args, **kwargs):
-            return FakeProcess()
-
-        monkeypatch.setattr("asyncio.create_subprocess_exec", fake_exec)
+        # yt-dlp's side of the contract: the temp file exists when it exits 0.
+        _fake_yt_dlp(monkeypatch, service.videos_dir, writes=[f"{track_id}.temp.mp4"], seen=[])
         # `_record_download` opens its own session, because in production it runs under
         # `BackgroundTasks` after the request's session is gone. Point it at this test's engine —
         # the app's global engine binds its pool to the session-scoped client's event loop.
@@ -214,6 +285,61 @@ class TestDownloadWritesItsRow:
             output_path.unlink(missing_ok=True)
             temp_path.unlink(missing_ok=True)
             await engine.dispose()
+
+    @pytest.mark.asyncio
+    async def test_asks_for_a_jpg_poster_under_the_temp_name(self, monkeypatch, tmp_path):
+        """The flags, and the extension-less thumbnail template that makes the output name fixed.
+
+        `-o {id}.temp.mp4` alone names the thumbnail `{id}.temp.jpg` for a merged mp4 but
+        `{id}.temp.mp4.jpg` when the format fallback lands on webm — yt-dlp only replaces an
+        extension that equals the video's. `thumbnail:{id}.temp` is what keeps it predictable.
+        """
+        from app.services.video import VideoService
+
+        service = VideoService(videos_dir=tmp_path)
+        seen: list[list[str]] = []
+        _fake_yt_dlp(monkeypatch, tmp_path, writes=["t1.temp.mp4", "t1.temp.jpg"], seen=seen)
+        monkeypatch.setattr(service, "_record_download", _no_record)
+
+        await service.download("t1", "https://www.youtube.com/watch?v=abc12345678")
+
+        (cmd,) = seen
+        assert "--write-thumbnail" in cmd
+        assert cmd[cmd.index("--convert-thumbnails") + 1] == "jpg"
+        assert f"thumbnail:{tmp_path / 't1.temp'}" in cmd
+
+    @pytest.mark.asyncio
+    async def test_the_poster_is_kept_beside_the_video(self, monkeypatch, tmp_path):
+        from app.services.video import VideoService
+
+        service = VideoService(videos_dir=tmp_path)
+        _fake_yt_dlp(monkeypatch, tmp_path, writes=["t1.temp.mp4", "t1.temp.jpg"], seen=[])
+        monkeypatch.setattr(service, "_record_download", _no_record)
+
+        status = await service.download("t1", "https://www.youtube.com/watch?v=abc12345678")
+
+        assert status.status == "complete"
+        assert service.has_poster("t1")
+        assert (tmp_path / "t1.jpg").read_bytes() == POSTER
+        assert list(tmp_path.glob("t1.temp.*")) == []
+
+    @pytest.mark.asyncio
+    async def test_a_missing_poster_never_fails_a_download(self, monkeypatch, tmp_path):
+        """And a poster from an earlier download of this track does not survive to describe it."""
+        from app.services.video import VideoService
+
+        service = VideoService(videos_dir=tmp_path)
+        (tmp_path / "t1.jpg").write_bytes(b"stale")
+        # An unconverted webp is what a failed `--convert-thumbnails` leaves behind.
+        _fake_yt_dlp(monkeypatch, tmp_path, writes=["t1.temp.mp4", "t1.temp.webp"], seen=[])
+        monkeypatch.setattr(service, "_record_download", _no_record)
+
+        status = await service.download("t1", "https://www.youtube.com/watch?v=abc12345678")
+
+        assert status.status == "complete"
+        assert service.has_video("t1")
+        assert not service.has_poster("t1")
+        assert list(tmp_path.glob("t1.temp.*")) == []
 
     @pytest.mark.asyncio
     async def test_status_survives_a_lost_progress_cache(self, async_db, track_with_video):
