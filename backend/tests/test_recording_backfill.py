@@ -366,3 +366,70 @@ def test_the_job_is_registered():
 
     src = inspect.getsource(manager)
     assert 'id="recording_backfill"' in src and "max_instances=1" in src
+
+
+# --- the hang of 2026-09-14 ------------------------------------------------------
+
+
+def test_the_acoustid_request_carries_a_timeout(monkeypatch):
+    """pyacoustid's lookup defaults to timeout=None. One unanswered request held a
+    worker thread for 45 minutes with both health rows reading `working`."""
+    import sys
+    import types
+
+    seen = {}
+    fake = types.ModuleType("acoustid")
+
+    def lookup(apikey, fp, duration, meta=None, timeout=None):
+        seen["timeout"] = timeout
+        return {"results": []}
+
+    fake.lookup = lookup
+    monkeypatch.setitem(sys.modules, "acoustid", fake)
+    rb._lookup("k", "fp", 100)
+    assert seen["timeout"] == rb.ACOUSTID_TIMEOUT_SECONDS
+    assert 0 < rb.ACOUSTID_TIMEOUT_SECONDS <= 60
+
+
+def test_a_tick_that_overruns_is_recorded_against_the_active_phase(world, monkeypatch):
+    async def slow_resolve(**kw):
+        rb._active_phase = rb.SOURCE_ACOUSTID
+        await asyncio.sleep(10)
+
+    monkeypatch.setattr(rb, "run_resolve_phase", slow_resolve)
+
+    async def real_sleep(s):
+        await asyncio.get_event_loop().run_in_executor(None, __import__("time").sleep, min(s, 0.2))
+
+    monkeypatch.setattr(rb.asyncio, "sleep", real_sleep)
+    out = asyncio.run(rb.run_recording_backfill(deadline_seconds=0.05))
+    assert out["status"] == "overran" and out["phase"] == rb.SOURCE_ACOUSTID
+    assert world.recorder.failures == [(rb.SOURCE_ACOUSTID, "timeout")]
+
+
+def test_a_phase_stops_taking_tracks_past_its_deadline(world, monkeypatch):
+    world.rows = [(track(title=str(i)), analysis()) for i in range(5)]
+    world.lookup = lambda k, fp, d: single()
+    # The clock jumps past the deadline after the third read: `started`, one
+    # in-loop check, then every later check sees an hour gone.
+    reads = {"n": 0}
+
+    def clock():
+        reads["n"] += 1
+        return 0.0 if reads["n"] <= 2 else 3600.0
+
+    monkeypatch.setattr(rb.time, "monotonic", clock)
+    out = asyncio.run(rb.run_resolve_phase())
+    assert out["status"] == "deadline"
+    assert out["considered"] < 5
+    # What it did resolve still counts as success — the deadline is not a fault.
+    assert world.recorder.successes == [(rb.SOURCE_ACOUSTID, out["resolved"])]
+
+
+def test_the_scheduler_bounds_the_tick():
+    import inspect
+
+    from app.services.background import sync
+
+    src = inspect.getsource(sync.SyncMixin._recording_backfill)
+    assert "deadline_seconds=" in src

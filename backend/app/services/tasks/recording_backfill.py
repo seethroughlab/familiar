@@ -52,6 +52,22 @@ RECHECK_DAYS = 180
 #: backs off, rather than burning the rest of a batch against a wall.
 UPSTREAM_FAILURE_LIMIT = 3
 
+#: pyacoustid's `lookup` defaults to **no timeout**. On 2026-09-14 at 12:05 UTC one
+#: request never answered, the worker thread held it for 45 minutes, and every
+#: tick after was skipped by `max_instances=1` — with both health rows reading
+#: `working`, because a hang is not a failure. A request that takes longer than
+#: this is a failure now.
+ACOUSTID_TIMEOUT_SECONDS = 30
+
+#: A phase stops taking new tracks once it has run this long, so a tick always
+#: fits inside its interval whatever the upstreams do. Resolve is sized to about
+#: a minute and claim to six; together they must finish under ten.
+PHASE_DEADLINE_SECONDS = 240
+
+#: Which phase a tick is in, so a tick that overruns can be recorded against the
+#: upstream that was actually being waited on.
+_active_phase: str | None = None
+
 
 def _now_iso() -> str:
     return utcnow().replace(tzinfo=None).isoformat(timespec="seconds")
@@ -128,7 +144,11 @@ def _lookup(api_key: str, fingerprint: str, duration: int) -> dict[str, Any]:
     import acoustid
 
     return acoustid.lookup(
-        api_key, fingerprint, duration, meta="recordings releasegroups sources"
+        api_key,
+        fingerprint,
+        duration,
+        meta="recordings releasegroups sources",
+        timeout=ACOUSTID_TIMEOUT_SECONDS,
     )
 
 
@@ -170,6 +190,8 @@ async def run_resolve_phase(
         stats["status"] = "backing_off"
         return stats
 
+    global _active_phase
+    _active_phase = SOURCE_ACOUSTID
     engine, session_maker = create_task_engine_session()
     started = time.monotonic()
     upstream_failures = 0
@@ -177,6 +199,9 @@ async def run_resolve_phase(
         async with session_maker() as db:
             rows = await _resolve_candidates(db, limit)
             for track, analysis in rows:
+                if time.monotonic() - started > PHASE_DEADLINE_SECONDS:
+                    stats["status"] = "deadline"
+                    break
                 stats["considered"] += 1
                 fingerprint = CommunityCacheService.canonical_fingerprint(analysis.acoustid).decode()
                 try:
@@ -251,8 +276,9 @@ async def run_resolve_phase(
                 await asyncio.sleep(ACOUSTID_PACE_SECONDS)
     finally:
         await engine.dispose()
+        _active_phase = None
 
-    if stats["status"] == "ok" and stats["considered"] and not dry_run:
+    if stats["status"] in ("ok", "deadline") and stats["considered"] and not dry_run:
         await health.record_success(SOURCE_ACOUSTID, items=stats["resolved"])
     stats["seconds"] = round(time.monotonic() - started, 1)
     logger.info("recording_backfill_resolve", extra=stats)
@@ -321,6 +347,8 @@ async def run_claim_phase(*, limit: int = CLAIM_BATCH, dry_run: bool = False) ->
         cache_url=current.community_cache_url,
         client_id=app_settings.ensure_community_cache_client_id() if not dry_run else None,
     )
+    global _active_phase
+    _active_phase = SOURCE_CLAIMS
     engine, session_maker = create_task_engine_session()
     started = time.monotonic()
     upstream_failures = 0
@@ -328,6 +356,9 @@ async def run_claim_phase(*, limit: int = CLAIM_BATCH, dry_run: bool = False) ->
         async with session_maker() as db:
             rows = await _claim_candidates(db, limit)
             for track, analysis in rows:
+                if time.monotonic() - started > PHASE_DEADLINE_SECONDS * 2:
+                    stats["status"] = "deadline"
+                    break
                 stats["considered"] += 1
                 if dry_run:
                     stats["claimed"] += 1
@@ -374,8 +405,9 @@ async def run_claim_phase(*, limit: int = CLAIM_BATCH, dry_run: bool = False) ->
                 await asyncio.sleep(CLAIM_PACE_SECONDS)
     finally:
         await engine.dispose()
+        _active_phase = None
 
-    if stats["status"] == "ok" and stats["considered"] and not dry_run:
+    if stats["status"] in ("ok", "deadline") and stats["considered"] and not dry_run:
         await health.record_success(SOURCE_CLAIMS, items=stats["claimed"])
     stats["seconds"] = round(time.monotonic() - started, 1)
     logger.info("recording_backfill_claim", extra=stats)
@@ -387,8 +419,30 @@ async def run_recording_backfill(
     resolve_limit: int = RESOLVE_BATCH,
     claim_limit: int = CLAIM_BATCH,
     dry_run: bool = False,
+    deadline_seconds: float | None = None,
 ) -> dict[str, Any]:
-    """One tick: resolve, then claim. Each phase decides for itself whether to run."""
-    resolved = await run_resolve_phase(limit=resolve_limit, dry_run=dry_run)
-    claimed = await run_claim_phase(limit=claim_limit, dry_run=dry_run)
-    return {"resolve": resolved, "claim": claimed}
+    """One tick: resolve, then claim. Each phase decides for itself whether to run.
+
+    `deadline_seconds` bounds the whole tick. A tick that overruns is recorded as
+    a `timeout` failure against the phase that was active — the state the health
+    surface could not see on 2026-09-14 — and the next tick is free to run.
+    """
+
+    async def tick():
+        resolved = await run_resolve_phase(limit=resolve_limit, dry_run=dry_run)
+        claimed = await run_claim_phase(limit=claim_limit, dry_run=dry_run)
+        return {"resolve": resolved, "claim": claimed}
+
+    if deadline_seconds is None:
+        return await tick()
+    try:
+        return await asyncio.wait_for(tick(), timeout=deadline_seconds)
+    except TimeoutError:
+        from app.services.discovery import get_recorder
+
+        phase = _active_phase or SOURCE_ACOUSTID
+        logger.warning("recording_backfill_tick_overran", extra={"phase": phase, "seconds": deadline_seconds})
+        await get_recorder().record_failure(
+            phase, kind="timeout", detail=f"tick exceeded {deadline_seconds:.0f}s"
+        )
+        return {"status": "overran", "phase": phase}
