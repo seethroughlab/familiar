@@ -24,6 +24,11 @@ What a match requires, all at once:
 6. **Somebody credible uploaded it** — the title says official video, or the channel is the
    artist's or a VEVO/official one. A bare "Song - Artist" from a stranger's channel is a
    re-upload of the audio with a picture more often than it is the video.
+7. **Every bracket is accounted for.** "(Official Video)", "(HD)", "(2012 Remaster)", "(feat. X)"
+   say things the rules understand. "(Pepsi Smash on Yahoo! Music 2007)", "(Fan Submission)",
+   "(alternate)" say the upload is *something else* — and they came from the artist's own
+   channel, which passed every rule above. A bracket the rules cannot explain is a reason to
+   refuse, because the list of things it might be is the list of things this must not fetch.
 
 Among results that pass, "official video" in the title and an official-looking channel rank first,
 then the closest duration. A result that passes nothing is reported with the first rule it broke,
@@ -161,6 +166,29 @@ def _rejecting_phrase(track_title: str, result: VideoSearchResult) -> str | None
     return None
 
 
+# Words a bracketed segment may contain and still be the video. Anything else in a bracket is
+# the upload telling you what it is instead.
+EXPLAINED_BRACKET_WORDS = frozenset(
+    "official video music hd hq 4k 1080p 720p remaster remastered version edit feat ft featuring "
+    "explicit clean uncensored single album radio directors director cut full length stereo mono "
+    "widescreen restored upscaled upgrade new".split()
+)
+_BRACKET = re.compile(r"[\(\[][^\)\]]*[\)\]]")
+
+
+def _unexplained_bracket(track_title: str, artist: str, result: VideoSearchResult) -> str | None:
+    known = EXPLAINED_BRACKET_WORDS | set(tokens(track_title)) | set(tokens(artist))
+    for segment in _BRACKET.findall(result.title):
+        words = [w for w in tokens(segment) if not w.isdigit()]
+        # A guest credit names somebody the track's own title may not: the bracket is explained
+        # by its first word.
+        if words and words[0] in ("feat", "ft", "featuring", "with"):
+            continue
+        if any(w not in known for w in words):
+            return segment
+    return None
+
+
 def _looks_official(result: VideoSearchResult) -> bool:
     words = tokens(result.title)
     return any(_contains_phrase(words, p) for p in OFFICIAL_PHRASES)
@@ -249,6 +277,10 @@ def choose(
             continue
         if not _credible(artist, result):
             fail(f"not called official and not the artist's channel: {result.title!r} ({result.channel})")
+            continue
+        bracket = _unexplained_bracket(title, artist, result)
+        if bracket:
+            fail(f"bracket says it is something else {bracket!r}: {result.title!r}")
             continue
         if duration_seconds:
             off = abs(result.duration - duration_seconds)

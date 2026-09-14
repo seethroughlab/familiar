@@ -108,6 +108,27 @@ class TestWhatIsNotTheVideo:
                      title="Good to Sea", artist="Pinback", duration=250)
             assert v.matched, channel
 
+    def test_an_unexplained_bracket_is_refused_even_on_the_artists_channel(self):
+        for track, title in (
+            ("Fire It Up", "Modest Mouse - Fire It Up (Pepsi Smash on Yahoo! Music 2007)"),
+            ("Passenger", 'Interpol - "Passenger" (Fan Submission)'),
+            ("Even Spring", "Plaid - Even Spring (alternate)"),
+        ):
+            v = pick([result(title, "Interpol", 221)], title=track, artist="Interpol", duration=221)
+            assert not v.matched, title
+            assert "bracket" in v.reason, v.reason
+
+    def test_explained_brackets_pass(self):
+        for title in (
+            "Interpol - Evil (Official Video)",
+            "Interpol - Evil [HD]",
+            "Interpol - Evil (2012 Remaster)",
+            "Interpol - Evil (feat. Nobody)",
+            "Interpol - Evil (Official Video) [4K Upgrade]",
+        ):
+            v = pick([result(title, "InterpolVEVO", 221)])
+            assert v.matched, title
+
     def test_a_strangers_bare_upload_is_refused(self):
         v = pick([result("Everything Is Wrong - Interpol", "Camilo 8", 221)],
                  title="Everything Is Wrong", artist="Interpol", duration=221)
