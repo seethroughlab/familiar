@@ -30,7 +30,10 @@ Implementation:
   **Point 5's design is
   [ADR-0115](ADR-0115-the-library-names-its-recordings-through-acoustid.md), accepted 2026-09-14**, with
   the resolution rate measured on three 200-track probes before a line was written: 86–91% of the
-  unnamed 23,863 resolve by a four-tier rule with no fuzzy matching.
+  unnamed 23,863 resolve by a four-tier rule with no fuzzy matching. **Point 5 is built and
+  running as of 2026-09-14** — the job, its flag, its health rows, its script — and at 11:17 UTC,
+  8.5 hours in, the library holds 8,642 recording ids against the 1,791 this record was written
+  with, resolving at 89.8%. Coverage after the run is recorded in ADR-0115.
 - **The premise this record was written under has inverted.** It assumed this installation would
   supply the ids. clapback's `ADR-0011` shipped a beets plugin (2026-09-13) whose users tag against
   MusicBrainz as a matter of course; the ids will mostly come from there. What this installation

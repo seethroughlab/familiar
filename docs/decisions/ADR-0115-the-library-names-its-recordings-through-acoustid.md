@@ -21,6 +21,15 @@ Implementation:
   corrected while writing tests: at 0.8, "The Ageing Young Rebel" does *not* match "Ageing Young
   Rebel" (3 of 4 tokens is 0.75) — the rule is what the measurement was taken at, not what a
   person would say, and the test records that.
+- **Deployed and enabled 2026-09-14 02:48 UTC.** The supervised dry run first — 200 tracks, nothing
+  written: **178 named (89%)**, 132 by tier 1, 8 by tier 2, 18 by tier 3, 20 by tier 4; 22 refused;
+  119.8 s. Inside the band the probes predicted, so the flag went on. First tick at 02:55: 137 of
+  150 named in 93 s, then 150 claims in 367 s — 24.5 a minute, zero lost — both health rows
+  `working`.
+- **In progress, measured 2026-09-14 11:17 UTC, 8.5 hours in.** 7,625 of the 23,853 checked: 6,851
+  named, 792 refused, **89.8%** — the probes held at scale. Familiar carries **8,642** recording ids
+  (from 1,791); the corpus reports **8,458 named rows**. 16,228 still to resolve, about eighteen
+  hours. The final number goes here when it exists, not before.
 
 Extends [ADR-0102](ADR-0102-the-community-cache-gains-a-recording-key.md), whose point 5 decided
 that this installation backfills recording ids "in the background, bounded", under
