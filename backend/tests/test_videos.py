@@ -309,6 +309,23 @@ class TestDownloadWritesItsRow:
         assert f"thumbnail:{tmp_path / 't1.temp'}" in cmd
 
     @pytest.mark.asyncio
+    async def test_asks_for_h264_before_anything_else(self, monkeypatch, tmp_path):
+        """`ext=mp4` let VP9 and AV1 through and the Mac played them as audio."""
+        from app.services.video import VideoService
+
+        service = VideoService(videos_dir=tmp_path)
+        seen: list[list[str]] = []
+        _fake_yt_dlp(monkeypatch, tmp_path, writes=["t1.temp.mp4"], seen=seen)
+        monkeypatch.setattr(service, "_record_download", _no_record)
+
+        await service.download("t1", "https://www.youtube.com/watch?v=abc12345678")
+
+        (cmd,) = seen
+        selector = cmd[cmd.index("-f") + 1]
+        assert selector.startswith("bestvideo[height<=1080][vcodec^=avc1]")
+        assert "[ext=mp4]" not in selector.split("/")[0]
+
+    @pytest.mark.asyncio
     async def test_the_poster_is_kept_beside_the_video(self, monkeypatch, tmp_path):
         from app.services.video import VideoService
 
@@ -408,6 +425,34 @@ class TestSearchFailureIsNotAnEmptyResult:
             await VideoService().search("anything")
 
     @pytest.mark.asyncio
+    async def test_one_failed_entry_does_not_lose_the_others(self, monkeypatch):
+        """An age-gated result makes yt-dlp exit 1 after printing the rest."""
+        from app.services.video import VideoService
+
+        good = (b'{"id": "abc", "title": "Interpol - Evil", "channel": null, "uploader": null, '
+                b'"duration": 221, "thumbnail": "t"}\n')
+
+        async def fake_exec(*args, **kwargs):
+            class Proc:
+                returncode = 1
+
+                async def communicate(self):
+                    return good, b"ERROR: [youtube] xyz: Sign in to confirm your age."
+
+                def kill(self):
+                    pass
+
+                async def wait(self):
+                    pass
+
+            return Proc()
+
+        monkeypatch.setattr("asyncio.create_subprocess_exec", fake_exec)
+        results = await VideoService().search("interpol evil")
+        assert [r.video_id for r in results] == ["abc"]
+        assert results[0].channel == ""  # null, not None: every reader treats it as text
+
+    @pytest.mark.asyncio
     async def test_a_genuinely_empty_search_still_returns_empty(self, monkeypatch):
         """The other half: success with no matches is an empty list, not an error."""
         from app.services.video import VideoService
@@ -440,3 +485,85 @@ class TestSearchFailureIsNotAnEmptyResult:
         from app.services.video import VideoService
 
         assert VideoService._base_ytdlp_args() == []
+
+
+class TestRefetchUnplayable:
+    """Videos the Mac cannot decode are downloaded again under the H.264 selector."""
+
+    @pytest.mark.asyncio
+    async def test_a_vp9_file_is_fetched_again_and_an_h264_one_left_alone(
+        self, async_db, track_with_video, track_without_poster, monkeypatch
+    ):
+        from app.cli.refetch_unplayable_videos import refetch
+
+        service = get_video_service()
+        vp9_id = str(track_with_video.id)
+
+        async def fake_codec(path):
+            return "vp9" if path.stem == vp9_id else "h264"
+
+        fetched = []
+
+        async def fake_download(track_id, url):
+            fetched.append((track_id, url))
+            from app.services.video import VideoDownloadStatus
+            return VideoDownloadStatus(track_id=track_id, video_id="x", status="complete", progress=100)
+
+        monkeypatch.setattr(service, "video_codec", fake_codec)
+        monkeypatch.setattr(service, "download", fake_download)
+
+        engine = create_async_engine(settings.database_url, pool_pre_ping=True)
+        try:
+            result = await refetch(
+                service, pause=0, session_maker=async_sessionmaker(engine, expire_on_commit=False)
+            )
+        finally:
+            await engine.dispose()
+
+        assert fetched == [(vp9_id, "https://www.youtube.com/watch?v=dQw4w9WgXcQ")]
+        assert result[0] == 1 and result[1] >= 1
+
+    @pytest.mark.asyncio
+    async def test_dry_run_downloads_nothing(self, track_with_video, monkeypatch):
+        from app.cli.refetch_unplayable_videos import refetch
+
+        service = get_video_service()
+
+        async def fake_codec(path):
+            return "av1"
+
+        async def fake_download(track_id, url):
+            raise AssertionError("dry run must not download")
+
+        monkeypatch.setattr(service, "video_codec", fake_codec)
+        monkeypatch.setattr(service, "download", fake_download)
+
+        engine = create_async_engine(settings.database_url, pool_pre_ping=True)
+        try:
+            result = await refetch(
+                service, dry_run=True, pause=0,
+                session_maker=async_sessionmaker(engine, expire_on_commit=False),
+            )
+        finally:
+            await engine.dispose()
+        assert result[0] >= 1
+
+    @pytest.mark.asyncio
+    async def test_ffprobe_is_asked_for_the_video_codec(self, monkeypatch, tmp_path):
+        from app.services.video import VideoService
+
+        seen = []
+
+        class Proc:
+            async def communicate(self):
+                return b"vp9\n", b""
+
+        async def fake_exec(*args, **kwargs):
+            seen.append(list(args))
+            return Proc()
+
+        monkeypatch.setattr("asyncio.create_subprocess_exec", fake_exec)
+        codec = await VideoService(videos_dir=tmp_path).video_codec(tmp_path / "t.mp4")
+
+        assert codec == "vp9"
+        assert seen[0][0] == "ffprobe" and str(tmp_path / "t.mp4") in seen[0]

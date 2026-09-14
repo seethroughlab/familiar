@@ -18,6 +18,49 @@ from app.db.session import async_session_maker
 from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
+# What the Mac can decode (ADR-0085 point 3: the video is an `AVPlayer` backdrop). VP9 and AV1
+# are not on this list because AVFoundation does not decode them, whatever the container says.
+PLAYABLE_CODECS = frozenset({"h264", "hevc"})
+
+H264_FORMAT = (
+    "bestvideo[height<=1080][vcodec^=avc1]+bestaudio[ext=m4a]"
+    "/bestvideo[height<=1080][vcodec^=avc1]+bestaudio"
+    "/best[height<=1080][vcodec^=avc1]"
+    "/bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]"
+    "/best[height<=1080][ext=mp4]/best"
+)
+
+
+# The frame-difference score below which a file is a still image with audio, not a video.
+#
+# Measured on 2026-09-14 over the library's 242 videos: 52 scored 0.0–0.5 (the album cover for
+# the length of the track, give or take pixel noise), one scored 1.9 (a cover with a subtle loop),
+# and the next lowest were 6.7 and 7.7 — low-motion but real. Real videos run 12 to 100+. The
+# gap is where the threshold goes.
+STILL_IMAGE_THRESHOLD = 3.0
+# How many frames the score samples, and how small each is shrunk. Eight across the timeline is
+# enough to catch a slideshow that changes every minute; 32×32 makes the comparison trivial and
+# indifferent to compression noise.
+MOTION_SAMPLE_FRAMES = 8
+MOTION_SAMPLE_SIDE = 32
+
+
+def max_frame_difference(frames: list[bytes]) -> float | None:
+    """The largest mean absolute pixel difference between any two frames, or None for fewer
+    than two. Greyscale bytes, all the same length. A still image scores ~0 however long it runs;
+    anything that moves scores double digits somewhere in the timeline."""
+    frames = [f for f in frames if f]
+    if len(frames) < 2 or len({len(f) for f in frames}) != 1:
+        return None
+    n = len(frames[0])
+    best = 0.0
+    for a in range(len(frames)):
+        for b in range(a + 1, len(frames)):
+            diff = sum(abs(x - y) for x, y in zip(frames[a], frames[b], strict=True)) / n
+            best = max(best, diff)
+    return best
+
+
 class VideoSearchUnavailable(Exception):
     """YouTube could not be searched — as distinct from having nothing to return.
 
@@ -36,6 +79,9 @@ class VideoSearchResult:
     duration: int  # seconds
     thumbnail_url: str
     url: str
+    # The upload's description. Not shown anywhere; `video_matching` reads its first line, which
+    # is how YouTube's auto-generated audio uploads announce themselves.
+    description: str = ""
 
 
 @dataclass
@@ -117,8 +163,19 @@ class VideoService:
                 raise VideoSearchUnavailable("search timed out after 30s") from None
 
             stderr_text = stderr.decode().strip() if stderr else ""
+            stdout_text = stdout.decode().strip() if stdout else ""
 
-            if process.returncode != 0:
+            if process.returncode != 0 and stdout_text:
+                # One entry failing is not the search failing. yt-dlp carries on past an entry it
+                # cannot extract — an age-gated video says "Sign in to confirm your age" — prints
+                # the rest, and still exits non-zero. Seven of a batch's four hundred searches
+                # came back that way with five good results apiece. The results are the answer;
+                # the exit code is a footnote.
+                logger.warning(
+                    "yt-dlp search had errors (rc=%d) for query %r but returned results: %s",
+                    process.returncode, query, stderr_text[:300]
+                )
+            elif process.returncode != 0:
                 # Raised, not swallowed. Returning `[]` here made a broken search look exactly
                 # like an empty one — the defect ADR-0077 records for `search_bandcamp`, which
                 # "answered 'no results' for every query, for however long it had been". A
@@ -133,7 +190,7 @@ class VideoService:
                 logger.debug("yt-dlp search warnings for %r: %s", query, stderr_text[:500])
 
             results = []
-            for line in stdout.decode().strip().split('\n'):
+            for line in stdout_text.split('\n'):
                 if not line:
                     continue
                 try:
@@ -144,10 +201,15 @@ class VideoService:
                         # Get the first thumbnail from the array
                         thumbnail_url = data['thumbnails'][0].get('url', '')
                     results.append(VideoSearchResult(
-                        video_id=data.get('id', ''),
-                        title=data.get('title', ''),
-                        channel=data.get('channel', data.get('uploader', '')),
+                        # `or ''` on each: yt-dlp emits `"channel": null` for an upload whose
+                        # channel is gone, and a key that is present with None is not a
+                        # missing key to `.get`. The batch matcher fell over on the 411th
+                        # track of its first run for exactly that.
+                        video_id=data.get('id') or '',
+                        title=data.get('title') or '',
+                        channel=data.get('channel') or data.get('uploader') or '',
                         duration=data.get('duration', 0) or 0,
+                        description=data.get('description') or '',
                         thumbnail_url=thumbnail_url,
                         url=f"https://www.youtube.com/watch?v={data.get('id', '')}"
                     ))
@@ -179,6 +241,64 @@ class VideoService:
         playable even if its row was lost, which matters because the file is what the stream serves.
         """
         return self.get_video_path(track_id) is not None
+
+    async def video_codec(self, path: Path) -> str | None:
+        """The name of the file's first video stream's codec, as ffprobe reports it, or None.
+
+        What decides whether the Mac can show it — see `PLAYABLE_CODECS`. ffprobe ships with
+        the ffmpeg the download's merge step already requires.
+        """
+        process = await asyncio.create_subprocess_exec(
+            "ffprobe", "-v", "error", "-select_streams", "v:0",
+            "-show_entries", "stream=codec_name", "-of", "csv=p=0", str(path),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await process.communicate()
+        codec = stdout.decode().strip().splitlines()
+        return codec[0].strip() if codec and codec[0].strip() else None
+
+    async def video_duration(self, path: Path) -> float | None:
+        process = await asyncio.create_subprocess_exec(
+            "ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path),
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await process.communicate()
+        try:
+            return float(stdout.decode().strip())
+        except ValueError:
+            return None
+
+    async def _frame_at(self, path: Path, seconds: float) -> bytes:
+        """One frame at `seconds`, shrunk to `MOTION_SAMPLE_SIDE` square greyscale. An input
+        seek (`-ss` before `-i`) lands on the nearest keyframe without decoding what precedes
+        it, which is what makes eight of these cost less than a second."""
+        side = MOTION_SAMPLE_SIDE
+        process = await asyncio.create_subprocess_exec(
+            "ffmpeg", "-v", "error", "-ss", f"{seconds:.3f}", "-i", str(path),
+            "-frames:v", "1", "-vf", f"scale={side}:{side},format=gray", "-f", "rawvideo", "-",
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await process.communicate()
+        return stdout if len(stdout) == side * side else b""
+
+    async def motion_score(self, path: Path) -> float | None:
+        """How much the picture changes across the file — see `STILL_IMAGE_THRESHOLD`.
+
+        Frames are sampled evenly, never at 0: many uploads open on a black frame or a title
+        card, and the first sample would then differ from every other one for no reason.
+        """
+        duration = await self.video_duration(path)
+        if not duration or duration <= 0:
+            return None
+        step = duration / (MOTION_SAMPLE_FRAMES + 1)
+        frames = [await self._frame_at(path, step * (i + 1)) for i in range(MOTION_SAMPLE_FRAMES)]
+        return max_frame_difference(frames)
+
+    async def is_still_image(self, path: Path) -> bool | None:
+        """True for a still, False for a video, None when the file could not be read."""
+        score = await self.motion_score(path)
+        return None if score is None else score < STILL_IMAGE_THRESHOLD
 
     def get_poster_path(self, track_id: str) -> Path | None:
         """The poster frame saved beside a track's video, or None.
@@ -362,7 +482,13 @@ class VideoService:
             cmd = [
                 "yt-dlp",
                 *self._base_ytdlp_args(),
-                "-f", "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best",
+                # H.264 by name, not "mp4" by extension. `ext=mp4` was satisfied by YouTube's VP9
+                # and AV1 streams in an MP4 container, and AVFoundation decodes neither: the Mac
+                # played the audio track under AVKit's audio-only glyph. On 2026-09-13, 67 of the
+                # library's 114 videos were like that and 47 had ever shown a frame. YouTube has
+                # an avc1 rendition of practically everything at 1080p and below; the last
+                # fallback is there for the rest and is what `PLAYABLE_CODECS` exists to catch.
+                "-f", H264_FORMAT,
                 "--merge-output-format", "mp4",
                 "--no-playlist",
                 "--progress",
