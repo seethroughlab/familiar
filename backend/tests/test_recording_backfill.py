@@ -433,3 +433,20 @@ def test_the_scheduler_bounds_the_tick():
 
     src = inspect.getsource(sync.SyncMixin._recording_backfill)
     assert "deadline_seconds=" in src
+
+
+def test_lookups_do_not_share_the_default_executor(world, monkeypatch):
+    """A saturated default pool made 0.3 s requests take 45 s on 2026-09-14."""
+    import threading
+
+    names = []
+
+    def lookup(k, fp, d):
+        names.append(threading.current_thread().name)
+        return single()
+
+    world.rows = [(track(), analysis())]
+    world.lookup = lookup
+    asyncio.run(rb.run_resolve_phase())
+    assert names and all(n.startswith("acoustid-lookup") for n in names)
+    assert rb._acoustid_executor._max_workers == 1
