@@ -76,6 +76,21 @@ class AppSettings(BaseModel):
     discovery_musicbrainz_enabled: bool = True
     discovery_listenbrainz_enabled: bool = True
 
+    # Name the library's recordings through AcoustID (ADR-0115 point 8).
+    #
+    # Off by default, and not under `discovery_enabled`: this is enrichment of music
+    # you own, which ADR-0099 scoped out of discovery by name. On, a background job
+    # sends every fingerprint the library holds without a recording id — 23,853 of
+    # them on 2026-09-14 — to AcoustID, once, and writes back the MusicBrainz
+    # recording id when the answer is unambiguous. The identification feature already
+    # sends a fingerprint when a person asks about one track; this asks about all of
+    # them unprompted, and that is a posture the owner turns on rather than inherits.
+    #
+    # Off means no fingerprint leaves the machine for this purpose. The claim half of
+    # the same job still runs, gated by `community_cache_contribute` below, because it
+    # sends ids the library already holds.
+    recording_backfill_enabled: bool = False
+
     # Community embedding cache (share CLAP embeddings with other users)
     community_cache_enabled: bool = True  # Look up embeddings from community cache
     community_cache_contribute: bool = False  # Contribute computed embeddings (opt-in)

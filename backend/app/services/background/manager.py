@@ -32,6 +32,11 @@ DISCOVERY_BATCH_SIZE = 10
 #: thirty-day lookback means nothing is missed between runs.
 LISTENBRAINZ_INTERVAL_HOURS = 3
 
+#: ADR-0115 point 1. Ten minutes, two bounded phases per tick: 150 AcoustID lookups
+#: (about a minute at the 3/s ceiling) then 150 corpus claims (six minutes at 25/min).
+#: The 23,853 unnamed tracks measured on 2026-09-14 resolve in about 1.1 days.
+RECORDING_BACKFILL_INTERVAL_MINUTES = 10
+
 
 class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
     """Manages background tasks in the API process.
@@ -170,6 +175,21 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
                 max_instances=1,
                 coalesce=True,
                 misfire_grace_time=600,
+                replace_existing=True,
+            )
+
+            # Names the library's recordings through AcoustID and tells the corpus
+            # (ADR-0115). Each phase gates itself — the resolve half on
+            # `recording_backfill_enabled`, the claim half on
+            # `community_cache_contribute` — so registering it unconditionally is
+            # right: a disabled phase returns at once and records nothing.
+            self._scheduler.add_job(
+                self._recording_backfill,
+                IntervalTrigger(minutes=RECORDING_BACKFILL_INTERVAL_MINUTES),
+                id="recording_backfill",
+                max_instances=1,
+                coalesce=True,
+                misfire_grace_time=300,
                 replace_existing=True,
             )
 

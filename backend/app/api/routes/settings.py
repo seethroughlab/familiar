@@ -62,6 +62,8 @@ class SettingsResponse(BaseModel):
     community_cache_enabled: bool
     community_cache_contribute: bool
     community_cache_url: str
+    # ADR-0115: resolve recording ids through AcoustID in the background. Off by default.
+    recording_backfill_enabled: bool
 
     # Playlist generation
     playlist_discovery_mode: str  # "library_only" or "suggest_missing"
@@ -108,6 +110,7 @@ class SettingsUpdateRequest(BaseModel):
     community_cache_enabled: bool | None = None
     community_cache_contribute: bool | None = None
     community_cache_url: str | None = None
+    recording_backfill_enabled: bool | None = None
 
     # Playlist generation
     playlist_discovery_mode: str | None = None  # "library_only" or "suggest_missing"

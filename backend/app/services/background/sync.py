@@ -451,6 +451,15 @@ class SyncMixin(_SyncBase):
         except Exception as e:
             logger.warning(f"ListenBrainz fresh releases failed: {e}")
 
+    async def _recording_backfill(self) -> None:
+        """APScheduler entry: one tick of ADR-0115 — resolve, then claim."""
+        from app.services.tasks.recording_backfill import run_recording_backfill
+
+        try:
+            await run_recording_backfill()
+        except Exception as e:
+            logger.warning(f"Recording backfill tick failed: {e}")
+
     async def _daily_external_albums_refresh(self) -> None:
         """APScheduler entry: recompute "Albums you might want" for every profile.
 
