@@ -453,10 +453,14 @@ class SyncMixin(_SyncBase):
 
     async def _recording_backfill(self) -> None:
         """APScheduler entry: one tick of ADR-0115 — resolve, then claim."""
+        from app.services.background.manager import RECORDING_BACKFILL_INTERVAL_MINUTES
         from app.services.tasks.recording_backfill import run_recording_backfill
 
         try:
-            await run_recording_backfill()
+            # Bounded to the interval less a margin, so a hung upstream costs one
+            # tick rather than every tick after it (`max_instances=1` would skip
+            # them all, silently, with health reading `working`).
+            await run_recording_backfill(deadline_seconds=RECORDING_BACKFILL_INTERVAL_MINUTES * 60 - 60)
         except Exception as e:
             logger.warning(f"Recording backfill tick failed: {e}")
 
