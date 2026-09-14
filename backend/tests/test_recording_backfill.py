@@ -418,7 +418,7 @@ def test_a_phase_stops_taking_tracks_past_its_deadline(world, monkeypatch):
         reads["n"] += 1
         return 0.0 if reads["n"] <= 2 else 3600.0
 
-    monkeypatch.setattr(rb.time, "monotonic", clock)
+    monkeypatch.setattr(rb, "_clock", clock)
     out = asyncio.run(rb.run_resolve_phase())
     assert out["status"] == "deadline"
     assert out["considered"] < 5

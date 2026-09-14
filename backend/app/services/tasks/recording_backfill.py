@@ -68,6 +68,9 @@ PHASE_DEADLINE_SECONDS = 240
 #: upstream that was actually being waited on.
 _active_phase: str | None = None
 
+#: Indirection so a test can move this module's clock without moving asyncio's.
+_clock = time.monotonic
+
 
 def _now_iso() -> str:
     return utcnow().replace(tzinfo=None).isoformat(timespec="seconds")
@@ -193,13 +196,13 @@ async def run_resolve_phase(
     global _active_phase
     _active_phase = SOURCE_ACOUSTID
     engine, session_maker = create_task_engine_session()
-    started = time.monotonic()
+    started = _clock()
     upstream_failures = 0
     try:
         async with session_maker() as db:
             rows = await _resolve_candidates(db, limit)
             for track, analysis in rows:
-                if time.monotonic() - started > PHASE_DEADLINE_SECONDS:
+                if _clock() - started > PHASE_DEADLINE_SECONDS:
                     stats["status"] = "deadline"
                     break
                 stats["considered"] += 1
@@ -280,7 +283,7 @@ async def run_resolve_phase(
 
     if stats["status"] in ("ok", "deadline") and stats["considered"] and not dry_run:
         await health.record_success(SOURCE_ACOUSTID, items=stats["resolved"])
-    stats["seconds"] = round(time.monotonic() - started, 1)
+    stats["seconds"] = round(_clock() - started, 1)
     logger.info("recording_backfill_resolve", extra=stats)
     return stats
 
@@ -350,13 +353,13 @@ async def run_claim_phase(*, limit: int = CLAIM_BATCH, dry_run: bool = False) ->
     global _active_phase
     _active_phase = SOURCE_CLAIMS
     engine, session_maker = create_task_engine_session()
-    started = time.monotonic()
+    started = _clock()
     upstream_failures = 0
     try:
         async with session_maker() as db:
             rows = await _claim_candidates(db, limit)
             for track, analysis in rows:
-                if time.monotonic() - started > PHASE_DEADLINE_SECONDS * 2:
+                if _clock() - started > PHASE_DEADLINE_SECONDS * 2:
                     stats["status"] = "deadline"
                     break
                 stats["considered"] += 1
@@ -409,7 +412,7 @@ async def run_claim_phase(*, limit: int = CLAIM_BATCH, dry_run: bool = False) ->
 
     if stats["status"] in ("ok", "deadline") and stats["considered"] and not dry_run:
         await health.record_success(SOURCE_CLAIMS, items=stats["claimed"])
-    stats["seconds"] = round(time.monotonic() - started, 1)
+    stats["seconds"] = round(_clock() - started, 1)
     logger.info("recording_backfill_claim", extra=stats)
     return stats
 
