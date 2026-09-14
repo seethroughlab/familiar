@@ -1,0 +1,143 @@
+"""`app.services.video_matching` — the chooser is pure, so every rule gets a case."""
+
+from app.services.video import VideoSearchResult
+from app.services.video_matching import (
+    artist_tokens,
+    choose,
+    primary_artist,
+    title_tokens,
+)
+
+
+def result(title, channel="SomeChannel", duration=240, video_id="v1"):
+    return VideoSearchResult(
+        video_id=video_id, title=title, channel=channel, duration=duration,
+        thumbnail_url="", url=f"https://www.youtube.com/watch?v={video_id}",
+    )
+
+
+def pick(results, *, title="Evil", artist="Interpol", duration=220):
+    return choose(title=title, artist=artist, duration_seconds=duration, results=results)
+
+
+class TestNaming:
+    def test_the_plain_official_video_matches(self):
+        v = pick([result("Interpol - Evil (Official Video)", "InterpolVEVO", 221)])
+        assert v.matched
+        assert v.reason.startswith("matched: official video")
+
+    def test_artist_can_be_named_by_the_channel_alone(self):
+        v = pick([result("Evil", "Interpol", 221)])
+        assert v.matched
+
+    def test_artist_runs_through_a_vevo_channel_without_spaces(self):
+        v = pick([result("Bloodbuzz Ohio", "TheNationalVEVO", 275)],
+                 title="Bloodbuzz Ohio", artist="The National", duration=276)
+        assert v.matched
+
+    def test_a_result_that_names_neither_is_refused(self):
+        v = pick([result("Some Other Band - Evil", "OtherBand", 221)])
+        assert not v.matched
+        assert "does not name the artist" in v.reason
+
+    def test_every_title_token_is_required(self):
+        v = pick([result("Interpol - Evil Live Session", "InterpolVEVO", 221)],
+                 title="Not Even Jail")
+        assert not v.matched
+        assert "does not name the title" in v.reason
+
+    def test_title_noise_is_not_required(self):
+        v = pick([result("The Cure - Just Like Heaven", "TheCureVEVO", 212)],
+                 title="Just Like Heaven (2006 Remaster)", artist="The Cure", duration=210)
+        assert v.matched
+
+    def test_a_guest_artist_is_not_required(self):
+        v = pick([result("Gorillaz - Feel Good Inc. (Official Video)", "Gorillaz", 222)],
+                 title="Feel Good Inc.", artist="Gorillaz feat. De La Soul", duration=222)
+        assert v.matched
+
+    def test_accents_fold(self):
+        v = pick([result("Sigur Ros - Agaetis Byrjun", "sigurros", 470)],
+                 title="Ágætis Byrjun", artist="Sigur Rós", duration=471)
+        assert v.matched
+
+
+class TestWhatIsNotTheVideo:
+    def test_live_is_refused(self):
+        v = pick([result("Interpol - Evil (Live at Glastonbury)", "InterpolVEVO", 221)])
+        assert not v.matched
+        assert "says 'live'" in v.reason
+
+    def test_official_audio_is_refused(self):
+        v = pick([result("Interpol - Evil (Official Audio)", "InterpolVEVO", 221)])
+        assert not v.matched
+        assert "official audio" in v.reason
+
+    def test_lyric_video_is_refused(self):
+        v = pick([result("Interpol - Evil (Lyric Video)", "InterpolVEVO", 221)])
+        assert not v.matched
+
+    def test_a_word_in_the_tracks_own_title_is_exempt(self):
+        v = pick([result("Skrillex - Bangarang Remix", "Skrillex", 215)],
+                 title="Bangarang Remix", artist="Skrillex", duration=215)
+        assert v.matched
+
+    def test_a_topic_upload_that_only_says_the_name_still_passes(self):
+        """Topic uploads are audio-only but titled plainly; the duration rule is what catches
+        the ones that are not the song, and a plain title is not a reason on its own."""
+        v = pick([result("Evil", "Interpol - Topic", 221)])
+        assert v.matched
+
+
+class TestDuration:
+    def test_a_full_album_fails_on_length_before_anything_else(self):
+        v = pick([result("Interpol - Antics (Full Album) Evil", "Someone", 2500)])
+        assert not v.matched
+
+    def test_an_intro_and_outro_are_allowed(self):
+        v = pick([result("Interpol - Evil (Official Video)", "InterpolVEVO", 261)], duration=220)
+        assert v.matched  # 41s over, tolerance is max(30, 44)
+
+    def test_too_long_is_refused(self):
+        v = pick([result("Interpol - Evil (Official Video)", "InterpolVEVO", 300)], duration=220)
+        assert not v.matched
+        assert "80s off" in v.reason
+
+    def test_without_a_track_duration_the_title_must_say_official(self):
+        assert pick([result("Interpol - Evil", "InterpolVEVO", 221)], duration=None).matched is False
+        assert pick([result("Interpol - Evil (Official Video)", "InterpolVEVO", 221)],
+                    duration=None).matched
+
+
+class TestRanking:
+    def test_official_video_outranks_a_plain_upload_listed_first(self):
+        plain = result("Interpol - Evil", "randomuploader", 221, video_id="plain")
+        official = result("Interpol - Evil (Official Video)", "InterpolVEVO", 221, video_id="off")
+        v = pick([plain, official])
+        assert v.result is official
+
+    def test_closest_duration_breaks_ties(self):
+        near = result("Interpol - Evil", "InterpolVEVO", 222, video_id="near")
+        far = result("Interpol - Evil", "InterpolVEVO", 250, video_id="far")
+        v = pick([far, near])
+        assert v.result is near
+
+    def test_no_results_is_its_own_reason(self):
+        assert pick([]).reason == "no results"
+
+
+class TestTokens:
+    def test_primary_artist_stops_at_the_guest(self):
+        assert primary_artist("Gorillaz feat. De La Soul") == "Gorillaz"
+        assert primary_artist("Simon & Garfunkel") == "Simon & Garfunkel"
+        assert primary_artist("Belle and Sebastian") == "Belle and Sebastian"
+
+    def test_leading_the_is_dropped_but_not_alone(self):
+        assert artist_tokens("The National") == ["national"]
+        assert artist_tokens("The The") == ["the"]
+
+    def test_title_noise(self):
+        assert title_tokens("Just Like Heaven (2006 Remaster)") == ["just", "like", "heaven"]
+        assert title_tokens("Evil - 2011 Remaster") == ["evil"]
+        assert title_tokens("He's on the Phone") == ["he", "on", "the", "phone"]
+        assert title_tokens("(Live)") == ["live"]
