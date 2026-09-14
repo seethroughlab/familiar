@@ -59,6 +59,11 @@ CONSECUTIVE_FAILURES_TO_STOP = 3
 
 Search = Callable[[str], Awaitable[list[VideoSearchResult]]]
 Download = Callable[[str, str], Awaitable[VideoDownloadStatus]]
+# Given a track id after its download completed: True if the file is a still image, False if it
+# is a video, None if it could not be read. Stills are removed — see `VideoService.motion_score`.
+IsStill = Callable[[str], Awaitable[bool | None]]
+# Removes a video and its row, for a still.
+Remove = Callable[[str], Awaitable[None]]
 
 
 @dataclass(frozen=True)
@@ -87,6 +92,9 @@ class Tally:
     skipped: int = 0
     failed: int = 0
     already_logged: int = 0
+    # Downloaded, found to be a still image, removed. Counted apart from `skipped` because it
+    # cost a download, and apart from `failed` because nothing went wrong.
+    stills: int = 0
 
 
 async def resolve_profile(session_maker: async_sessionmaker, name_or_id: str | None) -> Profile:
@@ -193,6 +201,8 @@ async def run(
     search: Search,
     download: Download,
     log_path: Path,
+    is_still: IsStill | None = None,
+    remove: Remove | None = None,
     dry_run: bool = False,
     pause: float = 0.0,
     retry: bool = False,
@@ -243,6 +253,19 @@ async def run(
 
         status = await download(str(candidate.track_id), picked.url)
         if status.status == "complete":
+            # Nothing before the download can tell a still from a video — the art-track and
+            # bracket rules catch the ones that announce themselves, and the bitrate does not
+            # separate them (a still at 1080p was 607 kbps; a real video at 720p was 201). The
+            # file itself can, so it is asked, and a still goes back the way it came.
+            still = await is_still(str(candidate.track_id)) if is_still else None
+            if still:
+                print(f"  still  {candidate.label}  (the picture never changes; removed)")
+                if remove:
+                    await remove(str(candidate.track_id))
+                _log(write_to, candidate, "still", f"still image: {picked.title!r}", picked.video_id)
+                tally.stills += 1
+                await asyncio.sleep(pause)
+                continue
             _log(write_to, candidate, "matched", verdict.reason, picked.video_id)
             tally.matched += 1
         else:
@@ -277,19 +300,29 @@ def main() -> None:
         async def search(query: str) -> list[VideoSearchResult]:
             return await service.search(query, limit=6)
 
+        async def is_still(track_id: str) -> bool | None:
+            path = service.get_video_path(track_id)
+            return await service.is_still_image(path) if path else None
+
+        async def remove(track_id: str) -> None:
+            async with async_session_maker() as session:
+                await service.delete_video(session, track_id)
+
         tally = await run(
             picks,
             search=search,
             download=service.download,
             log_path=log_path,
+            is_still=is_still,
+            remove=remove,
             dry_run=args.dry_run,
             pause=args.pause,
             retry=args.retry,
         )
         verb = "would download" if args.dry_run else "downloaded"
         print(
-            f"\n{verb} {tally.matched}; skipped {tally.skipped}; failed {tally.failed}; "
-            f"{tally.already_logged} already in {log_path.name}"
+            f"\n{verb} {tally.matched}; skipped {tally.skipped}; removed {tally.stills} stills; "
+            f"failed {tally.failed}; {tally.already_logged} already in {log_path.name}"
         )
 
     asyncio.run(go())

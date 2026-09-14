@@ -1,4 +1,4 @@
-.PHONY: install dev run reset-db migrate test test-contract lint lint-contracts openapi openapi-check contract-lock contract-lock-check format backfill-artists backfill-albums adopt-videos backfill-video-posters match-videos refetch-videos
+.PHONY: install dev run reset-db migrate test test-contract lint lint-contracts openapi openapi-check contract-lock contract-lock-check format backfill-artists backfill-albums adopt-videos backfill-video-posters match-videos refetch-videos find-stills
 
 # Install dependencies
 install:
@@ -80,6 +80,9 @@ match-videos:
 
 refetch-videos:
 	uv run python -m app.cli.refetch_unplayable_videos $(ARGS)
+
+find-stills:
+	uv run python -m app.cli.find_still_videos $(ARGS)
 
 # One-shot backfill: populate canonical artists/aliases from existing tracks.
 # Pass ARGS="--dry-run" or ARGS="--no-mb --limit 50" for variants.

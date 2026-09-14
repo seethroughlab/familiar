@@ -31,6 +31,36 @@ H264_FORMAT = (
 )
 
 
+# The frame-difference score below which a file is a still image with audio, not a video.
+#
+# Measured on 2026-09-14 over the library's 242 videos: 52 scored 0.0–0.5 (the album cover for
+# the length of the track, give or take pixel noise), one scored 1.9 (a cover with a subtle loop),
+# and the next lowest were 6.7 and 7.7 — low-motion but real. Real videos run 12 to 100+. The
+# gap is where the threshold goes.
+STILL_IMAGE_THRESHOLD = 3.0
+# How many frames the score samples, and how small each is shrunk. Eight across the timeline is
+# enough to catch a slideshow that changes every minute; 32×32 makes the comparison trivial and
+# indifferent to compression noise.
+MOTION_SAMPLE_FRAMES = 8
+MOTION_SAMPLE_SIDE = 32
+
+
+def max_frame_difference(frames: list[bytes]) -> float | None:
+    """The largest mean absolute pixel difference between any two frames, or None for fewer
+    than two. Greyscale bytes, all the same length. A still image scores ~0 however long it runs;
+    anything that moves scores double digits somewhere in the timeline."""
+    frames = [f for f in frames if f]
+    if len(frames) < 2 or len({len(f) for f in frames}) != 1:
+        return None
+    n = len(frames[0])
+    best = 0.0
+    for a in range(len(frames)):
+        for b in range(a + 1, len(frames)):
+            diff = sum(abs(x - y) for x, y in zip(frames[a], frames[b], strict=True)) / n
+            best = max(best, diff)
+    return best
+
+
 class VideoSearchUnavailable(Exception):
     """YouTube could not be searched — as distinct from having nothing to return.
 
@@ -227,6 +257,48 @@ class VideoService:
         stdout, _ = await process.communicate()
         codec = stdout.decode().strip().splitlines()
         return codec[0].strip() if codec and codec[0].strip() else None
+
+    async def video_duration(self, path: Path) -> float | None:
+        process = await asyncio.create_subprocess_exec(
+            "ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path),
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await process.communicate()
+        try:
+            return float(stdout.decode().strip())
+        except ValueError:
+            return None
+
+    async def _frame_at(self, path: Path, seconds: float) -> bytes:
+        """One frame at `seconds`, shrunk to `MOTION_SAMPLE_SIDE` square greyscale. An input
+        seek (`-ss` before `-i`) lands on the nearest keyframe without decoding what precedes
+        it, which is what makes eight of these cost less than a second."""
+        side = MOTION_SAMPLE_SIDE
+        process = await asyncio.create_subprocess_exec(
+            "ffmpeg", "-v", "error", "-ss", f"{seconds:.3f}", "-i", str(path),
+            "-frames:v", "1", "-vf", f"scale={side}:{side},format=gray", "-f", "rawvideo", "-",
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await process.communicate()
+        return stdout if len(stdout) == side * side else b""
+
+    async def motion_score(self, path: Path) -> float | None:
+        """How much the picture changes across the file — see `STILL_IMAGE_THRESHOLD`.
+
+        Frames are sampled evenly, never at 0: many uploads open on a black frame or a title
+        card, and the first sample would then differ from every other one for no reason.
+        """
+        duration = await self.video_duration(path)
+        if not duration or duration <= 0:
+            return None
+        step = duration / (MOTION_SAMPLE_FRAMES + 1)
+        frames = [await self._frame_at(path, step * (i + 1)) for i in range(MOTION_SAMPLE_FRAMES)]
+        return max_frame_difference(frames)
+
+    async def is_still_image(self, path: Path) -> bool | None:
+        """True for a still, False for a video, None when the file could not be read."""
+        score = await self.motion_score(path)
+        return None if score is None else score < STILL_IMAGE_THRESHOLD
 
     def get_poster_path(self, track_id: str) -> Path | None:
         """The poster frame saved beside a track's video, or None.
