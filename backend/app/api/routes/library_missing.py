@@ -259,40 +259,11 @@ async def locate_single_track(
     )
 
 
-@router.delete("/missing/{track_id}", response_model=DeleteTrackResponse)
-async def delete_missing_track(
-    db: DbSession,
-    track_id: str,
-) -> DeleteTrackResponse:
-    """Permanently delete a missing track from the database.
-
-    This is irreversible - the track and all its analysis data will be removed.
-    """
-    from uuid import UUID
-
-    try:
-        track_uuid = UUID(track_id)
-    except ValueError:
-        raise ValidationError("Invalid track ID")
-
-    track = await db.get(Track, track_uuid)
-    if not track:
-        raise TrackNotFoundError()
-
-    if track.status not in (TrackStatus.MISSING, TrackStatus.PENDING_DELETION):
-        raise ValidationError("Track is not missing - cannot delete active tracks")
-
-    title = track.title or Path(track.file_path).name
-    await db.delete(track)
-    await db.commit()
-
-    return DeleteTrackResponse(
-        status="deleted",
-        track_id=track_id,
-        title=title,
-    )
-
-
+# `batch` must be registered BEFORE `{track_id}`. Routes match in declaration order, and a
+# literal segment declared after a path parameter is never reached: `DELETE /missing/batch` was
+# parsed as `track_id="batch"` and answered "Invalid track ID" for as long as it existed — found
+# 2026-09-14 the first time anyone called it. `routes/__init__.py` records the same rule for
+# `pending_review`'s `group`/`bulk` routers.
 @router.delete("/missing/batch", response_model=BatchDeleteResponse)
 async def delete_missing_tracks_batch(
     db: DbSession,
@@ -333,4 +304,38 @@ async def delete_missing_tracks_batch(
         status="completed",
         deleted=deleted,
         errors=errors,
+    )
+
+
+@router.delete("/missing/{track_id}", response_model=DeleteTrackResponse)
+async def delete_missing_track(
+    db: DbSession,
+    track_id: str,
+) -> DeleteTrackResponse:
+    """Permanently delete a missing track from the database.
+
+    This is irreversible - the track and all its analysis data will be removed.
+    """
+    from uuid import UUID
+
+    try:
+        track_uuid = UUID(track_id)
+    except ValueError:
+        raise ValidationError("Invalid track ID")
+
+    track = await db.get(Track, track_uuid)
+    if not track:
+        raise TrackNotFoundError()
+
+    if track.status not in (TrackStatus.MISSING, TrackStatus.PENDING_DELETION):
+        raise ValidationError("Track is not missing - cannot delete active tracks")
+
+    title = track.title or Path(track.file_path).name
+    await db.delete(track)
+    await db.commit()
+
+    return DeleteTrackResponse(
+        status="deleted",
+        track_id=track_id,
+        title=title,
     )

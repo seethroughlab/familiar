@@ -781,7 +781,7 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
                 },
                 "tracks_per_album": {
                     "type": "integer",
-                    "description": "How many tracks to include per album (default 3)",
+                    "description": "How many tracks to include per album (default 3, max 100). Use a large value to include whole albums.",
                     "default": 3
                 }
             },
