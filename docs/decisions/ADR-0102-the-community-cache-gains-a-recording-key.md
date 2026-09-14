@@ -27,8 +27,8 @@ Implementation:
   agreement, and an installation must not be made to agree with itself by tagging its library.
 - **The claim run completed 2026-09-14** (paced at 25/min after #304): 1,748 considered, 1,745
   claimed, 3 not found, none lost to retries. The corpus is 6.8% named, all by this installation.
-  **Point 5's design is proposed as
-  [ADR-0115](ADR-0115-the-library-names-its-recordings-through-acoustid.md)** (2026-09-14), with
+  **Point 5's design is
+  [ADR-0115](ADR-0115-the-library-names-its-recordings-through-acoustid.md), accepted 2026-09-14**, with
   the resolution rate measured on three 200-track probes before a line was written: 86–91% of the
   unnamed 23,863 resolve by a four-tier rule with no fuzzy matching.
 - **The premise this record was written under has inverted.** It assumed this installation would

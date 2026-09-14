@@ -1,8 +1,12 @@
 # ADR-0115: The Library Names Its Recordings Through AcoustID
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-14
+
+Implementation:
+- **Accepted 2026-09-14**, the day it was proposed, as written. Building started the same day, in
+  point 12's order.
 
 Extends [ADR-0102](ADR-0102-the-community-cache-gains-a-recording-key.md), whose point 5 decided
 that this installation backfills recording ids "in the background, bounded", under
