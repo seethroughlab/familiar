@@ -627,3 +627,86 @@ async def discovery_source_health(db: DbSession) -> DiscoveryHealthResponse:
     worst = max(sources, key=lambda s: severity.get(s.state, 0), default=None)
 
     return DiscoveryHealthResponse(sources=sources, status=worst.state if worst else "working")
+
+
+class BudgetHealth(BaseModel):
+    """One of the ceilings in `app/api/concurrency.py`, and what it has seen since start."""
+
+    limit: int
+    in_flight: int
+    #: The high-water mark — what the server was actually asked to do, which a refusal count alone
+    #: cannot say.
+    peak_in_flight: int
+
+
+class StreamBudgetHealth(BudgetHealth):
+    """The audio budget, with the sync reservation inside it (ADR-0112 point 3)."""
+
+    sync_limit: int
+    sync_in_flight: int
+    peak_sync_in_flight: int
+    refused_sync: int
+    refused_interactive: int
+
+
+class ArtworkBudgetHealth(BudgetHealth):
+    """The cover budget, which waits briefly rather than refusing (ADR-0112 point 6)."""
+
+    refused: int
+
+
+class EncoderBudgetHealth(BudgetHealth):
+    """The ffmpeg bound behind `/stream?format=aac` (ADR-0118 point 5)."""
+
+    #: Encodes that had to wait for a slot. Above zero during a first sync is expected; above zero
+    #: during ordinary listening means the bound is too low or the cache is cold.
+    waited: int
+
+
+class FileResponseHealth(BaseModel):
+    """The three bounds on file work, and their counters, since the process started."""
+
+    stream: StreamBudgetHealth
+    artwork: ArtworkBudgetHealth
+    encoder: EncoderBudgetHealth
+
+
+@router.get("/health/file-responses", response_model=FileResponseHealth)
+async def file_response_health() -> FileResponseHealth:
+    """Report what the file-response and encoder ceilings have seen since start.
+
+    ADR-0112's own follow-up, shared with ADR-0118: both download incidents were reconstructed by
+    counting route hits in the NAS's syslog, because the server recorded nothing about the pressure
+    it was under. The limiters have kept these counters since 2026-09-07 and reported them nowhere.
+
+    Its own endpoint rather than a line in `/health/system`, for the reason
+    `/health/discovery-sources` gives: `ServiceStatus.details` is an untyped dict, and these are
+    twelve integers a dashboard should be able to name. No database: the counters live in the
+    process, which is also why they reset with it.
+    """
+    from app.api.concurrency import encoder_limiter, limiter
+
+    return FileResponseHealth(
+        stream=StreamBudgetHealth(
+            limit=limiter.total_limit,
+            in_flight=limiter.in_flight,
+            peak_in_flight=limiter.peak_in_flight,
+            sync_limit=limiter.sync_limit,
+            sync_in_flight=limiter.sync_in_flight,
+            peak_sync_in_flight=limiter.peak_sync_in_flight,
+            refused_sync=limiter.refused_sync,
+            refused_interactive=limiter.refused_interactive,
+        ),
+        artwork=ArtworkBudgetHealth(
+            limit=limiter.artwork_limit,
+            in_flight=limiter.artwork_in_flight,
+            peak_in_flight=limiter.peak_artwork_in_flight,
+            refused=limiter.refused_artwork,
+        ),
+        encoder=EncoderBudgetHealth(
+            limit=encoder_limiter.limit,
+            in_flight=encoder_limiter.in_flight,
+            peak_in_flight=encoder_limiter.peak_in_flight,
+            waited=encoder_limiter.waited,
+        ),
+    )
