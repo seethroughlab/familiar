@@ -40,7 +40,20 @@ async def _track_with_analysis(db, **kw):
     await insert_test_analysis(
         db,
         track.id,
-        {"energy": 0.5, "brightness": 0.5, "valence": 0.5, "key": "C", "bpm": 120.0, **features},
+        {
+            "energy": 0.5,
+            "brightness": 0.5,
+            "valence": 0.5,
+            "key": "C",
+            "bpm": 120.0,
+            # Ambient gates speech out of its pool, and a NULL is excluded rather than admitted —
+            # unmeasured is not the same as known-instrumental. Real rows always carry this: the
+            # library reports every one of its 26,435 tracks at the current FEATURES_VERSION. A
+            # fixture that omitted it was the one shape of row that cannot exist in practice, and
+            # it made ambient retrieval return nothing here.
+            "speechiness": 0.05,
+            **features,
+        },
     )
     return track
 

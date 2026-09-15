@@ -25,6 +25,7 @@ from app.logging_config import get_logger
 from app.services.ambient_fitness import (
     ambient_fitness_sql,
     ambient_seed_conditions,
+    ambient_speech_conditions,
     measure_calibration,
     seed_fitness,
 )
@@ -784,6 +785,12 @@ async def get_candidates(
         rows = (await db.execute(_neighbours(CANDIDATE_POOL))).all()
         excursion_ids: set[UUID] = set()
     else:
+        # **Ambient only, which is why it is here and not in `base_conditions`.** This function is
+        # shared with radio, playlists and discovery, and `TestBlastRadius` exists to catch exactly
+        # the change that alters their pools — speech is disqualifying for an ambient session and
+        # nobody else's problem.
+        base_conditions.extend(ambient_speech_conditions())
+
         calibration = await measure_calibration(db)
         fitness = ambient_fitness_sql(calibration)
         fit_gate = [
