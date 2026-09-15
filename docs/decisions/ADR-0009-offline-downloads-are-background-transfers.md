@@ -1,6 +1,7 @@
 # ADR-0009: Offline Downloads Are Background Transfers to a File Store
 
-Status: accepted
+Status: accepted — the implementation's discretionary scheduling reversed 2026-09-15 (see the last
+Implementation note)
 
 Date: 2026-07-29
 
@@ -122,6 +123,30 @@ Implementation:
   is wrong for the moment it exists for.
   [ADR-0012](ADR-0012-favorites-are-a-collection-not-a-library-section.md) later moves it under a
   Collections entry it shares with Favorites, and supersedes nothing in doing so.
+
+- **Discretionary scheduling is reversed, 2026-09-15.** The flip above stood for six weeks and was
+  wrong, and the first sync of 1,740 favourites under
+  [ADR-0118](ADR-0118-a-phone-downloads-lossless-tracks-as-aac.md) is what measured it. With the
+  phone plugged in and on wifi — the exact conditions the flag exists to wait for — the system's
+  scheduler ran transfers at ~40 a minute while the app was in front and **three every five
+  minutes** once it was in the background: `nsurlsessiond` gates every discretionary task through
+  `DuetActivityScheduler`, and it has to wake the app to be handed the next three
+  ([ADR-0111](ADR-0111-the-client-queues-transfers-rather-than-fanning-out.md) point 4's in-memory
+  queue). The server heard nothing for seven minutes at a stretch; the Downloads screen said
+  "waiting" and the listener said "stuck", and both were right. The sync finished at 04:10, three
+  hours after it could have, in one burst when the scheduler finally chose to.
+
+  The session is now `isDiscretionary = false` on both platforms — the Mac already was, since
+  2026-09-07, for the same symptom at a smaller scale — and the cellular concern the flag was
+  answering is answered directly instead: `allowsCellularAccess = false` and
+  `allowsExpensiveNetworkAccess = false`, so a sync runs only on wifi and never over a hotspot.
+  Someone with no wifi at all is stranded for downloads and not for listening, which still
+  streams. The session is renamed `.v4` and `.v3` retired, because a background session's
+  configuration is persisted by name and a changed flag never reaches an existing install
+  otherwise (ADR-0111's Implementation records the measurement). Point 1 stands; it is the flag
+  the implementation set under it that is reversed, and the wording on screen changes with it
+  for the reason the note above gives: "Waiting for Wi-Fi" was the badge's honest label under the
+  old flag, and "Waiting to download" is under the new one.
 
 ## Context
 
