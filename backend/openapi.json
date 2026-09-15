@@ -1027,6 +1027,35 @@
         "title": "ArtistTrack",
         "type": "object"
       },
+      "ArtworkBudgetHealth": {
+        "description": "The cover budget, which waits briefly rather than refusing (ADR-0112 point 6).",
+        "properties": {
+          "in_flight": {
+            "title": "In Flight",
+            "type": "integer"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "peak_in_flight": {
+            "title": "Peak In Flight",
+            "type": "integer"
+          },
+          "refused": {
+            "title": "Refused",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "limit",
+          "in_flight",
+          "peak_in_flight",
+          "refused"
+        ],
+        "title": "ArtworkBudgetHealth",
+        "type": "object"
+      },
       "ArtworkCoverageResponse": {
         "description": "How much of the library has real cover art.\n\n`total_albums` is counted the way `/library/albums` and `/library/stats` count, so the three\nagree (ADR-0058 point 6). It would have been easier to count canonical `Album` rows, and it\nwould have been wrong: the dashboard tile beside this one says 3,927, and a coverage figure over\na different denominator is the \"plausible-looking number\" that point exists to forbid.\n\n`generated` is broken out rather than folded into `with_artwork` because a generated placeholder\nis what the app draws when it has nothing \u2014 counting it as coverage would report a library with\nno cover art at all as fully covered.",
         "properties": {
@@ -3213,6 +3242,35 @@
         "title": "EgoMapResponse",
         "type": "object"
       },
+      "EncoderBudgetHealth": {
+        "description": "The ffmpeg bound behind `/stream?format=aac` (ADR-0118 point 5).",
+        "properties": {
+          "in_flight": {
+            "title": "In Flight",
+            "type": "integer"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "peak_in_flight": {
+            "title": "Peak In Flight",
+            "type": "integer"
+          },
+          "waited": {
+            "title": "Waited",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "limit",
+          "in_flight",
+          "peak_in_flight",
+          "waited"
+        ],
+        "title": "EncoderBudgetHealth",
+        "type": "object"
+      },
       "ErrorEnvelope": {
         "description": "The shape every error response takes (ADR-0007).\n\nMirrors `create_error_response` in `app/main.py` exactly. Every handler funnels through it:\nvalidation errors, `FamiliarError` subclasses, `HTTPException`, SQLAlchemy failures and the\ncatch-all 500.\n\nModelled here because it was previously described nowhere. The schema documented only 200 and\nFastAPI's automatic 422 \u2014 and that 422 was actively wrong, because the validation handler is\noverridden to emit *this* shape rather than `{\"detail\": [...]}`. A generated client therefore\nhad exactly one error model and it was the one the server never sends.\n\n`detail` and `request_id` are optional because they are **omitted** when absent rather than\nsent as null, so a client must treat them as missing keys and not as nullable values.",
         "example": {
@@ -3680,6 +3738,27 @@
           "total"
         ],
         "title": "FavoritesListResponse",
+        "type": "object"
+      },
+      "FileResponseHealth": {
+        "description": "The three bounds on file work, and their counters, since the process started.",
+        "properties": {
+          "artwork": {
+            "$ref": "#/components/schemas/ArtworkBudgetHealth"
+          },
+          "encoder": {
+            "$ref": "#/components/schemas/EncoderBudgetHealth"
+          },
+          "stream": {
+            "$ref": "#/components/schemas/StreamBudgetHealth"
+          }
+        },
+        "required": [
+          "stream",
+          "artwork",
+          "encoder"
+        ],
+        "title": "FileResponseHealth",
         "type": "object"
       },
       "FrontendLogBatch": {
@@ -9152,6 +9231,55 @@
           "configured"
         ],
         "title": "SoulseekStatusResponse",
+        "type": "object"
+      },
+      "StreamBudgetHealth": {
+        "description": "The audio budget, with the sync reservation inside it (ADR-0112 point 3).",
+        "properties": {
+          "in_flight": {
+            "title": "In Flight",
+            "type": "integer"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "peak_in_flight": {
+            "title": "Peak In Flight",
+            "type": "integer"
+          },
+          "peak_sync_in_flight": {
+            "title": "Peak Sync In Flight",
+            "type": "integer"
+          },
+          "refused_interactive": {
+            "title": "Refused Interactive",
+            "type": "integer"
+          },
+          "refused_sync": {
+            "title": "Refused Sync",
+            "type": "integer"
+          },
+          "sync_in_flight": {
+            "title": "Sync In Flight",
+            "type": "integer"
+          },
+          "sync_limit": {
+            "title": "Sync Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "limit",
+          "in_flight",
+          "peak_in_flight",
+          "sync_limit",
+          "sync_in_flight",
+          "peak_sync_in_flight",
+          "refused_sync",
+          "refused_interactive"
+        ],
+        "title": "StreamBudgetHealth",
         "type": "object"
       },
       "SuggestedTrackResponse": {
@@ -15989,6 +16117,78 @@
           }
         },
         "summary": "Discovery Source Health",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/api/v1/health/file-responses": {
+      "get": {
+        "description": "Report what the file-response and encoder ceilings have seen since start.\n\nADR-0112's own follow-up, shared with ADR-0118: both download incidents were reconstructed by\ncounting route hits in the NAS's syslog, because the server recorded nothing about the pressure\nit was under. The limiters have kept these counters since 2026-09-07 and reported them nowhere.\n\nIts own endpoint rather than a line in `/health/system`, for the reason\n`/health/discovery-sources` gives: `ServiceStatus.details` is an untyped dict, and these are\ntwelve integers a dashboard should be able to name. No database: the counters live in the\nprocess, which is also why they reset with it.",
+        "operationId": "system_file_response_health",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileResponseHealth"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "File Response Health",
         "tags": [
           "system"
         ]

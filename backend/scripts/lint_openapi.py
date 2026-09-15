@@ -127,6 +127,11 @@ VENDORED_OPERATIONS = {
     "outputs_stop_output",
     "outputs_seek_output",
     "outputs_set_output_volume",
+    # The contract handshake (ADR-0113), by operation because the `system` tag is the server's
+    # operational surface and the app wants exactly one call from it. Added to the Swift config on
+    # 2026-09-08 and missed here: CI never noticed, because the cross-check runs only with the Swift
+    # repo checked out beside this one, which the runner does not have.
+    "system_get_api_contract",
 }
 
 SWIFT_CLIENT_CONFIG = (
