@@ -5,6 +5,16 @@ All notable changes to Familiar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **A phone can download a lossless track as AAC.** `GET /tracks/{id}/stream?format=aac` encodes a
+  FLAC, ALAC, WAV or AIFF source once to 256 kbps AAC — a quarter of the size — and caches it; an
+  MP3 or AAC source is served exactly as it is, never re-encoded. Playback is unchanged, and the
+  parameter is optional, so no existing client is affected (ADR-0118). Encodes run under their own
+  bound, `TRANSCODE_CONCURRENCY`, separate from the file-response ceiling.
+
 ## [0.2.0-alpha2] - 2026-08-30
 
 Three weeks on from the 0.2 line's first release. That one's headline — Familiar no longer calls a
