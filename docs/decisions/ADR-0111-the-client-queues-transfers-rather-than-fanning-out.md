@@ -1,6 +1,6 @@
 # ADR-0111: The Client Queues Transfers Rather Than Fanning Out
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-07
 
@@ -9,6 +9,7 @@ background transfers and never said how many. Point 6 of that ADR deferred actin
 `favorites_auto_download`; it has since shipped, and this is what that turned out to cost.
 
 Implementation:
+- **Accepted 2026-09-15.** In the App Store since 1.4 build 36 (2026-09-08) and through the first 1,740-track sync under ADR-0118 without a refusal. Point 4's in-memory queue turned out to have a cost the record did not name — with the session discretionary, a background sync waited on iOS to wake the app for every three tracks — which ADR-0009's amendment of the same day records and answers.
 - **Written before the code**, which is the order ADR-0107, ADR-0108 and ADR-0109 each failed to
   keep and the last of which asked, in its final Follow-up, for the rule to change or the practice
   to. This is the practice changing.

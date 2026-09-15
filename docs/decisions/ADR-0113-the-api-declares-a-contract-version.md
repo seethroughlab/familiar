@@ -1,6 +1,6 @@
 # ADR-0113: The API Declares a Contract Version
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-08
 
@@ -12,6 +12,7 @@ running app meets a server it was not built against.
 Covers two repositories. `familiar-apple` has no `docs/decisions/`; it cites this series.
 
 Implementation:
+- **Accepted 2026-09-15.** Both halves shipped (#298, #299; familiar-apple#175) and the check has since caught schema drift three times in two days — `familiar#308`, `#306` and `#315` each turned the app's CI red until it re-vendored, which is the record doing what it was written for.
 - Server half in `familiar` `main` (#298, 2026-09-08): `API_CONTRACT_VERSION` / `MIN_CLIENT_CONTRACT`
   in `app/config.py`, `GET /api/v1/contract`, the two `info.x-*` keys, `contract.lock.json` and
   `scripts/check_contract_bump.py`. Deployed to `familiar-demo` by the merge; verified live —
