@@ -279,6 +279,42 @@ def seed_fitness(
     )
 
 
+def ambient_speech_conditions() -> list[ColumnElement[bool]]:
+    """Not speech. The gate every ambient query needs, wherever it picks a track.
+
+    **Extracted because only half the paths had it, and the half that did not is the half that
+    plays most of a session.** `ambient_seed_conditions` gated the *seed*; `get_candidates`, which
+    chooses every track after the first, gated only duration and liveness. So a session opened on
+    something properly instrumental and then drifted into an audiobook — reported from a real
+    library as Douglas Adams and a set of Portuguese lessons.
+
+    Ranking could not save it. Speech reaches the continuation score as one weighted term among
+    seven (`inst * 0.7 + (1 - speech) * 0.3`), competing with embedding similarity and dynamic
+    range, and a spoken-word track that sits close in embedding space simply outscores it. This
+    module's own docstring already said what the right shape was: instrumentalness and speechiness
+    "separate almost nothing continuously, and everything as a gate."
+
+    Worse than merely ungated: `_safe_float` in `ambient.py` defaults a NULL to 0.0, so a track
+    analysed before silero-vad arrived in FEATURES_VERSION v8 has NULL speechiness and scores
+    `(1 - 0.0) * 0.3` — full marks on the non-speech half. As SQL these comparisons drop those rows
+    instead, which is the correct direction: unmeasured is not the same as known-instrumental.
+
+    **Speechiness only, and not instrumentalness.** The seed gate pairs them, and a continuation
+    must not: `instrumentalness >= 0.5` excludes every track with a voice on it, which is most
+    music and the entire point of an excursion. A session is allowed to reach a song someone sings
+    on; it is not allowed to reach an audiobook. Measured on the fixtures here, the pair removed
+    the rock cluster excursions exist to find.
+
+    A NULL is excluded rather than admitted, and that is the case worth stating: `<=` against NULL
+    is not true, so anything unanalysed for speech drops out. That is the correct direction —
+    unmeasured is not the same as known-instrumental — and it is the case that actually bites,
+    because `_safe_float` scores a NULL as the *best* possible speech value while nothing gates it.
+    The cost is that music analysed before v8 sits out until it is re-analysed, which is
+    self-healing as `FEATURES_VERSION` rolls forward.
+    """
+    return [TrackAnalysis.speechiness <= 0.5]
+
+
 def ambient_seed_conditions(*, min_duration: float = 60.0) -> list[ColumnElement[bool]]:
     """The gate three call sites each inlined separately.
 
@@ -297,8 +333,10 @@ def ambient_seed_conditions(*, min_duration: float = 60.0) -> list[ColumnElement
     """
     return [
         Track.active_filter(),
+        # A *seed* is held to the stricter pair: it opens the session and sets what the bed is
+        # built from, so it must be instrumental and not merely unspoken.
         TrackAnalysis.instrumentalness >= 0.5,
-        TrackAnalysis.speechiness <= 0.5,
+        *ambient_speech_conditions(),
         TrackAnalysis.energy <= 0.7,
         Track.duration_seconds >= min_duration,
         TrackAnalysis.energy.isnot(None),

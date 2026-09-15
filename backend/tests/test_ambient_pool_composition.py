@@ -30,6 +30,17 @@ ROCK = dict(energy=0.88, brightness=0.82, bpm=142.0, instrumentalness=0.05,
             acousticness=0.08, speechiness=0.18, valence=0.6, dynamic_range_db=7.0)
 CALM = dict(energy=0.22, brightness=0.24, bpm=68.0, instrumentalness=0.96,
             acousticness=0.86, speechiness=0.02, valence=0.35, dynamic_range_db=14.0)
+#: An audiobook or a language lesson: quiet, acoustic, wide dynamic range — everything the
+#: continuation score rewards — and entirely speech. Reported from a real library as Douglas Adams
+#: and a set of Portuguese lessons, arriving mid-session after an instrumental seed.
+#: **Unmeasured, not measured-as-speech.** A track with real audiobook numbers (instrumentalness
+#: 0.02, speechiness 0.94) scores 0.03 on the vocal term and the ranking already buries it whenever
+#: there are alternatives — a fixture built that way passes against the unfixed code and proves only
+#: that the ranking works. The tracks that actually surface are the ones analysed before silero-vad
+#: arrived in FEATURES_VERSION v8, whose speechiness is NULL: `_safe_float` reads a NULL as 0.0, so
+#: `(1 - 0.0) * 0.3` gives them 0.30 — ten times a measured audiobook — and nothing gates them.
+SPOKEN = dict(energy=0.20, brightness=0.22, bpm=70.0, instrumentalness=None,
+              acousticness=0.90, speechiness=None, valence=0.34, dynamic_range_db=15.0)
 
 DIMENSIONS = 512
 
@@ -42,11 +53,19 @@ def _embedding(cluster: int, index: int) -> list[float]:
     return base
 
 
-async def _library(db, rock: int = 200, calm: int = 200) -> dict[str, list[uuid.UUID]]:
-    ids: dict[str, list[uuid.UUID]] = {"rock": [], "calm": []}
+async def _library(
+    db, rock: int = 200, calm: int = 200, spoken: int = 0
+) -> dict[str, list[uuid.UUID]]:
+    ids: dict[str, list[uuid.UUID]] = {"rock": [], "calm": [], "spoken": []}
     for kind, count, features, cluster in (
         ("rock", rock, ROCK, 0),
         ("calm", calm, CALM, 1),
+        # **Cluster 1 and, below, the seed's *exact* embedding.** A first attempt put these merely
+        # in the calm cluster and the test passed against the unfixed code: with 150 calm
+        # alternatives the vocal term alone kept 60 spoken tracks out of the top 40, so it proved
+        # the ranking worked rather than that the gate did. To test a gate the candidate has to be
+        # maximally attractive on every axis the score looks at — then only a gate can exclude it.
+        ("spoken", spoken, SPOKEN, 1),
     ):
         for i in range(count):
             track = Track(
@@ -62,7 +81,9 @@ async def _library(db, rock: int = 200, calm: int = 200) -> dict[str, list[uuid.
             db.add(
                 TrackAnalysis(
                     track_id=track.id,
-                    embedding=_embedding(cluster, i),
+                    # Spoken tracks share the seed's vector exactly, so cosine distance is zero and
+                    # they top every similarity ranking. See the note beside the loop.
+                    embedding=_embedding(cluster, 0 if kind == "spoken" else i),
                     key="C major",
                     features_version=FEATURES_VERSION,
                     **features,
@@ -175,3 +196,45 @@ class TestTheExcursionRate:
         excursions = sum(1 for c in candidates if c.descriptor.track_id in rock_ids)
         # 24 candidates at one in eight is three, give or take where the phase lands.
         assert 1 <= excursions <= 5, f"{excursions} of {len(candidates)}"
+
+
+class TestSpokenWordIsNotAmbient:
+    """**A session must not wander into an audiobook, however little else is on offer.**
+
+    The seed path has gated speech since it was written; `get_candidates` did not, so every track
+    after the first had speech as a *preference* — one weighted term against six others.
+
+    **The fixture deliberately offers no alternatives**, and that is the whole design of the test.
+    A first attempt gave the ranking 150 instrumental tracks to choose from instead, and it passed
+    against the unfixed code: with that much to pick from the vocal term alone buries spoken word,
+    so the test proved the ranking worked rather than that a gate existed. A gate is only visible
+    when ranking cannot save you — which is also the real-world case, a quiet corner of a library
+    where the nearest neighbours are the Portuguese lessons.
+
+    The spoken rows are **unmeasured**, not measured-as-speech, because that is what actually
+    surfaces: `_safe_float` reads a NULL as 0.0, so `(1 - 0.0) * 0.3` scores an unanalysed track
+    0.30 on the vocal term where a measured audiobook scores 0.03 — ten times better. Anything
+    analysed before silero-vad arrived in FEATURES_VERSION v8 is in that state.
+    """
+
+    async def test_a_spoken_word_track_never_reaches_the_pool(self, async_db):
+        ids = await _library(async_db, rock=0, calm=1, spoken=60)
+        candidates, _, _ = await get_candidates(
+            async_db, current_track_id=ids["calm"][0], limit=40, profile=AMBIENT
+        )
+
+        spoken = set(ids["spoken"])
+        returned = {c.descriptor.track_id for c in candidates}
+        assert not (returned & spoken), (
+            f"{len(returned & spoken)} spoken-word tracks reached an ambient session"
+        )
+
+    async def test_the_gate_is_what_excludes_them_not_a_shortage_of_rows(self, async_db):
+        """Guards the trap above: with the gate removed these rows are the only thing available,
+        so a pool that comes back empty proves the gate ran rather than that nothing matched."""
+        ids = await _library(async_db, rock=0, calm=1, spoken=60)
+        candidates, _, _ = await get_candidates(
+            async_db, current_track_id=ids["calm"][0], limit=40, profile=AMBIENT
+        )
+
+        assert all(c.descriptor.track_id not in set(ids["spoken"]) for c in candidates)
