@@ -5,6 +5,126 @@ All notable changes to Familiar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Everything since `v0.2.0-beta6`, 2026-09-04 to 2026-09-14. **Reconstructed on 2026-09-14 from the
+commits**, as the entry below it was — this file last moved at alpha2, and eight tags went by
+without touching it.
+
+### The library learns which recordings it holds
+
+- **Every fingerprinted track is named against AcoustID** in the background (ADR-0115): a ten-minute
+  job resolves up to 150 unnamed tracks a tick from the stored fingerprint — no file is opened — and
+  writes a MusicBrainz recording id only where a four-tier rule names exactly one. Measured before
+  building: 86–91% of a sample resolved; 8.5 hours in on the reference library, 7,625 of 23,853
+  checked and 89.8% named. Off with `recording_backfill_enabled`. Each lookup has a timeout, each
+  phase a deadline, and the lookups run on a thread of their own after a burst of MusicBrainz 503s
+  starved them of the default pool.
+- **The community cache keys on the fingerprint, not the column** (ADR-0114), and **claims the
+  recordings this library already names** (ADR-0102's cheap half), paced under the corpus's
+  30-writes-a-minute limit after the first run silently lost 45 of its first 500. The re-key ran on
+  2026-09-11: 26,431 considered, 14,192 contributed, 0 errors.
+- A contribution declares which pipeline computed it, the library was recomputed under that
+  declaration (`EMBEDDING_VERSION` 8), and a cached vector is accepted only from the pipeline this
+  installation runs — a vector from another one is well-formed and useless, and was being accepted
+  silently. The default cache URL points at a host that resolves.
+
+### Added
+
+- **A phone can download a lossless track as AAC.** `GET /tracks/{id}/stream?format=aac` encodes a
+  FLAC, ALAC, WAV or AIFF source once to 256 kbps AAC — a quarter of the size — and caches it; an
+  MP3 or AAC source is served exactly as it is, never re-encoded. Playback is unchanged, and the
+  parameter is optional, so no existing client is affected (ADR-0118). Encodes run under their own
+  bound, `TRANSCODE_CONCURRENCY`, separate from the file-response ceiling.
+- **Familiar can acquire what its discovery tools recommend, through a Soulseek client the
+  operator already runs** (ADR-0116, ADR-0117). Four MCP tools over slskd's HTTP API — search,
+  download, transfers, find-what-is-missing — withheld from `tools/list` until `soulseek_url` is
+  set. A completed download is bind-mounted read-only inside the library, found by the ordinary
+  scanner and put in pending review; Familiar never moves a file.
+- **The server keeps a ceiling of its own on concurrent file responses** (ADR-0112): twelve audio
+  responses, four of them background sync, sixteen covers — because a phone syncing 1,589
+  favourites took the disk and the thread pool on 2026-09-07 with `/stream` answering in 180 to
+  424 seconds. A client that marks its traffic as sync is told to come back in 30 seconds rather
+  than queued into a timeout it cannot tell from a crash.
+- **The API declares a contract version** (ADR-0113), and a client too old for the server is told
+  so instead of "Couldn't reach the server". CI refuses a schema change nobody has looked at, and
+  refuses to raise the client floor without naming the build that satisfies it.
+- **Music videos keep their poster frame**, served per video, and the 114 downloaded before that
+  got theirs backfilled from YouTube's id-derived URL. **A batch matcher** (`make match-videos`)
+  runs the Mac's one-at-a-time match over a profile's favourites and plays, with every choosing
+  rule written down and a log in place of the sheet; still-image "videos" are detected after
+  download by frame sampling.
+
+### Fixed
+
+- `DELETE /library/missing/batch` had never been reachable — a route declared after
+  `/missing/{track_id}` matched `batch` as a track id. A playlist can hold a whole album.
+- Ambient's pool is composed rather than retrieved (ADR-0108): from a rock seed it had returned
+  150 rock candidates and called that a session. Ambient-adjacency is measured against the
+  library rather than guessed.
+- A backfill no longer re-sends what the corpus already holds when the lookup merely failed to
+  answer — a repeat POST manufactures a second "installation" agreeing with itself.
+- A sandboxed visualizer can read cover art; `beat-tiles` had been drawing white cubes.
+- The website names both apps and uses Apple's badges; the README describes the client split the
+  code made a month earlier.
+
+## [0.2.0-beta6] - 2026-09-04
+
+**Eight tags in three days** — `alpha3` and `alpha4` on 2026-09-02, `beta1` through `beta6` on the
+3rd and 4th — each cut to get a fix onto the demo or the NAS, none of them with an entry here. One
+entry for the lot, reconstructed on 2026-09-14. The line is called beta from `beta1` because that
+is what the tags say; nothing about the software changed its mind on the 3rd.
+
+### CLAP leaves the process, and the GPU actually works
+
+- **The embedder is `clapback-embed`**, an external package, installed from PyPI (ADR-0105). torch
+  and transformers leave Familiar entirely — 593 MB of packages and a 1.1 GB checkpoint cache that
+  had made a recursive `chown` take nine minutes of a seventeen-minute CI build. The ONNX encoders
+  ship in the image rather than in the data volume, which a long-lived volume never picks up.
+- **The GPU is an opt-in override**, and the reservation is fatal without one — on a machine with
+  no NVIDIA driver the previous version refused to start at all. Measured, the GPU costs each
+  analysis worker a CUDA context on top of its decode buffer: a 57-minute mix decodes to 2 GB, and
+  three workers exhausted a 12 GB container, so the default is two.
+- **Whole tracks are embedded by chunked mean** (ADR-0104) instead of the middle ten seconds — two
+  rips of one recording with a 1.2 s lead-in difference had measured as far apart as different
+  songs. The re-analysis cost was recorded from the machine that ran it: 31.6 s a track, ~230 hours
+  for the library, six times the estimate.
+- A missing file no longer stalls a 26,000-track re-analysis; one had, four times over eighteen
+  hours. The sync's churn guard no longer force-exits any phase that runs longer than two minutes.
+  The release smoke test checks the embedder that ships, not the torch that does not.
+
+### Added
+
+- **Ambient mode is a reachable surface again** (ADR-0106, ADR-0107). It was never decided
+  against; it went as collateral three times — the Capacitor deletion took its synth, the web
+  player's removal its UI, ADR-0077 its routes. The three routes are back for the native apps.
+- **Discovery runs every twenty minutes** instead of nightly, **ListenBrainz is a source**
+  (Last.fm has had no release API since 2016), owning an artist is enough to be discovered —
+  2,614 of 3,453 owned artists had been structurally unreachable — and **discovery can be turned
+  off**, visibly (ADR-0099). Source health is state the job acts on, so a source that fails every
+  night no longer looks identical to one that works.
+- **Rediscovery**: the library you own ranked against what you actually play (ADR-0101). 23,683 of
+  26,434 tracks had never been played.
+- **The visualizer contract is published**, with a gallery that leads with what ships
+  (ADR-0103, superseding ADR-0063). Rendered from `docs/VISUALIZER_API.md` rather than restated.
+- **The S3 backup restores.** It was 1,420 lines with no test of any kind; run against real S3 and
+  a real Postgres, the restore was appending rather than replacing, a backup that never ran
+  reported that it had, and the demo's backups had failed on every run over a DSN option libpq
+  does not accept.
+- The community cache gains a recording key (ADR-0102, accepted); the Mac app is the MCP stdio
+  bridge (ADR-0098); an OpenMediaVault install panel; the admin app has one component tree and its
+  colours come from tokens (ADR-0081, ADR-0082).
+
+### Fixed
+
+- **Discovery had crashed every night for nineteen nights on one row** — `MultipleResultsFound`,
+  not the rate limit ADR-0099 had blamed — and the new-releases cache had been frozen since
+  2026-08-25. `get_new_releases` reads that cache now instead of walking MusicBrainz live on the
+  tool-call path, which had hung a host for 240 seconds.
+- Similar-tracks and discover no longer offer files that are gone.
+- `deploy-dev` verifies the container holds the code it sent; `docker cp` merges, and had left a
+  two-day-old `analysis.py` in place.
+
 ## [0.2.0-alpha2] - 2026-08-30
 
 Three weeks on from the 0.2 line's first release. That one's headline — Familiar no longer calls a

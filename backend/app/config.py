@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     # Analysis
     analysis_version: int = 1
 
+    # ffmpeg encodes running at once, for `/stream?format=aac` (ADR-0118 point 5). A setting
+    # rather than only a constant so the first real sync can be tuned without a deploy; the
+    # reasoning behind the default is at `MAX_CONCURRENT_ENCODES` in `app/api/concurrency.py`.
+    transcode_concurrency: int = 4
+
     # MCP (ADR-0043). Comma-separated hosts this server is reached by, e.g.
     # "localhost:4400,myserver:4400". Set it and DNS-rebinding protection is enabled for /mcp;
     # leave it empty and the protection is off, with a warning at startup. The SDK ships no default

@@ -22,6 +22,7 @@ cp .env.example .env
 | `S3_BACKUP_BUCKET` | S3 bucket name for backups | *(none)* |
 | `S3_BACKUP_REGION` | AWS region for S3 bucket | `us-east-1` |
 | `S3_BACKUP_PREFIX` | Key prefix for backup objects in bucket | *(none)* |
+| `TRANSCODE_CONCURRENCY` | ffmpeg encodes running at once for `/stream?format=aac` (ADR-0118). A phone downloading its favourites can ask for hundreds of lossless tracks as AAC; each encode holds one core for ~12 s and is cached after the first. Lower it if the API gets slow during a first sync | `4` |
 
 **Important:** If accessing Familiar from a remote machine (not localhost), update `FRONTEND_URL` to use your server's hostname or IP address:
 ```

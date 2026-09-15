@@ -14,11 +14,53 @@ import asyncio
 import logging
 import os
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 from app.services.metadata import BROWSER_SUPPORTED_CODECS
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class TranscodeTarget:
+    """What ``transcode_to_file`` produces: a codec, a container, and the name to cache it under.
+
+    Two exist. ``FLAC`` is the original purpose of this module — a lossless remux so a browser can
+    play AIFF and odd codecs. ``AAC`` is ADR-0118: a lossy encode so a *phone* can download a
+    lossless track at a quarter of the size. Same machinery, same cache, different arguments.
+    """
+
+    name: str
+    #: Appended to the track id in ``data/transcode_cache``. Both the codec and the container are
+    #: in the AAC name so a later change of either — ``libfdk_aac``, say — lands under a new name
+    #: and re-encodes rather than serving the old file as if it were the new one.
+    cache_suffix: str
+    mime_type: str
+    #: Everything between ``-i <source>`` and the output path.
+    ffmpeg_args: tuple[str, ...]
+
+
+FLAC = TranscodeTarget(
+    name="FLAC",
+    cache_suffix=".flac",
+    mime_type="audio/flac",
+    ffmpeg_args=("-c:a", "flac", "-f", "flac"),
+)
+
+#: 256 kbps AAC in an MP4 container (ADR-0118 point 3).
+#:
+#: ``-vn`` because a Bandcamp FLAC carries its cover as a video stream, and without it ffmpeg
+#: tries to put a JPEG in the MP4. ``+faststart`` moves the ``moov`` atom to the front so the file
+#: opens without a read to the end, which is what makes a Range request on it seekable. The
+#: built-in ``aac`` encoder rather than ``libfdk_aac`` because the image has the one and not the
+#: other; at 256 kbps the difference is not the point.
+AAC = TranscodeTarget(
+    name="AAC",
+    cache_suffix=".aac.m4a",
+    mime_type="audio/mp4",
+    ffmpeg_args=("-vn", "-c:a", "aac", "-b:a", "256k", "-movflags", "+faststart", "-f", "mp4"),
+)
 
 
 async def detect_codec(file_path: Path) -> tuple[str | None, int]:
@@ -69,14 +111,15 @@ async def needs_transcode_check(file_path: Path) -> bool:
     return False
 
 
-async def transcode_to_file(source: Path, dest: Path) -> None:
-    """Transcode audio file to FLAC, writing a complete file to dest.
+async def transcode_to_file(source: Path, dest: Path, target: TranscodeTarget = FLAC) -> None:
+    """Transcode audio file to ``target``, writing a complete file to dest.
 
-    Unlike piping to stdout, this produces proper streaminfo + seektable headers,
-    enabling Content-Length and range requests when served.
+    Unlike piping to stdout, this produces proper headers (FLAC's streaminfo + seektable; MP4's
+    ``moov``), enabling Content-Length and range requests when served.
     """
-    # Write to a temp file first, then rename for atomicity
-    fd, tmp_path = tempfile.mkstemp(suffix=".flac", dir=dest.parent)
+    # Write to a temp file first, then rename for atomicity. The temp name carries the target's
+    # suffix because ffmpeg's muxer for MP4 wants to know what it is writing.
+    fd, tmp_path = tempfile.mkstemp(suffix=target.cache_suffix, dir=dest.parent)
     os.close(fd)
     tmp = Path(tmp_path)
 
@@ -84,13 +127,14 @@ async def transcode_to_file(source: Path, dest: Path) -> None:
         proc = await asyncio.create_subprocess_exec(
             "ffmpeg", "-y",
             "-i", str(source),
-            "-c:a", "flac",
-            "-f", "flac",
+            *target.ffmpeg_args,
             str(tmp),
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE,
         )
         try:
+            # 300 s holds for AAC with margin: measured on the NAS at ~22× realtime on one core
+            # (12.4 s for 4:32), a twenty-minute 24/96 track is about a minute.
             _, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
         except TimeoutError:
             proc.kill()
@@ -107,7 +151,10 @@ async def transcode_to_file(source: Path, dest: Path) -> None:
             raise RuntimeError(f"Transcoded file is empty for {source.name}")
 
         os.replace(tmp, dest)
-        logger.info("Transcoded to FLAC cache: %s → %s (%d bytes)", source.name, dest.name, dest.stat().st_size)
+        logger.info(
+            "Transcoded to %s cache: %s → %s (%d bytes)",
+            target.name, source.name, dest.name, dest.stat().st_size,
+        )
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
