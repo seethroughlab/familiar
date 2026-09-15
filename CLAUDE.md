@@ -215,7 +215,7 @@ Linux" — is required there; **the first pull is ~7 GB**, not the 4 GB three do
 **disabling CLAP costs far more than "semantic search"**, since `TrackAnalysis.embedding` is read by
 eighteen modules including Find Similar and suggested tracks.
 
-**`ADR-0116` lets a host acquire what the discovery tools recommend** (proposed 2026-09-13).
+**`ADR-0116` lets a host acquire what the discovery tools recommend** (accepted 2026-09-15).
 Familiar talks HTTP to a **slskd** the operator already runs — never the Soulseek protocol — and
 only once `soulseek_url` is set. On a server with none configured the four tools are **withheld
 from `tools/list`** by `app/mcp/server.py`'s `withheld_tools()`, which is ADR-0022 point 3 applied
@@ -225,7 +225,7 @@ and `extension` is blank on most files. `find_missing_on_soulseek` checks the li
 network; `download_from_soulseek` lists the folder before enqueueing, so a one-track match downloads
 the album.
 
-**`ADR-0117` closes the loop without a file move** (proposed 2026-09-13, built with 0116). The
+**`ADR-0117` closes the loop without a file move** (accepted 2026-09-15, built with 0116). The
 follow-up 0116 first asked for — "move-and-sync" — would have broken **zero-touch**
 (`docs/ZERO-TOUCH.md`, commit `5fe90d7a`: Familiar never creates, moves or deletes library files).
 Instead slskd's completed folder is bind-mounted **inside** the library at `/music/Inbox:ro`
@@ -239,8 +239,8 @@ its own shell to act on; the move never goes through Familiar. The dead `/import
 mount and `GET /import/scan-path` are gone. If you find yourself adding a `shutil.move` for
 downloads, read 0117's Alternatives first.
 
-**`ADR-0118` makes a phone download AAC when the source is lossless** (proposed 2026-09-14, not
-yet built). `GET /tracks/{id}/stream?format=aac` encodes a lossless file once — 256 kbps, ffmpeg's
+**`ADR-0118` makes a phone download AAC when the source is lossless** (accepted 2026-09-15,
+both halves shipped). `GET /tracks/{id}/stream?format=aac` encodes a lossless file once — 256 kbps, ffmpeg's
 native `aac` (the image has no `libfdk_aac`), cached beside the AIFF remux in `data/transcode_cache`
 — and serves a **lossy source untouched**, with its own MIME type: the parameter means "no larger
 than AAC", never "re-encode". Playback never sends it; only `familiar-apple`'s `DownloadManager`

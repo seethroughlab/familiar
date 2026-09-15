@@ -1,6 +1,6 @@
 # ADR-0117: A Soulseek Download Is a Pending-Review Track, Not a File Move
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-13
 
@@ -9,6 +9,7 @@ first follow-up asked for "a `soulseek_import_path` and a post-download move-and
 records that the move half of that sentence was wrong, and what the loop actually needs.
 
 Implementation:
+- **Accepted 2026-09-15.** Merged with ADR-0116 in #306 (2026-09-14).
 - Built 2026-09-13 on `soulseek-tools`, alongside ADR-0116, ahead of acceptance.
 - Point 2: `docker/docker-compose.inbox.yml` (opt-in) mounts `${SOULSEEK_INBOX_PATH}` at
   `/music/Inbox:ro`; the `/imports-incoming` mount is gone from the production file; `library_import/quick.py` (`GET /import/scan-path`)

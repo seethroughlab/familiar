@@ -1,10 +1,11 @@
 # ADR-0118: A Phone Downloads Lossless Tracks as AAC
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-14
 
 Implementation:
+- **Accepted 2026-09-15**, after one night: the server half deployed to the NAS and merged (#315), the client half on TestFlight 1.5 build 42 (familiar-apple#179), and the reference phone's 1,740 favourites re-synced — 707 encodes, none failed, 6.06 GB of AAC where the FLACs alone were ~24 GB. Point 5's bound of four held at peak load 2.3. The one surprise was not this record's: the session's discretionary scheduling (ADR-0009) paced the sync, and is reversed there. Point 9's follow-up shipped as "Smaller files" (familiar-apple#183).
 - **Written before the code**, in the order ADR-0111 and ADR-0112 established, and the server half
   built the same day on this branch: `?format=aac` on `/tracks/{id}/stream`
   (`routes/tracks/streaming.py`), `TranscodeTarget` with `FLAC` and `AAC` in `services/flac_remux.py`,

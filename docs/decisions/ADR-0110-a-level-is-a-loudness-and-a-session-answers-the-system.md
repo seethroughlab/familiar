@@ -1,6 +1,6 @@
 # ADR-0110: A Level Is a Loudness, and a Session Answers the System
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-06
 
@@ -11,6 +11,11 @@ implementation of it did not go far enough. Re-affirms point 9 rather than rever
 now-playing entry to the primary engine.
 
 Implementation:
+- **Accepted 2026-09-15.** The record merged nine days after it was written (#294); the code it
+  describes has been on TestFlight since build 27 and on `main` since familiar-apple#170. Point 1's
+  loudness matching is what builds 39–43 sound like. Point 2's `AVAudioSession` path is in those
+  builds and has not been reported against; whether it has been *exercised* — an interruption
+  mid-session on a phone — nobody has said, so the note below still stands as the honest state.
 - **Written after the code, which is the fourth time in this feature's life.** ADR-0109's own
   Implementation note records the third and calls doing it again "worth saying plainly rather than
   quietly". Saying it plainly a fourth time: every point below was built and measured on

@@ -1,6 +1,6 @@
 # ADR-0112: The Server Keeps a Ceiling of Its Own
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-07
 
@@ -10,6 +10,7 @@ Apple client and said of this half only that it was "wanted" and "separate work"
 work; it is not optional, and the reason is in the Context below.
 
 Implementation:
+- **Accepted 2026-09-15.** On the NAS since 2026-09-07 and through the first AAC sync (1,760 stream requests, 0 refusals, peak load 2.3). The counters this record's follow-up asked for are reported at `/health/file-responses` (#318); the monit threshold is back at its default.
 - Written before the code, as ADR-0111 was, and built the same day: `backend/app/api/concurrency.py`
   with `FileResponseLimiter` and `FileResponseConcurrencyMiddleware`, installed in `main.py` inside
   `TokenAuthMiddleware`; ten tests in `backend/tests/test_file_response_bound.py`. The client half

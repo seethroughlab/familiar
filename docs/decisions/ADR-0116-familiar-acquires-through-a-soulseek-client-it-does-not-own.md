@@ -1,6 +1,6 @@
 # ADR-0116: Familiar Acquires Through a Soulseek Client It Does Not Own
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-13
 
@@ -8,6 +8,9 @@ Extends [ADR-0043](ADR-0043-the-llm-surface-is-an-mcp-server.md), which made the
 server, and applies [ADR-0022](ADR-0022-chat-is-built-native-and-hidden-without-a-provider.md)
 point 3 — a destination that cannot answer is absent, not present and failing — to a tool set for
 the first time.
+
+Implementation:
+- **Accepted 2026-09-15.** Built and merged with ADR-0117 in #306 (2026-09-14) ahead of acceptance, on the operator's own slskd.
 
 ## Context
 
