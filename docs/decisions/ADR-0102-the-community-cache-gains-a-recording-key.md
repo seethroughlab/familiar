@@ -33,7 +33,11 @@ Implementation:
   unnamed 23,863 resolve by a four-tier rule with no fuzzy matching. **Point 5 is built and
   running as of 2026-09-14** — the job, its flag, its health rows, its script — and at 11:17 UTC,
   8.5 hours in, the library holds 8,642 recording ids against the 1,791 this record was written
-  with, resolving at 89.8%. Coverage after the run is recorded in ADR-0115.
+  with, resolving at 89.8%. **The run completed 2026-09-15 08:48 UTC: 23,371 of 25,954 fingerprinted
+  tracks — 90.0% — carry a recording id, and the corpus reports 23,196 of 25,886 rows named,
+  89.6%.** This record's Context measured 6.8% on 2026-08-31 and called the gap the thing in the
+  way; it is not in the way any more. The full breakdown, and the two defects the run surfaced,
+  are in ADR-0115.
 - **The premise this record was written under has inverted.** It assumed this installation would
   supply the ids. clapback's `ADR-0011` shipped a beets plugin (2026-09-13) whose users tag against
   MusicBrainz as a matter of course; the ids will mostly come from there. What this installation
