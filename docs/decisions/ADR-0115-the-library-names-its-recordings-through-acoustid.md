@@ -30,6 +30,48 @@ Implementation:
   named, 792 refused, **89.8%** — the probes held at scale. Familiar carries **8,642** recording ids
   (from 1,791); the corpus reports **8,458 named rows**. 16,228 still to resolve, about eighteen
   hours. The final number goes here when it exists, not before.
+- **Two defects, both invisible to the health surface as built, both found by looking at the
+  running system rather than the test suite** — the lesson `ADR-0099` records about itself,
+  learned again by a job built under its discipline. **At 12:05 UTC on 2026-09-14 one AcoustID
+  request never answered.** pyacoustid's `lookup` defaults to `timeout=None`; the worker thread
+  held the request for 47 minutes, `max_instances=1` skipped every tick after it, and both health
+  rows read `working` throughout, because a hang is not a failure — point 10's blind spot,
+  exactly. Familiar #312 (deployed 13:08): 30 s on the request, a deadline inside each phase, and
+  `asyncio.wait_for` around the tick recording an overrun as `timeout` against the phase that was
+  active. **From 14:30 the deadline then exposed the second:** resolve phases stopped after 4–6
+  tracks with zero errors. AcoustID answered in 0.3 s from both the NAS and elsewhere, but a burst
+  of MusicBrainz 503s — each retried with a blocking backoff sleep — had filled the loop's default
+  thread pool, and every `to_thread` lookup waited ~45 s for a thread. The async claim phase was
+  unaffected, which is what pointed at the pool. Familiar #313 (deployed 16:17): lookups run on a
+  dedicated single-thread executor. First tick after: 150 considered, 134 named, 91 s. Throughput
+  went 810/h → 350/h → 810/h; the two cost about five hours between them.
+- **Resolution completed 2026-09-15 08:48 UTC; claims drained by 08:49.** Thirty hours from the
+  flag going on, of which five were the defects above. Measured then, from the library:
+
+  | | | |
+  |---|---|---|
+  | active tracks with a fingerprint | **25,954** | |
+  | …checked by the job | 24,200 | |
+  | …named by the job | **21,627** | **89.4%** of checked |
+  | by tier — single recording | 15,202 | 70.3% |
+  | by tier — title | 1,539 | 7.1% |
+  | by tier — release group | 2,236 | 10.3% |
+  | by tier — `sources` | 2,650 | 12.3% |
+  | refused — no title match | 1,057 | 4.4% |
+  | refused — no result | 885 | 3.7% |
+  | refused — fingerprint known, no recording | 571 | 2.4% |
+  | refused — tied / low score | 34 / 26 | 0.2% |
+  | errors | **0** | |
+  | **fingerprinted tracks now carrying a recording id** | **23,371 of 25,954** | **90.0%**, from 6.8% |
+  | claims sent | 23,268 | |
+  | claims the corpus could not take (row never contributed) | 103 | 0.4%, rechecked in 180 days |
+  | **corpus rows named** | **23,196 of 25,886** | **89.6%**, from 6.8% |
+
+  The probes said 86–91% and the run came in at 89.4%, with the tiers in the proportions they
+  predicted — tier 4 a little larger than the sample suggested (12% against 6%), which is the
+  "several title matches, no album match" bucket landing there as point 3 intended. The 2,573
+  refusals keep their candidates; the loosened title rule the Alternatives deferred can now be
+  measured offline against 1,057 real cases without a single further lookup.
 
 Extends [ADR-0102](ADR-0102-the-community-cache-gains-a-recording-key.md), whose point 5 decided
 that this installation backfills recording ids "in the background, bounded", under
