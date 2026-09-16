@@ -97,7 +97,7 @@ async def list_track_ids(
     # ADR-0120 point 1. On the base query, before any path reads it, so the weighted scorer,
     # `ORDER BY random()`, the sort and `start_with` all see the same set — and the scorer
     # normalises against the maximum play count *within* it, which is what a weighting over a
-    # subset should do. A 422 rather than a silent whole-library answer without a profile:
+    # subset should do. A 400 rather than a silent whole-library answer without a profile:
     # a plain shuffle looks exactly like the feature working (ADR-0032 point 5).
     if favorites:
         if not profile:

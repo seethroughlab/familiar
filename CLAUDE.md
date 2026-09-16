@@ -269,7 +269,7 @@ both halves built the same day). ADR-0035 point 4 applied a preset only where a 
 from the whole library; the listener's everyday queue is Favorites, and the preset acted on a
 button they never pressed. `GET /tracks/ids?favorites=true` scopes every path — weighted, random,
 sorted, `start_with` — to the profile's favourites by joining `ProfileFavorite` on the base query
-(422 without a profile: a whole-library answer would look like the feature working). Additive;
+(400 without a profile: a whole-library answer would look like the feature working). Additive;
 contract re-locked at v1. On the Apple side `FamiliarPlayer.queueScope` (`.library` / `.favorites`)
 replaces the boolean, a preset chosen over a scoped queue re-draws it, and turning shuffle on over
 one with a preset set draws weighted after the local permutation. Nothing else is weightable.

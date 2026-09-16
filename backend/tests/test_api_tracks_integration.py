@@ -727,4 +727,4 @@ class TestTrackIdsScopedToFavorites:
         """A whole-library answer to a favourites question would look exactly like the feature
         working (ADR-0032 point 5)."""
         resp = client.get("/api/v1/tracks/ids", params={"favorites": "true"})
-        assert resp.status_code == 422
+        assert resp.status_code == 400, "the API's own validation error, as every other refusal here"

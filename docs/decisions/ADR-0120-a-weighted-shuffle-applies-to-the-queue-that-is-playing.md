@@ -71,7 +71,7 @@ other direction: shuffle *on* looks weighted and is not.
 1. **`GET /api/v1/tracks/ids` takes `favorites=true`.** With a profile, the query is restricted to
    the profile's favourites by joining `ProfileFavorite`; every path — weighted, `shuffle=true`,
    sorted, `start_with` — sees the restriction, because it is applied to the base query before any
-   of them. Without a profile it is a validation error rather than a silent whole-library answer,
+   of them. Without a profile it is a 400 — the API's own validation error — rather than a silent whole-library answer,
    for ADR-0032 point 5's reason: a plain shuffle looks exactly like the feature working. `total`
    counts the scoped set. Additive to the contract; re-locked at v1.
 
@@ -112,7 +112,7 @@ other direction: shuffle *on* looks weighted and is not.
 7. **Execution order:** point 1 with its test → schema dumped, contract re-locked, deployed to the
    NAS → the schema vendored into `familiar-apple` → points 2–4 with their tests → a TestFlight
    build. The server must be up before the client asks, or the client's Favorites re-draw is a
-   422 it treats as "no answer" and does nothing, which is correct and invisible.
+   refusal it treats as "no answer" and does nothing, which is correct and invisible.
 
 ## Alternatives Considered
 
@@ -136,6 +136,6 @@ other direction: shuffle *on* looks weighted and is not.
   playing order agree.
 - One more server request when shuffle is turned on over a scoped queue with a preset set, and
   a second's delay before the weighted order lands under a permutation that is already playing.
-- `/tracks/ids?favorites=true` without a profile is a 422, and a client behind this build never
+- `/tracks/ids?favorites=true` without a profile is a 400, and a client behind this build never
   sends it.
 - The device's queue record grows a field; the server's session snapshot does not.
