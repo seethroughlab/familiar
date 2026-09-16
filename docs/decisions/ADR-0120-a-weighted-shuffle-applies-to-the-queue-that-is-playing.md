@@ -6,6 +6,14 @@ Date: 2026-09-16
 
 Implementation:
 - **Accepted 2026-09-16**, the day it was proposed, as written; both halves built the same day.
+- **Built 2026-09-16.** Server: `favorites=true` on `/tracks/ids` (`routes/tracks/listing.py`),
+  joined on the base query, the weighted path reading its boost column off that join rather than
+  joining twice; four tests; contract re-locked at v1 (familiar#322). Client: `FamiliarPlayer.
+  queueScope` with `.library`/`.favorites` in place of the boolean, set by the Favorites screen for
+  its whole collection and by the library draws; `LibraryView.redrawScopedQueue` with the scope on
+  the request; `ShuffleControl.toggle` asking for the weighted order after turning shuffle on;
+  the device queue record carrying `scope` beside the boolean it supersedes; seven tests
+  (familiar-apple, ADR-0120 branch). Not yet deployed or on TestFlight as this is written.
 
 ## Context
 
@@ -75,11 +83,14 @@ other direction: shuffle *on* looks weighted and is not.
    record beside the field `#189` added, which keeps its name and meaning for records already
    written.
 
-3. **A preset chosen over a scoped queue re-draws it.** `redrawLibraryQueue` becomes
-   `redrawScopedQueue`, and asks `/tracks/ids` with `favorites=true` for a `.favorites` scope and
-   without it for `.library`; the rest is unchanged — `start_with` pins the current track,
-   `widenQueue` swaps what is left, "Off" is a re-draw in the scope's own order shuffled here from
-   the cursor. A queue with no scope is left alone and the preset waits, as point 4 always said.
+3. **A preset chosen over a scoped queue re-draws it, while shuffle is on.** `redrawLibraryQueue`
+   becomes `redrawScopedQueue`, and asks `/tracks/ids` with `favorites=true` for a `.favorites`
+   scope and without it for `.library`; the rest is unchanged — `start_with` pins the current
+   track, `widenQueue` swaps what is left, "Off" is a re-draw in the scope's own order shuffled
+   here from the cursor. With shuffle off the preset is stored and waits for the toggle (point 4):
+   a weighted order playing under an "in order" toggle would be the lie point 2 forbids, from the
+   other side. A queue with no scope is left alone and the preset waits, as ADR-0035 point 4
+   always said.
 
 4. **Turning shuffle on over a scoped queue with a preset set draws weighted, rather than
    permuting.** The toggle turns on immediately and locally, as it always has — the queue is
