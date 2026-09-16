@@ -536,6 +536,12 @@ def run_track_embedding(track_id: str) -> dict[str, Any]:
             if existing_analysis and existing_analysis.acoustid:
                 acoustid_fingerprint = existing_analysis.acoustid
 
+            # The recording id, when the track has one — `ADR-0115` names ~90% of the
+            # library, after analysis, so at first analysis this is usually None and at
+            # re-analysis usually not. Asked first because the hash is exact only within
+            # one fingerprinting path and the id is the same on every path (ADR-0119).
+            recording_mbid = track.musicbrainz_track_id or None
+
             # Try community cache first if enabled
             if app_settings.community_cache_enabled and acoustid_fingerprint:
                 try:
@@ -543,13 +549,16 @@ def run_track_embedding(track_id: str) -> dict[str, Any]:
                         cache_url=app_settings.community_cache_url
                     )
                     cached = asyncio.run(
-                        cache_service.lookup(acoustid_fingerprint)
+                        cache_service.lookup(acoustid_fingerprint, recording_mbid=recording_mbid)
                     )
                     if cached:
                         embedding = cached.embedding
-                        embedding_source = "community_cache"
+                        # `community_cache:recording` or `community_cache:hash`, so the
+                        # next re-analysis can report how often the id found a row the
+                        # hash would have missed, rather than guessing.
+                        embedding_source = f"community_cache:{cached.via}"
                         logger.info(
-                            f"Community cache hit for {track.title} "
+                            f"Community cache hit for {track.title} via {cached.via} "
                             f"(contributed by {cached.contributor_count} users)"
                         )
                 except Exception as e:
@@ -585,6 +594,9 @@ def run_track_embedding(track_id: str) -> dict[str, Any]:
                                 # installed embedder is provably the thing that
                                 # produced it. Phase 2 of clapback's `ADR-0006`.
                                 pipeline_version=embedding_pipeline_version(),
+                                # A claim in the same request when the track is already
+                                # named (ADR-0119 point 3); the backfill claims the rest.
+                                recording_mbid=recording_mbid,
                             )
                         )
                     except Exception as e:

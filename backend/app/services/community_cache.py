@@ -75,6 +75,9 @@ class CachedEmbedding:
     #: What produced it. None from a corpus predating clapback's `ADR-0006`; every
     #: row in a current one declares it.
     pipeline_version: str | None = None
+    #: Which request answered: "hash" (our own key) or "recording" (the MusicBrainz
+    #: id, which may have found another fingerprinting path's row — ADR-0119).
+    via: str = "hash"
 
 
 @dataclass
@@ -331,11 +334,29 @@ class CommunityCacheService:
         analysis_version: int | None = None,
         pipeline_version: str | None = None,
         raise_on_error: bool = False,
+        recording_mbid: str | None = None,
     ) -> CachedEmbedding | None:
-        """Look up an embedding from the community cache.
+        """Look up an embedding from the community cache — by recording first, if
+        the caller holds an id, and by fingerprint hash otherwise (ADR-0119).
+
+        **The hash is exact within one fingerprinting path and may differ across
+        two.** clapback's `ADR-0019`, measured over 56 FLACs: the `fpcalc` binary
+        (this installation) and pyacoustid's library (beets) return the same
+        fingerprint for 24 of them. So a miss by hash does not mean the corpus
+        lacks the recording — it may hold it under another client's key — and the
+        MusicBrainz recording id, which is the same on every path, is asked first.
+        `GET /v1/recordings/{mbid}` returns every row claimed under the id, ordered
+        by how many clients claimed it and then by contributors; the first is taken,
+        as `clapback-client` takes it. A 404 there falls through to the hash. An
+        unanswered request there does **not** — see `raise_on_error`, whose rule is
+        the same on both requests.
 
         Args:
             acoustid_fingerprint: The raw AcoustID fingerprint string
+            recording_mbid: The MusicBrainz *recording* id, if the track has one
+                (`Track.musicbrainz_track_id`, named by `ADR-0115`). Optional, and
+                absent for most tracks at first analysis; present for ~90% at
+                re-analysis, which is where the cross-path hit lives.
             analysis_version: Version to match (defaults to current EMBEDDING_VERSION)
             pipeline_version: Only accept a vector from this pipeline. **This is the
                 parameter that makes the answer usable**, since clapback's `ADR-0006`
@@ -360,7 +381,9 @@ class CommunityCacheService:
                 clapback's `ADR-0008` is built on.
 
         Returns:
-            CachedEmbedding if found, None otherwise
+            CachedEmbedding if found, None otherwise. `fingerprint_hash` on it is
+            the *row's* key, which after a recording hit may be another path's, not
+            ours; `via` says which request answered.
 
         Raises:
             CommunityCacheUnavailable: only when `raise_on_error` is set and the
@@ -376,6 +399,21 @@ class CommunityCacheService:
             pipeline_version = embedding_pipeline_version()
 
         fp_hash = self.hash_fingerprint(acoustid_fingerprint)
+
+        if recording_mbid:
+            answered, by_recording = await self._lookup_by_recording(
+                recording_mbid, pipeline_version, analysis_version, raise_on_error
+            )
+            if by_recording is not None:
+                return by_recording
+            # **Unanswered is not a miss, and does not fall through** (ADR-0119 point
+            # 4). Falling through would turn "the server did not answer" into "no row
+            # under our key", and on the contribute path into a duplicate submission —
+            # the manufactured agreement clapback's `ADR-0008` exists to avoid.
+            if not answered:
+                return None
+            # A 404: nothing claimed under the id, or nothing from our pipeline. The
+            # hash may still hit — our own contribution, before the backfill named it.
 
         params: dict[str, Any] = {
             "analysis_version": analysis_version,
@@ -416,7 +454,99 @@ class CommunityCacheService:
 
         try:
             data = response.json()
+        except Exception as e:
+            logger.warning(f"Community cache lookup failed to parse response: {e}")
+            return None
+        hit = self._parse_row(data, fp_hash, pipeline_version, analysis_version, via="hash")
+        if hit is not None:
+            logger.info(
+                f"Community cache hit for {fp_hash[:16]}... "
+                f"(contributed by {hit.contributor_count} users)"
+            )
+        return hit
 
+    async def _lookup_by_recording(
+        self,
+        recording_mbid: str,
+        pipeline_version: str | None,
+        analysis_version: int,
+        raise_on_error: bool,
+    ) -> tuple[bool, CachedEmbedding | None]:
+        """`GET /v1/recordings/{mbid}` — the rows any client has claimed under the id.
+
+        The first row is the answer: the server orders by claims, then contributors,
+        then age, and `clapback-client` takes the same one. `pipeline_version` is a
+        server-side filter here as on the hash request, and is checked on the way
+        back for the same reason.
+
+        Returns `(answered, hit)`. `answered` is False only when the request could
+        not be completed — the caller must not read that as a miss.
+        """
+        params: dict[str, Any] = {"type": "musicbrainz_recording"}
+        if pipeline_version:
+            params["pipeline_version"] = pipeline_version
+
+        response = await self._request_with_retry(
+            "GET",
+            f"{self.cache_url}/v1/recordings/{recording_mbid}",
+            params=params,
+        )
+
+        if response is None:
+            if raise_on_error:
+                raise CommunityCacheUnavailable(
+                    f"no answer for recording {recording_mbid[:8]}… — rate-limited, "
+                    f"timed out or unreachable. Not the same as absent."
+                )
+            return False, None
+        if response.status_code == 404:
+            logger.debug("Corpus holds nothing claimed under %s…", recording_mbid[:8])
+            return True, None
+        if response.status_code != 200:
+            logger.warning(f"Community cache recording lookup error: HTTP {response.status_code}")
+            if raise_on_error:
+                raise CommunityCacheUnavailable(
+                    f"HTTP {response.status_code} for recording {recording_mbid[:8]}… — not absent."
+                )
+            return False, None
+
+        try:
+            rows = response.json().get("embeddings") or []
+        except Exception as e:
+            logger.warning(f"Community cache recording lookup failed to parse response: {e}")
+            return False, None
+        if not rows:
+            return True, None
+        row = rows[0]
+        # The row's own key, which is whichever path keyed it — kept so a caller can
+        # tell a cross-path hit from our own row coming back by another door.
+        hit = self._parse_row(
+            row, str(row.get("fingerprint_hash", "")), pipeline_version, analysis_version,
+            via="recording",
+        )
+        if hit is not None:
+            logger.info(
+                "Community cache hit by recording %s… (row %s…, claimed by %s, contributed by %s)",
+                recording_mbid[:8],
+                hit.fingerprint_hash[:16],
+                row.get("recording_claims", "?"),
+                hit.contributor_count,
+            )
+        return True, hit
+
+    @staticmethod
+    def _parse_row(
+        data: dict[str, Any],
+        fingerprint_hash: str,
+        pipeline_version: str | None,
+        analysis_version: int,
+        via: str,
+    ) -> CachedEmbedding | None:
+        """One row into a `CachedEmbedding`, or None if it is not one we can use.
+
+        Shared by the hash and recording requests, which return the same row shape.
+        """
+        try:
             # Validate embedding dimension
             embedding = data.get("embedding", [])
             if len(embedding) != EMBEDDING_DIM:
@@ -441,18 +571,14 @@ class CommunityCacheService:
                 )
                 return None
 
-            logger.info(
-                f"Community cache hit for {fp_hash[:16]}... "
-                f"(contributed by {data.get('contributor_count', 1)} users)"
-            )
-
             return CachedEmbedding(
-                fingerprint_hash=fp_hash,
+                fingerprint_hash=fingerprint_hash,
                 embedding=embedding,
                 analysis_version=data.get("analysis_version", analysis_version),
                 clap_model_version=data.get("clap_model_version", CLAP_MODEL_VERSION),
                 contributor_count=data.get("contributor_count", 1),
                 pipeline_version=returned,
+                via=via,
             )
         except Exception as e:
             logger.warning(f"Community cache lookup failed to parse response: {e}")
@@ -464,6 +590,7 @@ class CommunityCacheService:
         embedding: list[float],
         analysis_version: int | None = None,
         pipeline_version: str | None = None,
+        recording_mbid: str | None = None,
     ) -> bool:
         """Contribute an embedding to the community cache.
 
@@ -480,6 +607,13 @@ class CommunityCacheService:
                 different one, which is precisely the false assertion clapback's
                 `ADR-0006` exists to prevent. A caller that did not just compute
                 the vector passes nothing, and the corpus records "unknown".
+            recording_mbid: The MusicBrainz recording id, if the track has one. Sent
+                beside the hash it is a claim in the same request (clapback's
+                `ADR-0012`), and what `ADR-0019` point 2's per-recording agreement
+                joins on — so the comparison with another path's row for the same
+                recording runs at write time, not after `ADR-0115`'s backfill next
+                claims it. Absent for most tracks at first analysis; the backfill's
+                `claim_recording_outcome` still covers those (ADR-0119 point 3).
 
         Returns:
             True if contribution was accepted, False otherwise
@@ -523,6 +657,10 @@ class CommunityCacheService:
         # nothing here breaks before then.
         if pipeline_version:
             payload["pipeline_version"] = pipeline_version
+        # A claim, so only our own: never inferred, never copied from a row the corpus
+        # returned. Omitted rather than null for the same reason `client_id` is.
+        if recording_mbid:
+            payload["recording_mbid"] = recording_mbid
 
         response = await self._request_with_retry(
             "POST",
