@@ -251,6 +251,19 @@ core** — so encodes run under their own semaphore of four, separate from the f
 ceiling, and the first sync after it ships is the thing to watch. Plan in
 `familiar-apple/PLAN-lossy-downloads.md`.
 
+**`ADR-0119` asks the corpus by recording before it asks by hash** (accepted 2026-09-16, built
+the same day). clapback's `ADR-0019` measured the corpus key as a function of the fingerprinting
+path — `fpcalc` and pyacoustid agree on 24 of 56 FLACs — so a miss by hash does not mean the
+corpus lacks the recording. `CommunityCacheService.lookup(…, recording_mbid=)` asks
+`GET /v1/recordings/{mbid}` first and the hash only on a 404; **an unanswered recording request
+does not fall through** (the `ADR-0008` duplicate-agreement trap, point 4). `contribute` sends
+`recording_mbid` when held, a claim in the same request. The pipeline passes
+`track.musicbrainz_track_id` — present for ~90% at re-analysis, almost never at first analysis —
+and writes `embedding_source` as `community_cache:recording` or `community_cache:hash`, so the
+next re-analysis reports the split. Batch calls, the AcoustID track id and adopting
+`clapback-client` are named and left. `docker/Dockerfile` no longer installs `git`: the
+`git+` dependency it was for has been on PyPI since 2026-09-04.
+
 ## Key Directories
 
 ```

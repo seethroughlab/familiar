@@ -1,13 +1,31 @@
 # ADR-0119: The Corpus Is Asked by Recording Before It Is Asked by Hash
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-16
 
 Implementation:
-- Nothing yet. Written after reading clapback at `d07598e` (2026-09-16) beside this repository at
-  `bad07ca`, not from memory — clapback's `CLAUDE.md` asks for exactly that, and this record's
-  Context is the audit it asked for.
+- **Accepted 2026-09-16**, the day it was proposed, as written. Written after reading clapback at
+  `d07598e` beside this repository at `bad07ca`, not from memory — clapback's `CLAUDE.md` asks for
+  exactly that, and this record's Context is the audit it asked for.
+- **Built 2026-09-16, points 1–5, in point 7's order.** Point 5 first: `git` and its three lines
+  out of the builder stage. Point 1: `CommunityCacheService.lookup` takes `recording_mbid=`;
+  `_lookup_by_recording` asks `GET /v1/recordings/{mbid}?type=musicbrainz_recording` and returns
+  `(answered, hit)`, because point 4 needs the two kinds of nothing told apart — a 404 falls
+  through to the hash, an unanswered request stops. The row parser is shared by both requests
+  (`_parse_row`), which is where the pipeline check already lived; `CachedEmbedding.via` says
+  which door answered. Point 2: `analysis_pipeline.py` passes `track.musicbrainz_track_id` and
+  writes `embedding_source` as `community_cache:recording` or `community_cache:hash`. Point 3:
+  `contribute(recording_mbid=)`, omitted rather than null when not held, and the pipeline passes
+  it on the same branch that declares the pipeline. Sixteen tests in
+  `tests/test_community_cache_lookup_by_recording.py`, offline, over the server's response
+  shapes: the recording request is first and names its claim type and pipeline; the hash runs
+  only after a 404 or an empty list; an unanswered or 5xx recording request makes **no** hash
+  request and raises when asked; a cross-path hit keeps the row's own key; the contribution
+  carries the id; and the pipeline's two call sites pass it. 1,386 pass locally with the
+  database-bound fixtures erroring for want of a Postgres, as before.
+- **Not yet deployed.** The number this record owes — how often the id finds a row the hash
+  would have missed — exists only after the next re-analysis, and goes here then.
 
 ## Context
 
