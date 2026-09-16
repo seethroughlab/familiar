@@ -68,6 +68,14 @@ Implementation:
   [ADR-0032](ADR-0032-the-apple-clients-get-a-home-destination.md) point 4 are absent until that ADR
   lands, as it says.
 
+**Amended 2026-09-16 by [ADR-0120](ADR-0120-a-weighted-shuffle-applies-to-the-queue-that-is-playing.md):**
+point 4's "and nowhere else" no longer holds. A preset now applies to the queue that is playing
+when that queue is a set the server can name — the whole library, or the profile's favourites —
+re-drawing what is left under it with the current track kept, and turning shuffle on over such a
+queue draws weighted rather than permuting. Points 1–3 and 5–7 stand. The reason is point 2's own:
+a preset that shaped only the next draw was, on the queue a listener actually keeps, a control that
+appears to work and does nothing.
+
 ## Context
 
 The web app has four named shuffle modes and the Apple clients have none. Unusually for this set,

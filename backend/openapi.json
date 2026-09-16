@@ -30702,6 +30702,18 @@
             }
           },
           {
+            "description": "Only the profile's favourites. Applies to every path \u2014 weighted, shuffled, sorted \u2014 so a weighted shuffle can be drawn over Favorites (ADR-0120). Needs a profile.",
+            "in": "query",
+            "name": "favorites",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Only the profile's favourites. Applies to every path \u2014 weighted, shuffled, sorted \u2014 so a weighted shuffle can be drawn over Favorites (ADR-0120). Needs a profile.",
+              "title": "Favorites",
+              "type": "boolean"
+            }
+          },
+          {
             "in": "query",
             "name": "search",
             "required": false,
