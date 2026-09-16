@@ -661,3 +661,70 @@ class TestTrackList:
     async def test_get_track_not_found(self, async_db, client):
         resp = client.get(f"/api/v1/tracks/{uuid4()}")
         assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# ADR-0120: a weighted shuffle drawn over Favorites
+# ---------------------------------------------------------------------------
+
+
+class TestTrackIdsScopedToFavorites:
+    """`favorites=true` restricts every path of `/tracks/ids` to the profile's favourites, so a
+    weighted shuffle can be drawn over the queue a listener actually keeps (ADR-0120 point 1)."""
+
+    async def _favourites(self, async_db):
+        from app.db.models import ProfileFavorite
+        from tests.factories import insert_test_profile
+
+        profile = await insert_test_profile(async_db, name="Favourer")
+        loved = [await insert_test_track(async_db, title=f"Loved {i}") for i in range(3)]
+        unloved = [await insert_test_track(async_db, title=f"Unloved {i}") for i in range(3)]
+        for track in loved:
+            async_db.add(ProfileFavorite(profile_id=profile.id, track_id=track.id))
+        await async_db.commit()
+        return profile, loved, unloved
+
+    @pytest.mark.asyncio
+    async def test_the_plain_list_is_only_favourites(self, async_db, client):
+        profile, loved, unloved = await self._favourites(async_db)
+        resp = client.get(
+            "/api/v1/tracks/ids", params={"favorites": "true"},
+            headers={"X-Profile-ID": str(profile.id)},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert set(data["ids"]) == {str(t.id) for t in loved}
+        assert data["total"] == 3, "total counts the scoped set"
+
+    @pytest.mark.asyncio
+    async def test_a_weighted_draw_is_only_favourites_and_pins_start_with(self, async_db, client):
+        """The weighted path joins the favourites table for its boost column; scoped, it must not
+        join it twice, and the scorer runs over the favourites alone."""
+        profile, loved, _ = await self._favourites(async_db)
+        first = str(loved[1].id)
+        resp = client.get(
+            "/api/v1/tracks/ids",
+            params={"favorites": "true", "shuffle_preset": "comfort_zone", "start_with": first},
+            headers={"X-Profile-ID": str(profile.id)},
+        )
+        assert resp.status_code == 200, resp.text
+        ids = resp.json()["ids"]
+        assert set(ids) == {str(t.id) for t in loved}
+        assert ids[0] == first
+
+    @pytest.mark.asyncio
+    async def test_a_random_shuffle_is_only_favourites(self, async_db, client):
+        profile, loved, _ = await self._favourites(async_db)
+        resp = client.get(
+            "/api/v1/tracks/ids", params={"favorites": "true", "shuffle": "true"},
+            headers={"X-Profile-ID": str(profile.id)},
+        )
+        assert resp.status_code == 200
+        assert set(resp.json()["ids"]) == {str(t.id) for t in loved}
+
+    @pytest.mark.asyncio
+    async def test_without_a_profile_it_is_refused_not_widened(self, async_db, client):
+        """A whole-library answer to a favourites question would look exactly like the feature
+        working (ADR-0032 point 5)."""
+        resp = client.get("/api/v1/tracks/ids", params={"favorites": "true"})
+        assert resp.status_code == 422

@@ -52,6 +52,13 @@ async def list_track_ids(
     shuffle: bool = Query(False, description="Randomize the order of IDs"),
     shuffle_preset: str | None = Query(None, description="Weighted shuffle preset name"),
     start_with: str | None = Query(None, description="Track ID to place first in results"),
+    favorites: bool = Query(
+        False,
+        description=(
+            "Only the profile's favourites. Applies to every path — weighted, shuffled, sorted — "
+            "so a weighted shuffle can be drawn over Favorites (ADR-0120). Needs a profile."
+        ),
+    ),
     search: str | None = None,
     artist: str | None = None,
     album: str | None = None,
@@ -86,6 +93,19 @@ async def list_track_ids(
     has_feature_filter = has_feature_filter or has_fx or has_fy
 
     query = select(Track.id).where(Track.status == TrackStatus.ACTIVE)
+
+    # ADR-0120 point 1. On the base query, before any path reads it, so the weighted scorer,
+    # `ORDER BY random()`, the sort and `start_with` all see the same set — and the scorer
+    # normalises against the maximum play count *within* it, which is what a weighting over a
+    # subset should do. A 422 rather than a silent whole-library answer without a profile:
+    # a plain shuffle looks exactly like the feature working (ADR-0032 point 5).
+    if favorites:
+        if not profile:
+            raise ValidationError("favorites=true needs a profile")
+        query = query.join(
+            ProfileFavorite,
+            (ProfileFavorite.track_id == Track.id) & (ProfileFavorite.profile_id == profile.id),
+        )
 
     if search:
         search_filter = f"%{search}%"
@@ -137,24 +157,24 @@ async def list_track_ids(
     preset = SHUFFLE_PRESETS.get(shuffle_preset) if shuffle_preset else None
     if preset and profile:
         # Fetch IDs with play history and favorite status
-        weighted_query = (
-            query.add_columns(
-                Track.artist,
-                Track.created_at,
-                ProfilePlayHistory.play_count,
-                ProfilePlayHistory.last_played_at,
-                ProfileFavorite.favorited_at,
-            )
-            .outerjoin(
-                ProfilePlayHistory,
-                (ProfilePlayHistory.track_id == Track.id)
-                & (ProfilePlayHistory.profile_id == profile.id),
-            )
-            .outerjoin(
+        weighted_query = query.add_columns(
+            Track.artist,
+            Track.created_at,
+            ProfilePlayHistory.play_count,
+            ProfilePlayHistory.last_played_at,
+            ProfileFavorite.favorited_at,
+        ).outerjoin(
+            ProfilePlayHistory,
+            (ProfilePlayHistory.track_id == Track.id)
+            & (ProfilePlayHistory.profile_id == profile.id),
+        )
+        # Already joined as the scope above, and Postgres refuses the same table twice unaliased;
+        # the column reads off that join, and every row in it is a favourite.
+        if not favorites:
+            weighted_query = weighted_query.outerjoin(
                 ProfileFavorite,
                 (ProfileFavorite.track_id == Track.id) & (ProfileFavorite.profile_id == profile.id),
             )
-        )
         result = await db.execute(weighted_query)
         rows = result.all()
 

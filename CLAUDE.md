@@ -264,6 +264,16 @@ next re-analysis reports the split. Batch calls, the AcoustID track id and adopt
 `clapback-client` are named and left. `docker/Dockerfile` no longer installs `git`: the
 `git+` dependency it was for has been on PyPI since 2026-09-04.
 
+**`ADR-0120` makes a weighted shuffle apply to the queue that is playing** (accepted 2026-09-16,
+both halves built the same day). ADR-0035 point 4 applied a preset only where a queue was drawn
+from the whole library; the listener's everyday queue is Favorites, and the preset acted on a
+button they never pressed. `GET /tracks/ids?favorites=true` scopes every path — weighted, random,
+sorted, `start_with` — to the profile's favourites by joining `ProfileFavorite` on the base query
+(422 without a profile: a whole-library answer would look like the feature working). Additive;
+contract re-locked at v1. On the Apple side `FamiliarPlayer.queueScope` (`.library` / `.favorites`)
+replaces the boolean, a preset chosen over a scoped queue re-draws it, and turning shuffle on over
+one with a preset set draws weighted after the local permutation. Nothing else is weightable.
+
 ## Key Directories
 
 ```
