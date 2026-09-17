@@ -274,6 +274,17 @@ contract re-locked at v1. On the Apple side `FamiliarPlayer.queueScope` (`.libra
 replaces the boolean, a preset chosen over a scoped queue re-draws it, and turning shuffle on over
 one with a preset set draws weighted after the local permutation. Nothing else is weightable.
 
+**`ADR-0121` makes a batch of downloads a Live Activity** (accepted 2026-09-17, client only).
+From the lock screen a favourites sync that is working and one that is wedged looked identical.
+`familiar-apple` gains a `DownloadActivityWidget` extension: one card per batch — "Downloading
+104 of 1478", the moving track, "Transcode · AAC" or "Direct · original files" (ADR-0118's
+preference, not each file's fate), failures, a ring with a stop button. Driven from `Downloads`'
+coalesced phase stream, never the raw 34/s one; counts are the card's own (what was seen in
+flight), not `DownloadManager.states`. A drained queue ends it "Finished" for five minutes, or
+"Stopped at 62 of 98 — open Familiar to continue" when the process that held the queue is gone.
+The stop button is a `LiveActivityIntent` reaching `DownloadManager.cancelAll()` through a hook
+`AppDelegate` installs on every launch — the first control that discards a whole queue.
+
 ## Key Directories
 
 ```
