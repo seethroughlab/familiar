@@ -295,7 +295,7 @@ again differs from the numbering:
 | # | ADR | Why here |
 |---|---|---|
 | 1 | `0128` | **Built 2026-09-17.** `TEST_DATABASE_URL`, a `_test` suffix with no second marker, CI renamed to `familiar_test`. Its guard runs in the rootdir `conftest.py` until `0130` gives it a factory. |
-| 2 | `0130` | `create_app(settings, services)`; the first domain moved is **Soulseek**, chosen because it touches every boundary the record names and has the fewest callers. Library sync and analysis go last. |
+| 2 | `0130` | **Soulseek slice built 2026-09-18.** `create_app(settings, services)` exists; `app/container.py` holds one gateway; the route, MCP executor and background poll are handed it. The pattern for the next domain is the ADR's Implementation block. Library sync and analysis go last; `scanner.py:126` still reads env at import. |
 | 3 | `0129` | `@hey-api/openapi-ts`, pinned; the first slice is the one whose interceptor greps English (`base.ts:197`). Before `0126` so the new screens consume feature adapters, not `api/*.ts`. |
 | 4 | `0126` | Overview / Library / Analysis / Server — four, after a panel-level audit found the first draft's three split providers, the analysis pipeline and backup across groups, and placed two screens that don't exist (pending review; editable library paths). Its gate — a mocked Overview reviewed against the idle NAS and a failing server, desktop and 400px — was cleared the same day. Old router paths redirect — not an `0079` alias. |
 | 5 | `0125` | `@familiar/visualizer-sdk`, build-time only. Independent of everything above; the dependency-free path is already proven by `packages/visualizers/examples/`. |

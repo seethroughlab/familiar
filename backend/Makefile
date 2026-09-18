@@ -75,11 +75,12 @@ lint:
 	uv run ruff check .
 	uv run mypy app
 
-# Run the custom checks CI enforces (schema, migrations, profile contracts)
+# Run the custom checks CI enforces (schema, migrations, profile contracts, import boundaries)
 lint-contracts:
 	uv run python scripts/lint_openapi.py
 	uv run python scripts/lint_migrations.py
 	uv run python scripts/lint_profile_contracts.py
+	uv run python scripts/lint_boundaries.py
 
 # Write backend/openapi.json — the artifact familiar-apple generates its Swift client from.
 # Regenerate and commit whenever the API changes; CI fails if it is stale.

@@ -297,6 +297,11 @@ jobs:
       - name: Lint profile contracts
         run: uv run python scripts/lint_profile_contracts.py
 
+      # ADR-0130 point 9: operations and the container are HTTP-free, services do not reach into
+      # routes, nothing imports the assembled app. Pure AST; needs no database.
+      - name: Lint import boundaries
+        run: uv run python scripts/lint_boundaries.py
+
       # Imports app.main, so it needs `uv sync --extra dev` above — it cannot move to
       # the migration-lint job, which deliberately runs stdlib-only scripts. This job
       # also runs on a bare checkout with no backend/static/, which matters: a built

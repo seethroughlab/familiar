@@ -31,13 +31,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from mcp.server.stdio import stdio_server  # noqa: E402
 
+from app.config import settings  # noqa: E402
+from app.container import build_services  # noqa: E402
 from app.mcp.server import PROFILE_ENV, build_server  # noqa: E402
 
 
 async def main() -> None:
     bound = os.environ.get(PROFILE_ENV)
     print(f"[familiar-mcp] stdio, profile={bound or 'sole profile'}", file=sys.stderr)
-    server = build_server()
+    # The same container the HTTP mount gets (ADR-0130): the operator's slskd, if configured.
+    server = build_server(build_services(settings))
     async with stdio_server() as (stdin, stdout):
         await server.run(stdin, stdout, server.create_initialization_options())
 

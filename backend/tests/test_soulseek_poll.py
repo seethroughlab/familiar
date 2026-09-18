@@ -12,17 +12,20 @@ What is pinned is the rule, because the rule is where the two obvious implementa
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.container import Services
 from app.services.background.soulseek import (
     SoulseekMixin,
     folders_to_trigger,
     settled_key,
 )
-from app.services.soulseek import SoulseekService
+from app.services.soulseek import SoulseekNotConfigured, SoulseekService
 
 
 def folder(
@@ -155,10 +158,39 @@ class TestTheTriggerRule:
         assert settled_key("a", "x\\y") == settled_key("a", "x\\y")
 
 
-class FakeManager(SoulseekMixin):
-    """Just enough BackgroundManager for the mixin: redis, sync state, run_sync."""
+class StubGateway:
+    """A `SoulseekGateway` double: the boundary the poll is handed (ADR-0130 point 7).
 
-    def __init__(self, transfers: list[dict[str, Any]], *, running: bool = False) -> None:
+    `client()` yields whatever service the test built — a MagicMock with an async `downloads`
+    — so these tests stay about *when a settled folder triggers a sync*, not about slskd's wire.
+    """
+
+    def __init__(self, service: Any | None) -> None:
+        self._service = service
+        self.url = "http://slskd:5030" if service is not None else None
+
+    @property
+    def configured(self) -> bool:
+        return self._service is not None
+
+    @asynccontextmanager
+    async def client(self, *, timeout: float = 10.0) -> AsyncIterator[Any]:
+        if self._service is None:
+            raise SoulseekNotConfigured("not configured")
+        yield self._service
+
+
+class FakeManager(SoulseekMixin):
+    """Just enough BackgroundManager for the mixin: redis, sync state, run_sync, services."""
+
+    def __init__(
+        self,
+        transfers: list[dict[str, Any]],
+        *,
+        running: bool = False,
+        slskd: Any | None = None,
+    ) -> None:
+        self.services = Services(soulseek=StubGateway(slskd))  # type: ignore[arg-type]
         self.store: dict[str, str] = {}
         self.redis = MagicMock()
         self.redis.get.side_effect = lambda k: self.store.get(k)
@@ -172,38 +204,27 @@ class FakeManager(SoulseekMixin):
 
 
 @pytest.fixture
-def configured(monkeypatch):
-    """A configured slskd whose `downloads()` returns whatever the manager was built with."""
-    monkeypatch.setattr(
-        "app.services.app_settings.AppSettingsService.has_soulseek_configured", lambda self: True
-    )
+def configured():
+    """A configured slskd whose `downloads()` returns whatever the test sets."""
+    return MagicMock()
 
-    svc = MagicMock()
-    svc.close = AsyncMock()
-    monkeypatch.setattr(SoulseekService, "from_settings", classmethod(lambda cls: svc))
-    return svc
+
+def manager(transfers: list[dict[str, Any]], configured: Any, *, running: bool = False) -> FakeManager:
+    m = FakeManager(transfers, running=running, slskd=configured)
+    configured.downloads = AsyncMock(return_value=transfers)
+    return m
 
 
 class TestThePoll:
     @pytest.mark.asyncio
-    async def test_unconfigured_does_nothing(self, monkeypatch):
-        monkeypatch.setattr(
-            "app.services.app_settings.AppSettingsService.has_soulseek_configured",
-            lambda self: False,
-        )
-        called = []
-        monkeypatch.setattr(
-            SoulseekService, "from_settings", classmethod(lambda cls: called.append(1))
-        )
-        m = FakeManager([])
+    async def test_unconfigured_does_nothing(self):
+        m = FakeManager([], slskd=None)
         await m._soulseek_poll()
-        assert called == []
         m.run_sync.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_a_settled_folder_starts_a_sync_and_is_remembered(self, configured):
-        m = FakeManager([folder("u", "d", completed=11)])
-        configured.downloads = AsyncMock(return_value=m._transfers)
+        m = manager([folder("u", "d", completed=11)], configured)
         await m._soulseek_poll()
         m.run_sync.assert_awaited_once()
         assert m.store[settled_key("u", "d")] == "11"
@@ -211,24 +232,21 @@ class TestThePoll:
 
     @pytest.mark.asyncio
     async def test_the_next_poll_does_not_sync_again(self, configured):
-        m = FakeManager([folder("u", "d", completed=11)])
-        configured.downloads = AsyncMock(return_value=m._transfers)
+        m = manager([folder("u", "d", completed=11)], configured)
         await m._soulseek_poll()
         await m._soulseek_poll()
         assert m.run_sync.await_count == 1
 
     @pytest.mark.asyncio
     async def test_a_running_sync_defers_without_marking(self, configured):
-        m = FakeManager([folder("u", "d", completed=11)], running=True)
-        configured.downloads = AsyncMock(return_value=m._transfers)
+        m = manager([folder("u", "d", completed=11)], configured, running=True)
         await m._soulseek_poll()
         m.run_sync.assert_not_called()
         assert settled_key("u", "d") not in m.store, "must trigger on a later poll"
 
     @pytest.mark.asyncio
     async def test_an_in_flight_folder_waits(self, configured):
-        m = FakeManager([folder("u", "d", completed=3, queued=8)])
-        configured.downloads = AsyncMock(return_value=m._transfers)
+        m = manager([folder("u", "d", completed=3, queued=8)], configured)
         await m._soulseek_poll()
         m.run_sync.assert_not_called()
 
@@ -236,7 +254,7 @@ class TestThePoll:
     async def test_an_unreachable_slskd_is_quiet(self, configured, caplog):
         from app.services.soulseek import SoulseekUnreachable
 
-        m = FakeManager([])
+        m = manager([], configured)
         configured.downloads = AsyncMock(side_effect=SoulseekUnreachable("down"))
         with caplog.at_level("WARNING"):
             await m._soulseek_poll()

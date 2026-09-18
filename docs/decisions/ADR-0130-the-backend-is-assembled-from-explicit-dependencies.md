@@ -4,6 +4,43 @@ Status: accepted
 
 Date: 2026-09-17
 
+Implementation:
+- **2026-09-18, `familiar` — the Soulseek slice**, the first domain as the follow-up asked. What
+  exists now, by point:
+  1. `create_app(settings, services)` in `app/main.py`. The block that ran at import — construct
+     the app, mount MCP, add the middleware in the one order that works, register handlers and
+     routes — is that function's body, comments intact; `app = create_app(app_config,
+     build_services(app_config))` at the bottom is the production call. `serve_embed`,
+     `spa_fallback`, `STATIC_DIR` and `NON_SPA_PREFIXES` stay at module scope because tests
+     import them. `app.main` itself still assembles on import; what changed is that a test can
+     assemble a second one with its own container and reach every route.
+  2. `app/container.py`: `Services`, frozen, with one field — `soulseek: SoulseekGateway` —
+     closed from the lifespan. `Services.unconfigured()` is the named null capability: what a
+     `ToolExecutor` or `BackgroundManager` gets when built without one. `build_services` is the
+     composition root and the one place that reaches `get_app_settings_service()`.
+  3. `GET /soulseek/status` receives `ProbeSoulseekStatus` through `app/api/deps.py` and
+     serialises its answer; `tests/test_api_settings.py` overrides `get_services` on the real app
+     instead of patching module attributes.
+  4. `app/operations/soulseek.py`: `ProbeSoulseekStatus(gateway)`, returning a `SoulseekProbe`.
+  5. `SoulseekConfiguration` (a Protocol: two strings, read per call so the panel's changes take
+     effect without a restart) and `SoulseekGateway` in `app/services/soulseek.py`;
+     `SoulseekService.from_settings()` is gone.
+  6. `MUSIC_LIBRARY_PATH` is `Settings.music_library_path`; the module constant is derived from
+     `settings`. **This ADR's Context under-counted:** `app/services/scanner.py:126` reads
+     `SCANNER_THREADS` at import too. It moves with library sync, the domain scheduled last.
+  7. `BackgroundManager.startup(services=…)` hands the container to the polls; `_soulseek_poll`
+     asks `self.services.soulseek`, not a settings singleton.
+  8. No new module-global. The MCP server receives the container through the SDK's own
+     `lifespan_context` (`build_server(services)`), which is how `withheld_tools(services)` and the
+     per-call `ToolExecutor(…, services=)` get it; `scripts/mcp_stdio.py` builds the same one.
+  9. `scripts/lint_boundaries.py`, in `make lint-contracts` and CI: operations and the container
+     are HTTP-free, services do not import `app.api.routes` or `.deps`, nothing under `app/`
+     imports `app.main`. One known exception, `services/llm/handlers/playlists.py`, on a list that
+     fails if an entry stops being needed.
+  Tests: `test_application_assembly.py` (two containers, two answers, no patching),
+  `TestGateway` in `test_soulseek.py`, `test_lint_boundaries.py`; the poll, tool and MCP tests
+  lost their `monkeypatch` of `from_settings` and `has_soulseek_configured`.
+
 ## Context
 
 Familiar's route/service split is real, but construction is mostly implicit. Services for outputs,

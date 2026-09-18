@@ -3,9 +3,6 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Library path - defaults to /music (Docker), can be overridden via MUSIC_LIBRARY_PATH env var
-MUSIC_LIBRARY_PATH = Path(os.environ.get("MUSIC_LIBRARY_PATH", "/music"))
-
 
 def get_app_version() -> str:
     """Get app version from VERSION file (set at Docker build time) or fallback."""
@@ -28,13 +25,20 @@ class Settings(BaseSettings):
     # Redis
     redis_url: str = "redis://localhost:6379/0"
 
+    # The library. /music inside the container; the host path is a docker-compose volume mount,
+    # and MUSIC_LIBRARY_PATH is the one way to point at something else. This used to be a module
+    # constant read from `os.environ` at import, moved here under ADR-0130 point 6 so that the
+    # environment enters through this object. `scanner.py`'s SCANNER_THREADS is the other
+    # import-time read; it moves with library sync, the domain the ADR schedules last.
+    music_library_path: Path = Path("/music")
+
     @property
     def music_library_paths(self) -> list[Path]:
         """Fixed music library path at /music.
 
         Configure host path via docker-compose volume mount.
         """
-        return [MUSIC_LIBRARY_PATH]
+        return [self.music_library_path]
 
     # Data paths
     art_path: Path = Path("data/art")
@@ -300,3 +304,7 @@ AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".wav", ".
 
 # Global settings instance
 settings = Settings()
+
+#: The library path, for the six modules that name it as a constant. Derived from `settings`
+#: rather than read from the environment, so there is one reading of MUSIC_LIBRARY_PATH.
+MUSIC_LIBRARY_PATH = settings.music_library_path

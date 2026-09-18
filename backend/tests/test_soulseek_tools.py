@@ -18,30 +18,29 @@ import httpx
 import pytest
 
 from app.services.llm.executor import ToolExecutor
-from app.services.soulseek import SoulseekNotConfigured, SoulseekService
-from tests.test_soulseek import FakeSlskd
-
-
-@pytest.fixture
-def executor() -> ToolExecutor:
-    return ToolExecutor(db=None, profile_id=uuid4())  # type: ignore[arg-type]
+from tests.test_soulseek import FakeSlskd, services_for
 
 
 @pytest.fixture
 def slskd(monkeypatch):
-    """A fake slskd behind `SoulseekService.from_settings`, with polling made instant."""
+    """A fake slskd, with polling made instant."""
     import app.services.soulseek as mod
 
     monkeypatch.setattr(mod, "SEARCH_POLL_SECONDS", 0)
-    fake = FakeSlskd()
-    monkeypatch.setattr(
-        SoulseekService,
-        "from_settings",
-        classmethod(
-            lambda cls: cls("http://slskd:5030", "k", transport=httpx.MockTransport(fake.handler))
-        ),
+    return FakeSlskd()
+
+
+@pytest.fixture
+def executor(slskd) -> ToolExecutor:
+    """An executor whose container's Soulseek gateway talks to the fake (ADR-0130).
+
+    Given, not patched in: the executor reaches slskd only through `self.services.soulseek`.
+    """
+    return ToolExecutor(  # type: ignore[arg-type]
+        db=None,
+        profile_id=uuid4(),
+        services=services_for(httpx.MockTransport(slskd.handler)),
     )
-    return fake
 
 
 def _holdings(**result):
@@ -202,13 +201,9 @@ class TestSearchAndTransfers:
 
 class TestFailuresAreAnswers:
     @pytest.mark.asyncio
-    async def test_not_configured_says_where_to_configure_it(self, executor, monkeypatch):
-        def raise_(cls):
-            raise SoulseekNotConfigured(
-                "No Soulseek client is configured. Set the slskd URL and API key under Server → Integrations → Soulseek."
-            )
-
-        monkeypatch.setattr(SoulseekService, "from_settings", classmethod(raise_))
+    async def test_not_configured_says_where_to_configure_it(self, monkeypatch):
+        """An executor built without a container is a server with no slskd — the null capability."""
+        executor = ToolExecutor(db=None, profile_id=uuid4())  # type: ignore[arg-type]
         monkeypatch.setattr(ToolExecutor, "_library_holdings", _holdings())
         for call in (
             executor._search_soulseek("x"),
@@ -220,7 +215,7 @@ class TestFailuresAreAnswers:
             assert "Integrations → Soulseek" in result["error"]
 
     @pytest.mark.asyncio
-    async def test_unreachable_is_named_not_raised(self, executor, monkeypatch):
+    async def test_unreachable_is_named_not_raised(self, monkeypatch):
         import app.services.soulseek as mod
 
         monkeypatch.setattr(mod, "SEARCH_POLL_SECONDS", 0)
@@ -228,12 +223,10 @@ class TestFailuresAreAnswers:
         def refuse(request: httpx.Request) -> httpx.Response:
             raise httpx.ConnectError("refused", request=request)
 
-        monkeypatch.setattr(
-            SoulseekService,
-            "from_settings",
-            classmethod(
-                lambda cls: cls("http://down:5030", None, transport=httpx.MockTransport(refuse))
-            ),
+        executor = ToolExecutor(  # type: ignore[arg-type]
+            db=None,
+            profile_id=uuid4(),
+            services=services_for(httpx.MockTransport(refuse), url="http://down:5030"),
         )
         result = await executor._search_soulseek("x")
         assert "Nothing answered at http://down:5030" in result["error"]
