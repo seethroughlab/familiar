@@ -1,6 +1,6 @@
 # ADR-0124: Generated API Types Stop at the Apple Client's Repositories
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-17
 

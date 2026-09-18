@@ -1,6 +1,6 @@
 # ADR-0130: The Backend Is Assembled from Explicit Dependencies
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-17
 

@@ -1,6 +1,6 @@
 # ADR-0127: Current Documentation Precedes Project History
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-17
 
@@ -50,12 +50,9 @@ artifact is a small, tested current-state path that points into history only whe
    to deleted files do not remain in the active backlog. Current debt names an owner boundary, evidence and
    a condition for closure rather than carrying a chronological implementation diary.
 
-8. **Source comments state the invariant and the evidence that makes it load-bearing** — the measured
-   number, the crash, the report — and link the owning ADR for the rest. They do not narrate the sequence
-   of prior implementations: "it was a `@StateObject`, then a `static weak var`, then…" belongs in the
-   record; "build 33 crashed here" and "thirty-four publishes a second" stay at the point of edit, because
-   that is where the next person is standing when they need them. This applies to new comments; existing
-   ones are not retrofitted.
+8. **Source comments explain present invariants.** Extended incident history and alternatives link to the
+   owning ADR. A comment may state why order or behavior is load-bearing, but should not require a reader to
+   reconstruct several retired architectures before reading the next statement.
 
 9. **Commands and file references in current guides are tested.** CI checks that referenced repository
    paths exist and that documented package scripts or Make targets resolve. Deliberate failing convenience
@@ -87,8 +84,8 @@ mechanically, but ownership and design intent still require prose and review.
 - **Positive:** stale commands and file references fail automatically.
 - **Positive:** ADR detail remains intact and becomes easier to discover by subject.
 - **Tradeoff:** current-state guides require maintenance whenever ownership or workflows move.
-- **Tradeoff:** the history a comment no longer narrates is only as findable as point 6's index makes
-  it; the index is a prerequisite of point 8, not a nicety.
+- **Tradeoff:** some valuable prose leaves source files, so following an ADR link becomes part of deep
+  debugging.
 - **Follow-up:** after acceptance, review CLAUDE.md and AGENTS.md together; two exhaustive agent guides that
   disagree are worse than one shared current source included by both.
 

@@ -1,6 +1,6 @@
 # ADR-0129: The Web Client Is Generated from the OpenAPI Contract
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-17
 
@@ -46,16 +46,9 @@ should use. The missing layer is a small domain adapter, not another hand-writte
    mutations or domain adapters. This keeps cache keys, retries, invalidation and user-visible error
    behavior beside the feature rather than scattered through presentation components.
 
-6. **Every error a client branches on carries a stable machine-readable `code`.** **This is a server
-   change, and this record owns it:** `ErrorEnvelope` has no such field today (`detail`, `error`, `message`,
-   `request_id`, `status_code`). `code` is added as an optional, additive field — a v1 re-lock under
-   ADR-0113 — backed by one Python enum emitted into the schema as an enum, so both generators produce a
-   type and the codes cannot drift the way the messages did. The namespace starts with the cases that are
-   control flow today — `SERVER_TOKEN_REQUIRED`, `INVALID_PROFILE`, `SYNC_ALREADY_RUNNING` — plus what
-   ADR-0124's inventory turns up, and grows only when a client needs to branch; "every" means every error
-   a client acts on, not every raise. The codes are shared: ADR-0124 point 4's normalized error vocabulary
-   on the Apple side is the same decision seen from the other client. `message` and `detail` remain
-   human-readable and may change without changing client behavior.
+6. **Every actionable error carries a stable machine-readable `code`.** Codes use a documented enum-like
+   namespace such as `SERVER_TOKEN_REQUIRED`, `INVALID_PROFILE` and `SYNC_ALREADY_RUNNING`. `message` and
+   `detail` remain human-readable and may change without changing client behavior.
 
 7. **The shared transport installs origin, server-token and profile-header behavior once.** Generated
    operations do not each learn authentication. Explicit per-request profile selection remains possible
