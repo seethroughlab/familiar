@@ -285,6 +285,28 @@ flight), not `DownloadManager.states`. A drained queue ends it "Finished" for fi
 The stop button is a `LiveActivityIntent` reaching `DownloadManager.cancelAll()` through a hook
 `AppDelegate` installs on every launch — the first control that discards a whole queue.
 
+**`ADR-0122`–`ADR-0130` are all `proposed` (2026-09-17) and none is accepted yet.** They are about
+structure rather than features: how the Apple client, the backend, the web client and the docs are put
+together. Two of them exist because a routine command is dangerous — `uv run pytest tests/ -x -q` under Running Tests below
+deletes every row from eighteen tables in whatever database `DATABASE_URL` names (`0128`), and CI's
+disposable database is itself called `familiar`, so the name proves nothing today. Execution order, which
+again differs from the numbering:
+
+| # | ADR | Why here |
+|---|---|---|
+| 1 | `0128` | Smallest and protects real data. `TEST_DATABASE_URL`, a `_test` suffix with no second marker, CI renamed to `familiar_test`. Its guard runs in `conftest.py` until `0130` gives it a factory. |
+| 2 | `0130` | `create_app(settings, services)`; the first domain moved is **Soulseek**, chosen because it touches every boundary the record names and has the fewest callers. Library sync and analysis go last. |
+| 3 | `0129` | `@hey-api/openapi-ts`, pinned; the first slice is the one whose interceptor greps English (`base.ts:197`). Before `0126` so the new screens consume feature adapters, not `api/*.ts`. |
+| 4 | `0126` | Overview / Library / Settings. **Gated**: a mocked Overview is reviewed against the idle NAS and a failing server, desktop and 400px, before the record is accepted. Old router paths redirect — this is not an `0079` alias. |
+| 5 | `0125` | `@familiar/visualizer-sdk`, build-time only. Independent of everything above; the dependency-free path is already proven by `packages/visualizers/examples/`. |
+| 6 | `0127` | `docs/START-HERE.md`, `make doctor`, `make check`, and a CI check that cited paths exist. Last so the traced slice goes through the generated web client and the factory. Its follow-up reconciles this file with `AGENTS.md`. |
+| — | `0122` → `0123` → `0124` | The Apple track, in `familiar-apple`, in parallel with all of the above. `FamiliarAppCore` is the first boundary, because `0123`'s `FamiliarApplication` and `0124`'s repositories both live there. |
+
+Two things the numbers in those records settle that the text would have let you assume otherwise: the
+four first-party visualizers really are byte-identical in six files (one md5 each, 613 lines per package),
+and the fifteen Apple tests that read Swift as text do so through two helpers, `AppSource.swift` and
+`EngineSource.swift`, so they are found by searching for those rather than for the file paths.
+
 ## Key Directories
 
 ```
