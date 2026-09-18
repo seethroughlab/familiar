@@ -5,6 +5,7 @@ export * from './library';
 export * from './playlists';
 export * from './integrations';
 export * from './settings';
+export * from './soulseek';
 export * from './profiles';
 export * from './admin';
 export * from './metadata';

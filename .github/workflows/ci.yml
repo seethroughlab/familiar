@@ -629,6 +629,15 @@ jobs:
       - name: Dependency Boundary Checks
         run: pnpm --filter @familiar/frontend run check:boundaries
 
+      # ADR-0129 point 2: the web client is generated from backend/openapi.json and committed.
+      # Regenerate and fail on a diff, so a contract change, its lock and its generated clients
+      # are one reviewable change. Pure file transformation; needs no backend.
+      - name: Check generated API client is current
+        run: pnpm --filter @familiar/api-client run check
+
+      - name: Type-check generated API client
+        run: pnpm --filter @familiar/api-client run typecheck
+
   frontend-test:
     name: Frontend Test
     # **Linux, not bare `self-hosted`.** These three are Node jobs with no reason to want macOS, and
