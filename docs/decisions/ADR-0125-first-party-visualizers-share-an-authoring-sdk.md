@@ -1,6 +1,6 @@
 # ADR-0125: First-Party Visualizers Share an Authoring SDK
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-17
 

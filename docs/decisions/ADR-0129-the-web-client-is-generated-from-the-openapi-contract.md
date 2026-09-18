@@ -1,6 +1,6 @@
 # ADR-0129: The Web Client Is Generated from the OpenAPI Contract
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-17
 

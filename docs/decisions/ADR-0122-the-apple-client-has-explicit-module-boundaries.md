@@ -1,6 +1,6 @@
 # ADR-0122: The Apple Client Has Explicit Module Boundaries
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-17
 

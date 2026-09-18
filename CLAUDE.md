@@ -285,11 +285,11 @@ flight), not `DownloadManager.states`. A drained queue ends it "Finished" for fi
 The stop button is a `LiveActivityIntent` reaching `DownloadManager.cancelAll()` through a hook
 `AppDelegate` installs on every launch — the first control that discards a whole queue.
 
-**`ADR-0122`–`ADR-0130` are `proposed` (2026-09-17), except `0128`, accepted and built the same day.** They are about
+**`ADR-0122`–`ADR-0130` are all accepted (2026-09-17); only `0128` is built, the same day.** They are about
 structure rather than features: how the Apple client, the backend, the web client and the docs are put
-together. Two of them exist because a routine command is dangerous — `uv run pytest tests/ -x -q` under Running Tests below
-deletes every row from eighteen tables in whatever database `DATABASE_URL` names (`0128`), and CI's
-disposable database is itself called `familiar`, so the name proves nothing today. Execution order, which
+together. Two of them exist because a routine command was dangerous — until `0128` shipped, `uv run pytest`
+deleted every row from eighteen tables in whatever database `DATABASE_URL` named, and CI's
+disposable database was itself called `familiar`, so the name proved nothing. Execution order, which
 again differs from the numbering:
 
 | # | ADR | Why here |
@@ -297,7 +297,7 @@ again differs from the numbering:
 | 1 | `0128` | **Built 2026-09-17.** `TEST_DATABASE_URL`, a `_test` suffix with no second marker, CI renamed to `familiar_test`. Its guard runs in the rootdir `conftest.py` until `0130` gives it a factory. |
 | 2 | `0130` | `create_app(settings, services)`; the first domain moved is **Soulseek**, chosen because it touches every boundary the record names and has the fewest callers. Library sync and analysis go last. |
 | 3 | `0129` | `@hey-api/openapi-ts`, pinned; the first slice is the one whose interceptor greps English (`base.ts:197`). Before `0126` so the new screens consume feature adapters, not `api/*.ts`. |
-| 4 | `0126` | Overview / Library / Analysis / Server — four, after a panel-level audit found the first draft's three split providers, the analysis pipeline and backup across groups, and placed two screens that don't exist (pending review; editable library paths). **Gated**: a mocked Overview is reviewed against the idle NAS and a failing server, desktop and 400px, before acceptance. Old router paths redirect — not an `0079` alias. |
+| 4 | `0126` | Overview / Library / Analysis / Server — four, after a panel-level audit found the first draft's three split providers, the analysis pipeline and backup across groups, and placed two screens that don't exist (pending review; editable library paths). Its gate — a mocked Overview reviewed against the idle NAS and a failing server, desktop and 400px — was cleared the same day. Old router paths redirect — not an `0079` alias. |
 | 5 | `0125` | `@familiar/visualizer-sdk`, build-time only. Independent of everything above; the dependency-free path is already proven by `packages/visualizers/examples/`. |
 | 6 | `0127` | `docs/START-HERE.md`, `make doctor`, `make check`, and a CI check that cited paths exist. Last so the traced slice goes through the generated web client and the factory. Its follow-up reconciles this file with `AGENTS.md`. |
 | — | `0122` → `0123` → `0124` | The Apple track, in `familiar-apple`, in parallel with all of the above. `FamiliarAppCore` is the first boundary, because `0123`'s `FamiliarApplication` and `0124`'s repositories both live there. |

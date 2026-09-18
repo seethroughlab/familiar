@@ -1,6 +1,6 @@
 # ADR-0126: The Admin UI Is Organized Around Operator Workflows
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-17
 
@@ -184,6 +184,8 @@ rail inside a destination is not the old application-wide media sidebar and is a
 - **Follow-up:** a persisted duplicates count, so Overview can show it without a 40 s scan.
 - **Follow-up:** reconcile `health/system`'s and `library/stats`'s pending-analysis figures, or document
   which one is authoritative.
-- **Follow-up:** this record is not accepted on the text alone. Before acceptance, a mocked Overview is
-  reviewed against two states — the NAS library, idle, and a server with active failures — at desktop and
-  at 400px, and the labels and first viewport are confirmed or revised from what that shows.
+- **Follow-up (done 2026-09-17):** this record was not accepted on the text alone. A mocked Overview was
+  reviewed against two states — the NAS library, idle, with real figures, and a synthetic failing server —
+  at 1280px and 390px, alongside mocked Analysis and Server / Providers pages built from the same data.
+  The four labels and the first viewport were confirmed as drawn; the mock is the "Overview Mock" canvas
+  in the operator's claude.ai artifacts.

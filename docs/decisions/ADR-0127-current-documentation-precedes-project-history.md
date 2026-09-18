@@ -1,6 +1,6 @@
 # ADR-0127: Current Documentation Precedes Project History
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-17
 

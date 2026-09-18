@@ -1,6 +1,6 @@
 # ADR-0123: The Apple Client Has One Process-Lifetime Composition Root
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-17
 
