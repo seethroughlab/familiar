@@ -4,6 +4,17 @@ Status: proposed
 
 Date: 2026-09-17
 
+Implementation:
+- 2026-09-18, `familiar` — points 1–6. `backend/tests/_disposable_database.py` is the guard, run from
+  `pytest_configure` in `tests/conftest.py`, which no longer imports anything under `app` at module
+  level; the accepted URL is installed as `DATABASE_URL` for the process so every reader in `app`
+  follows it. `make test` / `make test-services` provision `familiar-test-postgres` (5434) and
+  `familiar-test-redis` (6380), migrate `familiar_test`, and are idempotent. CI's three pytest jobs
+  name their service database `familiar_test` and pass only `TEST_DATABASE_URL` to pytest. Point 7 is
+  partial: conftest's lazy imports mean a test that asks for no fixture assembles no server, but pure
+  tests are not yet labelled and the guard still runs for every invocation — that labelling waits on
+  ADR-0130's factory, without which "does not import the assembled application" cannot be checked.
+
 ## Context
 
 The backend suite has two kinds of database user, and they currently share one configuration.

@@ -245,7 +245,7 @@ Add a pending count badge. Query `pendingTracksApi.getStats()` and show `total` 
 
 ## Verification
 
-1. `cd backend && uv run pytest tests/ -x -q` — all tests pass
+1. `cd backend && make test ARGS="-x -q"` — all tests pass
 2. `cd packages/frontend && pnpm tsc --noEmit` — no new TS errors
 3. Manual test: add new audio files to library path → run sync → verify tracks appear in Pending Review browser, NOT in main library
 4. Test approve/skip/replace actions → verify tracks move to correct states

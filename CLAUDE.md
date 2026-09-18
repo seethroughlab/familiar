@@ -287,14 +287,14 @@ The stop button is a `LiveActivityIntent` reaching `DownloadManager.cancelAll()`
 
 **`ADR-0122`–`ADR-0130` are all `proposed` (2026-09-17) and none is accepted yet.** They are about
 structure rather than features: how the Apple client, the backend, the web client and the docs are put
-together. Two of them exist because a routine command is dangerous — `uv run pytest tests/ -x -q` under Running Tests below
-deletes every row from eighteen tables in whatever database `DATABASE_URL` names (`0128`), and CI's
-disposable database is itself called `familiar`, so the name proves nothing today. Execution order, which
+together. Two of them exist because a routine command was dangerous — until `0128` shipped, `uv run pytest`
+deleted every row from eighteen tables in whatever database `DATABASE_URL` named, and CI's
+disposable database was itself called `familiar`, so the name proved nothing. Execution order, which
 again differs from the numbering:
 
 | # | ADR | Why here |
 |---|---|---|
-| 1 | `0128` | Smallest and protects real data. `TEST_DATABASE_URL`, a `_test` suffix with no second marker, CI renamed to `familiar_test`. Its guard runs in `conftest.py` until `0130` gives it a factory. |
+| 1 | `0128` | **Shipped.** `TEST_DATABASE_URL`, a `_test` suffix with no second marker, CI renamed to `familiar_test`. The guard is `tests/_disposable_database.py`, run from `pytest_configure` before anything under `app` is imported; `conftest.py` imports `app` only inside fixtures. |
 | 2 | `0130` | `create_app(settings, services)`; the first domain moved is **Soulseek**, chosen because it touches every boundary the record names and has the fewest callers. Library sync and analysis go last. |
 | 3 | `0129` | `@hey-api/openapi-ts`, pinned; the first slice is the one whose interceptor greps English (`base.ts:197`). Before `0126` so the new screens consume feature adapters, not `api/*.ts`. |
 | 4 | `0126` | Overview / Library / Settings. **Gated**: a mocked Overview is reviewed against the idle NAS and a failing server, desktop and 400px, before the record is accepted. Old router paths redirect — this is not an `0079` alias. |
@@ -527,8 +527,16 @@ make deploy-dev  # Build + rsync to NAS + restart (~16-30s)
 
 ```bash
 # Backend (from backend/)
-make test                    # pytest with coverage
-uv run pytest tests/ -x -q   # quick run, stop on first failure
+make test                    # throwaway Postgres+Redis on 5434/6380, migrate, pytest (ADR-0128)
+make test ARGS="-x -q"       # quick run, stop on first failure
+make test-services-down      # remove the throwaway containers
+```
+
+Raw `uv run pytest` stops before collection unless `TEST_DATABASE_URL` names a database ending in
+`_test` — it never reads `DATABASE_URL`, because `async_db` deletes rows. `make test-services`
+starts the containers and prints the URL to export if you want to run pytest yourself.
+
+```bash
 
 # Frontend unit tests (from packages/frontend/)
 pnpm test                   # vitest run

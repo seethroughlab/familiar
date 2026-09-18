@@ -3,6 +3,12 @@ Test fixtures for Familiar backend tests.
 
 Uses FastAPI's synchronous TestClient which properly handles async endpoints
 without the event loop complexities of using AsyncClient directly.
+
+**Nothing here imports `app` at module level** (ADR-0128). `app.config.settings` reads
+`DATABASE_URL` when it is constructed, and `async_db` below deletes rows from whatever that
+names — so the database must be proved disposable first, in `pytest_configure`, and every
+`app` import sits inside the fixture that needs it. Before the guard existed, `uv run pytest`
+against a developer's ordinary configuration erased their library.
 """
 
 from collections.abc import Generator
@@ -14,34 +20,35 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.config import settings
-from app.db.models import (
-    Artist,
-    ArtistAlias,
-    ArtistCheckCache,
-    DiscoverySourceHealth,
-    ExternalAlbumCache,
-    ExternalArtistImageCache,
-    MixTape,
-    PlaybackSession,
-    PlaybackSessionArchive,
-    PlayEvent,
-    Playlist,
-    PlaylistTrack,
-    ProfilePlayHistory,
-    ProposedChange,
-    SmartPlaylist,
-    Track,
-    TrackAnalysis,
-    TrackVideo,
-)
-from app.main import app
+from tests import _disposable_database
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Prove the database is disposable, or stop before anything is collected.
+
+    Collection is when test modules run their own `from app.main import app`, so this is
+    the last moment a check can still precede every connection.
+    """
+    try:
+        _disposable_database.install()
+    except _disposable_database.NotDisposable as refused:
+        pytest.exit(str(refused), returncode=4)
+
+    # Assemble the server now, exactly where the old module-level `from app.main import app`
+    # did it relative to the tests: before any of them. Importing it lazily in the `client`
+    # fixture instead — the obvious move — made five tests fail that pass in isolation
+    # (ambient excursion rate, collection-suggestion voting, similar-tracks file checks),
+    # because they depend on `app.main`'s import-time work having happened before other
+    # tests touched `app` submodules. ADR-0130's factory is what removes that dependence;
+    # until then the import stays eager and the guard above stays ahead of it.
+    import app.main  # noqa: F401
 
 
 @pytest.fixture(autouse=True)
 def deterministic_random():
     """Seed stdlib random for reproducible test runs."""
     import random
+
     random.seed(42)
     yield
 
@@ -70,7 +77,10 @@ def client() -> Generator[TestClient, None, None]:
     TestClient handles async endpoints synchronously, avoiding event loop issues.
     Must be session-scoped because the async engine's connection pool binds
     connections to a single event loop.
+
     """
+    from app.main import app
+
     with TestClient(app, raise_server_exceptions=False) as c:
         yield c
 
@@ -98,32 +108,57 @@ def make_profile_headers(profile: dict) -> dict[str, str]:
 # Shared async DB fixture for integration tests
 # ---------------------------------------------------------------------------
 
-# Tables to clean in correct FK order (children before parents).
-# ArtistAlias FKs to Artist with CASCADE; Track.canonical_artist_id FKs
-# to Artist with SET NULL — so deleting tracks first then artists is safe.
-_CLEANUP_TABLES = [
-    # Seeded by its migration, so it survives between tests and one test's backoff
-    # leaks into the next. Truncated here; the recorder recreates rows on demand.
-    DiscoverySourceHealth,
-    MixTape,
-    PlaylistTrack,
-    Playlist,
-    SmartPlaylist,
-    ProposedChange,
-    PlayEvent,
-    PlaybackSessionArchive,
-    PlaybackSession,
-    ProfilePlayHistory,
-    ExternalAlbumCache,
-    ArtistCheckCache,
-    ExternalArtistImageCache,
-    TrackAnalysis,
-    # FKs to Track with CASCADE, so it goes before Track like TrackAnalysis does.
-    TrackVideo,
-    Track,
-    ArtistAlias,
-    Artist,
-]
+
+def _cleanup_tables() -> list[type]:
+    """Tables to clean in correct FK order (children before parents).
+
+    ArtistAlias FKs to Artist with CASCADE; Track.canonical_artist_id FKs
+    to Artist with SET NULL — so deleting tracks first then artists is safe.
+    """
+    from app.db.models import (
+        Artist,
+        ArtistAlias,
+        ArtistCheckCache,
+        DiscoverySourceHealth,
+        ExternalAlbumCache,
+        ExternalArtistImageCache,
+        MixTape,
+        PlaybackSession,
+        PlaybackSessionArchive,
+        PlayEvent,
+        Playlist,
+        PlaylistTrack,
+        ProfilePlayHistory,
+        ProposedChange,
+        SmartPlaylist,
+        Track,
+        TrackAnalysis,
+        TrackVideo,
+    )
+
+    return [
+        # Seeded by its migration, so it survives between tests and one test's backoff
+        # leaks into the next. Truncated here; the recorder recreates rows on demand.
+        DiscoverySourceHealth,
+        MixTape,
+        PlaylistTrack,
+        Playlist,
+        SmartPlaylist,
+        ProposedChange,
+        PlayEvent,
+        PlaybackSessionArchive,
+        PlaybackSession,
+        ProfilePlayHistory,
+        ExternalAlbumCache,
+        ArtistCheckCache,
+        ExternalArtistImageCache,
+        TrackAnalysis,
+        # FKs to Track with CASCADE, so it goes before Track like TrackAnalysis does.
+        TrackVideo,
+        Track,
+        ArtistAlias,
+        Artist,
+    ]
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -132,8 +167,12 @@ async def async_db():
 
     Creates its own engine per test to avoid event-loop binding conflicts with
     the session-scoped TestClient. Cleans integration-test tables before and
-    after each test.
+    after each test — which is why the database must have been proved disposable
+    in `pytest_configure` before this runs.
     """
+    from app.config import settings
+
+    tables = _cleanup_tables()
     engine = create_async_engine(
         settings.database_url,
         echo=False,
@@ -147,14 +186,14 @@ async def async_db():
 
     async with session_maker() as session:
         # Clean before test
-        for model in _CLEANUP_TABLES:
+        for model in tables:
             await session.execute(delete(model))
         await session.commit()
 
         yield session
 
         # Clean after test
-        for model in _CLEANUP_TABLES:
+        for model in tables:
             await session.execute(delete(model))
         await session.commit()
 

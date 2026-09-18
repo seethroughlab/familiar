@@ -211,7 +211,7 @@ These will be cleaned up as part of the removal work (sections 2-3 above superse
 
 ## Verification
 
-1. `cd backend && uv run pytest tests/ -x -q` — no regressions (writer tests deleted, all others pass)
+1. `cd backend && make test ARGS="-x -q"` — no regressions (writer tests deleted, all others pass)
 2. `cd packages/frontend && pnpm tsc --noEmit` — no TypeScript errors
 3. Manual: `GET /api/v1/settings` — no `library_write_enabled` field
 4. Manual: `POST /api/v1/library/organize/run` → 404 (endpoint removed)

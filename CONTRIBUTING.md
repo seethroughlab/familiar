@@ -23,7 +23,11 @@ cd ../packages/web
 pnpm dev
 ```
 
-Backend tests need PostgreSQL and Redis. The compose stack above provides them for local work.
+**Backend tests do not run against that stack.** The suite deletes rows from eighteen tables before
+and after each test, so it only accepts a database whose name ends in `_test`, given as
+`TEST_DATABASE_URL` — never `DATABASE_URL` (ADR-0128). `make test` starts a throwaway Postgres and
+Redis on 5434/6380, migrates `familiar_test`, and runs pytest; re-running it is idempotent, and
+`make test-services-down` removes the containers.
 
 ## Before Opening a PR
 
@@ -34,7 +38,7 @@ Run the focused checks for the area you touched.
 cd backend
 uv run ruff check .
 uv run mypy app --ignore-missing-imports
-uv run pytest tests/ -x -q
+make test ARGS="-x -q"          # or: make test-services, then pytest with TEST_DATABASE_URL set
 
 # Frontend
 pnpm --filter @familiar/frontend run lint
