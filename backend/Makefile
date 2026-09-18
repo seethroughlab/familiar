@@ -1,4 +1,4 @@
-.PHONY: install dev run reset-db migrate test-db test test-contract lint lint-contracts openapi openapi-check contract-lock contract-lock-check format backfill-artists backfill-albums adopt-videos backfill-video-posters match-videos refetch-videos find-stills
+.PHONY: install dev run reset-db migrate test-db test-services test-services-down test test-contract lint lint-contracts openapi openapi-check contract-lock contract-lock-check format backfill-artists backfill-albums adopt-videos backfill-video-posters match-videos refetch-videos find-stills
 
 # Install dependencies
 install:
@@ -30,15 +30,45 @@ export TEST_DATABASE_URL
 test-db:
 	uv run python scripts/ensure_test_database.py
 
+# No compose stack running? `make test-services` starts a throwaway Postgres and Redis on spare
+# ports instead — the dev stack on 5432/6379 is never touched — and points TEST_DATABASE_URL at
+# them for the targets that follow in the same invocation:
+#
+#     make test-services test            # containers up, migrate, run the suite
+#     make test-services test ARGS="-x"  # ARGS passes through to pytest
+#     make test-services-down            # remove the containers and their data
+#
+# Re-running is idempotent (`docker start` on an existing container). Override the ports if they
+# collide: `make test-services TEST_PG_PORT=5444`.
+TEST_PG_PORT ?= 5434
+TEST_REDIS_PORT ?= 6380
+ifneq ($(filter test-services,$(MAKECMDGOALS)),)
+TEST_DATABASE_URL := postgresql+asyncpg://familiar:familiar@localhost:$(TEST_PG_PORT)/familiar_test
+REDIS_URL := redis://localhost:$(TEST_REDIS_PORT)/0
+export REDIS_URL
+endif
+
+test-services:
+	@docker start familiar-test-postgres >/dev/null 2>&1 || docker run -d --name familiar-test-postgres \
+		-e POSTGRES_USER=familiar -e POSTGRES_PASSWORD=familiar -e POSTGRES_DB=familiar_test \
+		-p $(TEST_PG_PORT):5432 pgvector/pgvector:pg16 >/dev/null
+	@docker start familiar-test-redis >/dev/null 2>&1 || docker run -d --name familiar-test-redis \
+		-p $(TEST_REDIS_PORT):6379 redis:7-alpine >/dev/null
+	@until docker exec familiar-test-postgres pg_isready -U familiar -d familiar_test >/dev/null 2>&1; do sleep 0.5; done
+	@echo "test services ready: $(TEST_DATABASE_URL)"
+
+test-services-down:
+	@docker rm -f familiar-test-postgres familiar-test-redis >/dev/null 2>&1 || true
+
 # Run tests — against the test database only. `uv run pytest` on its own refuses to run
 # without TEST_DATABASE_URL, with the same instructions, rather than emptying whatever
-# DATABASE_URL names; that is the whole of ADR-0128.
+# DATABASE_URL names; that is the whole of ADR-0128. ARGS passes through to pytest.
 test: test-db
-	uv run pytest -v
+	uv run pytest -v $(ARGS)
 
 # Run backend API contract tests with required migration preflight
 test-contract: test-db
-	uv run pytest tests/test_contract_error_shapes.py tests/test_contract_auth_matrix.py tests/test_contract_envelope_parity.py -v --tb=short --no-cov
+	uv run pytest tests/test_contract_error_shapes.py tests/test_contract_auth_matrix.py tests/test_contract_envelope_parity.py -v --tb=short --no-cov $(ARGS)
 
 # Lint code
 lint:

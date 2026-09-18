@@ -529,6 +529,8 @@ make deploy-dev  # Build + rsync to NAS + restart (~16-30s)
 # Backend (from backend/)
 make test                    # creates + migrates familiar_test, then pytest (ADR-0128)
 make test-db                 # just the database; then `uv run pytest -x -q` works, TEST_DATABASE_URL exported
+make test-services test      # no compose stack? throwaway Postgres+Redis on 5434/6380 instead; ARGS="-x" passes through
+make test-services-down      # remove those containers
 # A bare `uv run pytest` without TEST_DATABASE_URL refuses to run — it would empty DATABASE_URL's database.
 
 # Frontend unit tests (from packages/frontend/)
