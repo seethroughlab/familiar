@@ -36,9 +36,11 @@ from app.config import (
     AUDIO_EXTENSIONS,
     MIN_CLIENT_CONTRACT,
     MUSIC_LIBRARY_PATH,
+    Settings,
     get_app_version,
 )
 from app.config import settings as app_config
+from app.container import Services, build_services
 from app.logging_config import get_logger, setup_logging
 
 # Configure structured logging
@@ -266,7 +268,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Start background task manager
     from app.services.background import get_background_manager
     bg = get_background_manager()
-    await bg.startup()
+    await bg.startup(services=app.state.services)
     logger.info("Background task manager started")
 
     # The MCP session manager must be running or every /mcp request fails at *request* time with
@@ -279,6 +281,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Shutting down Familiar API")
     await bg.shutdown()
     logger.info("Background task manager stopped")
+    await app.state.services.aclose()
+
+
+@asynccontextmanager
+async def _mcp_session_manager_running(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Run the MCP session manager for the lifetime of the app."""
+    mcp_app = app.state.mcp_app
+    async with mcp_app.router.lifespan_context(mcp_app):
+        yield
 
 
 def custom_generate_unique_id(route: APIRoute) -> str:
@@ -455,334 +466,6 @@ OPENAPI_TAG_GROUPS = [
 ]
 
 
-app = FastAPI(
-    title="Familiar",
-    description="LLM-powered local music player API",
-    version=get_app_version(),
-    lifespan=lifespan,
-    generate_unique_id_function=custom_generate_unique_id,
-    openapi_tags=OPENAPI_TAGS,
-)
-
-# MCP (ADR-0043). Mounted here rather than beside the API routers because the SPA catch-all is
-# registered last and would swallow it — and asymmetrically: streamable HTTP uses POST for requests
-# and GET for the server-initiated stream, so a late mount leaves POST working while GET quietly
-# returns index.html. `mcp` is in NON_SPA_PREFIXES for the same reason.
-from app.mcp.server import MCPDispatch  # noqa: E402
-from app.mcp.server import build_asgi_app as _build_mcp_app  # noqa: E402
-
-_mcp_asgi_app = _build_mcp_app()
-app.add_middleware(MCPDispatch, mcp_app=_mcp_asgi_app)
-
-# A ceiling on concurrent file responses (ADR-0111, server half).
-#
-# **Position, again, is the design.** Added before `TokenAuthMiddleware` and therefore *inside* it,
-# so an unauthenticated request cannot spend a slot — and inside `RequestIDMiddleware`, so a 503
-# carries the `x-request-id` that correlates it with the request that was turned away.
-#
-# It is here and not on the route because the resource is held for as long as the *body* is being
-# sent. A dependency releases when the handler returns, which for a 40 MB file is the beginning of
-# the transfer rather than the end — the same mistake the 2026-08-02 fix was correcting one layer
-# down.
-from app.api.concurrency import FileResponseConcurrencyMiddleware  # noqa: E402
-
-app.add_middleware(FileResponseConcurrencyMiddleware)
-
-# Inbound authentication (ADR-0045 point 1).
-#
-# **The position in this file is the whole design.** `add_middleware` prepends, so the *last* one
-# added is the outermost. Adding this immediately after `MCPDispatch` and before `RequestIDMiddleware`
-# and CORS puts it:
-#   - *inside* CORS, so a preflight is answered with CORS headers rather than an opaque 401;
-#   - *inside* `RequestIDMiddleware`, so a refusal carries the `x-request-id` that correlates it;
-#   - *outside* `MCPDispatch`, which is the load-bearing one — `MCPDispatch` answers `/mcp` before
-#     the router is ever reached, so a router dependency would protect all 264 REST operations and
-#     leave the MCP endpoint, the one ADR-0043 exists to expose, as the only open door.
-#
-# It is inert until a token is configured; see `TokenAuthMiddleware`.
-from app.api.auth import TokenAuthMiddleware  # noqa: E402
-
-app.add_middleware(TokenAuthMiddleware)
-
-
-@asynccontextmanager
-async def _mcp_session_manager_running(_app: FastAPI) -> AsyncGenerator[None, None]:
-    """Run the MCP session manager for the lifetime of the app."""
-    async with _mcp_asgi_app.router.lifespan_context(_mcp_asgi_app):
-        yield
-
-
-# Rate limiting
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
-
-# Request ID middleware (must be added first to wrap everything)
-app.add_middleware(RequestIDMiddleware)
-
-# CORS middleware for frontend
-# Build allowed origins from FRONTEND_URL + localhost for development
-def _get_cors_origins() -> list[str]:
-    """Get CORS allowed origins from configuration."""
-    origins = [
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://localhost:4400",
-    ]
-    # Add configured frontend URL (for production)
-    if app_config.frontend_url:
-        origins.append(app_config.frontend_url)
-        # Also allow without trailing slash and with different protocols
-        url = app_config.frontend_url.rstrip("/")
-        if url not in origins:
-            origins.append(url)
-        # If http, also allow https variant
-        if url.startswith("http://"):
-            https_url = url.replace("http://", "https://", 1)
-            if https_url not in origins:
-                origins.append(https_url)
-    return origins
-
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_get_cors_origins(),
-    # Allow private network access: single-word hostnames and any IPv4 addresses
-    allow_origin_regex=r"^(https?|capacitor)://([a-zA-Z0-9-]+|\d+\.\d+\.\d+\.\d+)(:\d+)?$",
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-    expose_headers=["Content-Range", "Accept-Ranges", "Content-Length"],
-)
-
-
-#: Paths a visualizer plugin may read from an opaque origin.
-#:
-#: Media only, and read-only: cover art and the audio it is drawn over. Nothing here reveals
-#: anything a listener on the network could not already fetch, which is the same argument the media
-#: endpoints already rest on — a WiiM speaker holds no credential either.
-_OPAQUE_ORIGIN_READABLE = ("/artwork", "/stream")
-
-
-@app.middleware("http")
-async def allow_opaque_origin_media(request: Request, call_next):  # type: ignore[no-untyped-def]
-    """Let a sandboxed visualizer read cover art.
-
-    **A visualizer plugin has an opaque origin, so its requests arrive as `Origin: null`.** ADR-0087
-    point 1 loads plugin documents in an iframe with `sandbox="allow-scripts"` and deliberately
-    without `allow-same-origin`, which is what makes the origin opaque. `null` is not a URL, so it
-    matches neither `_get_cors_origins()` nor `allow_origin_regex`, and `CORSMiddleware` therefore
-    sends no `Access-Control-Allow-Origin` at all.
-
-    The symptom is silent and does not look like CORS: `beat-tiles` loads its cover with
-    `THREE.TextureLoader` and `setCrossOrigin('anonymous')`, so a refused read lands in the error
-    callback, which sets the texture to `null` — and the scene draws a grid of plain white cubes
-    with no error anywhere.
-
-    `familiar-apple` already fixed exactly this for the plugin's *own* folder: its custom scheme
-    handler attaches `Access-Control-Allow-Origin` with the same reasoning, found when a converted
-    visualizer could not load its own model. Artwork comes from this server instead, so it needs the
-    same answer here.
-
-    **Deliberately not `allow_credentials`.** The header is added only for `Origin: null`, only on
-    media paths, and only for reads. Adding `"null"` to the allow-list instead would have widened
-    every endpoint to opaque origins *with* credentials, which is a much larger claim than "a
-    sandboxed drawing surface may see the album cover".
-    """
-    response = await call_next(request)
-    if (
-        request.headers.get("origin") == "null"
-        and request.method in ("GET", "HEAD", "OPTIONS")
-        and any(part in request.url.path for part in _OPAQUE_ORIGIN_READABLE)
-        and "access-control-allow-origin" not in response.headers
-    ):
-        response.headers["Access-Control-Allow-Origin"] = "*"
-        # **And drop the credentials claim, which `CORSMiddleware` attaches to any request carrying
-        # an `Origin` — allowed or not.** `Allow-Origin: *` with `Allow-Credentials: true` is a
-        # contradiction: a browser refuses the pair outright for a credentialed request, and for the
-        # anonymous read this exists for the claim is untrue anyway. Leaving it would make the one
-        # response that says "anyone may read this" also say "and you may send cookies".
-        # `del`, not `pop`: Starlette's `MutableHeaders` has no `pop`, and calling it raises inside
-        # the middleware — which surfaces as the header simply never being set, not as an error.
-        if "access-control-allow-credentials" in response.headers:
-            del response.headers["access-control-allow-credentials"]
-    return response
-
-
-# Global exception handlers
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(
-    request: Request, exc: RequestValidationError
-) -> JSONResponse:
-    """Handle Pydantic validation errors."""
-    request_id = getattr(request.state, "request_id", None)
-    errors = exc.errors()
-    detail = "; ".join(
-        f"{'.'.join(str(loc) for loc in e['loc'])}: {e['msg']}" for e in errors
-    )
-    logger.warning(f"[{request_id}] Validation error: {detail}")
-    return create_error_response(
-        status_code=422,
-        message="Validation error",
-        detail=detail,
-        request_id=request_id,
-    )
-
-
-@app.exception_handler(SQLAlchemyError)
-async def sqlalchemy_exception_handler(
-    request: Request, exc: SQLAlchemyError
-) -> JSONResponse:
-    """Handle database errors."""
-    request_id = getattr(request.state, "request_id", None)
-    logger.error(f"[{request_id}] Database error: {exc}", exc_info=True)
-    return create_error_response(
-        status_code=500,
-        message="Database error",
-        detail=str(exc) if app_config.debug else None,
-        request_id=request_id,
-    )
-
-
-@app.exception_handler(FamiliarError)
-async def familiar_exception_handler(
-    request: Request, exc: FamiliarError
-) -> JSONResponse:
-    """Handle custom Familiar exceptions."""
-    request_id = getattr(request.state, "request_id", None)
-    # Only log 500-level errors at error level
-    if exc.status_code >= 500:
-        logger.error(f"[{request_id}] {exc.__class__.__name__}: {exc.message}", exc_info=True)
-    else:
-        logger.warning(f"[{request_id}] {exc.__class__.__name__}: {exc.message}")
-    return create_error_response(
-        status_code=exc.status_code,
-        message=exc.message,
-        detail=exc.detail,
-        request_id=request_id,
-    )
-
-
-
-@app.exception_handler(HTTPException)
-async def http_exception_handler(
-    request: Request, exc: HTTPException
-) -> JSONResponse:
-    """Normalize HTTPException responses to standard error envelope."""
-    request_id = getattr(request.state, "request_id", None)
-    if exc.status_code >= 500:
-        logger.error(f"[{request_id}] HTTPException {exc.status_code}: {exc.detail}")
-    else:
-        logger.warning(f"[{request_id}] HTTPException {exc.status_code}: {exc.detail}")
-    return create_error_response(
-        status_code=exc.status_code,
-        message=str(exc.detail) if exc.detail else "Request failed",
-        request_id=request_id,
-    )
-
-
-@app.exception_handler(Exception)
-async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    """Catch-all handler for unhandled exceptions."""
-    request_id = getattr(request.state, "request_id", None)
-    logger.error(f"[{request_id}] Unhandled error: {exc}", exc_info=True)
-    return create_error_response(
-        status_code=500,
-        message="Internal server error",
-        detail=str(exc) if app_config.debug else None,
-        request_id=request_id,
-    )
-
-# Include routers — every one of them, in a single call (ADR-0072 point 6). The list lives in
-# `app/api/routes/__init__.py`; see that module for why it is there and which part of its order is
-# load-bearing.
-#
-# `DEFAULT_ERROR_RESPONSES` is attached to the aggregate router rather than to 249 individual
-# routes (ADR-0007). Without it the schema documents only 200 and FastAPI's automatic 422 — and
-# that 422 is the wrong shape, since `validation_exception_handler` below emits the Familiar
-# envelope instead. Declaring 422 explicitly replaces FastAPI's `HTTPValidationError` with the
-# shape the server actually sends. Routes add their own statuses on top where one is real control
-# flow.
-app.include_router(api_router, prefix="/api/v1")
-
-# Moved paths announce themselves (ADR-0079 point 3). Registered as middleware rather than as a
-# route dependency because the headers must survive an error response — see the class docstring.
-app.add_middleware(DeprecatedPathHeaders)
-
-
-def _openapi_with_global_security() -> dict[str, Any]:
-    """Publish the server token as a global security requirement (ADR-0045 point 2).
-
-    Point 2 says *"every operation carries a security requirement, and the allowlist goes to zero"*,
-    and cites 158 operations with none. That number is real — it is 160 today, having grown by two
-    since the ADR was written, which is the ADR's own argument about permanent allowlists making
-    itself. But the count conflates two axes that this codebase keeps separate:
-
-    - **Authentication** — does the caller hold the server token? That is not a property of an
-      individual operation here. `TokenAuthMiddleware` gates every `/api/` path and `/mcp` at once,
-      so the honest OpenAPI expression is a *global* `security` block, which the spec has never had
-      (`security` was absent entirely). One block covers all 264.
-    - **Profile scoping** — which profile may a request act as? That is per-operation, it is what
-      `lint_profile_contracts.py`'s 30-module allowlist tracks, and it is the genuinely large half
-      of point 2. It is untouched here and is a later phase.
-
-    Conflating them would let this look finished while the second half had not started, so the two
-    are separated deliberately rather than quietly.
-    """
-    if app.openapi_schema:
-        return app.openapi_schema
-
-    from fastapi.openapi.utils import get_openapi
-
-    from app.api.auth import TOKEN_HEADER
-
-    # `tags=` must be passed explicitly. `get_openapi` does not read it off the app, so the
-    # `openapi_tags` given to `FastAPI(...)` is silently dropped by any custom `openapi` hook that
-    # forgets it — the descriptions render as nothing and no error is raised anywhere.
-    schema = get_openapi(
-        title=app.title,
-        version=app.version,
-        description=app.description,
-        routes=app.routes,
-        tags=app.openapi_tags,
-    )
-    components = schema.setdefault("components", {})
-    schemes = components.setdefault("securitySchemes", {})
-    schemes["FamiliarToken"] = {
-        "type": "apiKey",
-        "in": "header",
-        "name": TOKEN_HEADER,
-        "description": (
-            "Server token (ADR-0045). Issue one at POST /api/v1/auth/token. When no token is "
-            "configured the server accepts unauthenticated requests, so generated clients must "
-            "treat this as optional-but-expected rather than required."
-        ),
-    }
-    # Applies to every operation, including the ones that declare `ProfileHeader`: the two are
-    # different questions, and an operation can require both.
-    schema["security"] = [{"FamiliarToken": []}]
-
-    # The functional areas, grouped (ADR-0072 point 5). `x-tagGroups` is a ReDoc extension rather
-    # than core OpenAPI, which is why it is set here instead of on the `FastAPI(...)` call — there
-    # is no constructor argument for it. `/redoc` renders it as the left-hand navigation; a
-    # generator that does not understand the key ignores it, which is the intended failure mode.
-    schema["x-tagGroups"] = OPENAPI_TAG_GROUPS
-
-    # The contract numbers travel *inside* the schema so the client that generates from it can
-    # derive its own contract mechanically instead of anyone maintaining the number twice
-    # (ADR-0113). `familiar-apple`'s `scripts/vendor-schema.sh` reads these two keys and writes a
-    # Swift constant from them in the same run that copies this file.
-    schema["info"]["x-contract-version"] = API_CONTRACT_VERSION
-    schema["info"]["x-min-client-contract"] = MIN_CLIENT_CONTRACT
-
-    app.openapi_schema = schema
-    return schema
-
-
-app.openapi = _openapi_with_global_security  # type: ignore[method-assign]
-
-
-# Serve frontend static files in production
-# The static folder is created during Docker build
 STATIC_DIR = Path(__file__).parent.parent / "static"
 
 # Prefixes the single-page app must never swallow. A miss inside these belongs to the API, and the
@@ -857,42 +540,387 @@ async def spa_fallback(full_path: str) -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
 
 
-if STATIC_DIR.exists():
-    # Serve static assets
-    app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
-    app.mount("/icons", StaticFiles(directory=STATIC_DIR / "icons"), name="icons")
+def create_app(settings: Settings, services: Services) -> FastAPI:
+    """Assemble the server (ADR-0130 point 1).
 
+    Everything that used to happen at import — construct the app, mount MCP, add the middleware in
+    the one order that works, register handlers and routes — happens here, given the settings and
+    the container it should use. The module-level `app` at the bottom is the production call, for
+    uvicorn; a test can call this with its own `Services` and reach every route through a
+    `TestClient` without touching a singleton.
 
-    # The PWA is retired (ADR-0059) — no manifest, no `registerSW.js`, no `workbox-*` chunks.
+    `settings` is the one immutable settings object (point 6); the middleware below still reads
+    `app_config` for values it always did, and those move to `settings` as their domains do.
+    """
+    del settings  # every reader below still uses `app_config` — see the docstring
+
+    app = FastAPI(
+        title="Familiar",
+        description="LLM-powered local music player API",
+        version=get_app_version(),
+        lifespan=lifespan,
+        generate_unique_id_function=custom_generate_unique_id,
+        openapi_tags=OPENAPI_TAGS,
+    )
+
+    # MCP (ADR-0043). Mounted here rather than beside the API routers because the SPA catch-all is
+    # registered last and would swallow it — and asymmetrically: streamable HTTP uses POST for requests
+    # and GET for the server-initiated stream, so a late mount leaves POST working while GET quietly
+    # returns index.html. `mcp` is in NON_SPA_PREFIXES for the same reason.
+    from app.mcp.server import MCPDispatch  # noqa: E402
+    from app.mcp.server import build_asgi_app as _build_mcp_app  # noqa: E402
+
+    mcp_app = _build_mcp_app(services)
+    app.state.mcp_app = mcp_app
+    app.add_middleware(MCPDispatch, mcp_app=mcp_app)
+
+    # A ceiling on concurrent file responses (ADR-0111, server half).
     #
-    # `/sw.js` stays, and must. It now serves a tombstone worker whose whole job is to unregister
-    # the Workbox worker earlier versions installed. Letting this 404 would fall through to the SPA
-    # catch-all and answer with `index.html`, and a browser told its service worker is now an HTML
-    # document behaves less predictably than one handed a script that removes itself. See
-    # `packages/web/public/sw.js`.
-    @app.get("/sw.js")
-    async def service_worker() -> FileResponse:
-        return FileResponse(STATIC_DIR / "sw.js", media_type="application/javascript")
+    # **Position, again, is the design.** Added before `TokenAuthMiddleware` and therefore *inside* it,
+    # so an unauthenticated request cannot spend a slot — and inside `RequestIDMiddleware`, so a 503
+    # carries the `x-request-id` that correlates it with the request that was turned away.
+    #
+    # It is here and not on the route because the resource is held for as long as the *body* is being
+    # sent. A dependency releases when the handler returns, which for a 40 MB file is the beginning of
+    # the transfer rather than the end — the same mistake the 2026-08-02 fix was correcting one layer
+    # down.
+    from app.api.concurrency import FileResponseConcurrencyMiddleware  # noqa: E402
 
-    # Serve index.html for root
-    @app.get("/")
-    async def serve_root() -> FileResponse:
-        """Serve index.html for root path."""
-        return FileResponse(STATIC_DIR / "index.html")
+    app.add_middleware(FileResponseConcurrencyMiddleware)
 
-    # Registered before the catch-all below, which would otherwise swallow them and hand the web
-    # view the full app.
-    app.get("/embed", response_model=None)(serve_embed)
+    # Inbound authentication (ADR-0045 point 1).
+    #
+    # **The position in this file is the whole design.** `add_middleware` prepends, so the *last* one
+    # added is the outermost. Adding this immediately after `MCPDispatch` and before `RequestIDMiddleware`
+    # and CORS puts it:
+    #   - *inside* CORS, so a preflight is answered with CORS headers rather than an opaque 401;
+    #   - *inside* `RequestIDMiddleware`, so a refusal carries the `x-request-id` that correlates it;
+    #   - *outside* `MCPDispatch`, which is the load-bearing one — `MCPDispatch` answers `/mcp` before
+    #     the router is ever reached, so a router dependency would protect all 264 REST operations and
+    #     leave the MCP endpoint, the one ADR-0043 exists to expose, as the only open door.
+    #
+    # It is inert until a token is configured; see `TokenAuthMiddleware`.
+    from app.api.auth import TokenAuthMiddleware  # noqa: E402
 
-    # SPA fallback - serve index.html for all non-API routes
-    app.get("/{full_path:path}", response_model=None)(spa_fallback)
-else:
-    # Development mode - just show API info
-    @app.get("/")
-    async def root() -> dict[str, Any]:
-        """Root endpoint with API info."""
-        return {
-            "name": "Familiar",
-            "version": "0.1.0",
-            "docs": "/docs",
+    app.add_middleware(TokenAuthMiddleware)
+
+
+    # The container every route, the MCP executor and the background manager are handed (ADR-0130).
+    app.state.services = services
+
+    # Rate limiting
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
+
+    # Request ID middleware (must be added first to wrap everything)
+    app.add_middleware(RequestIDMiddleware)
+
+    # CORS middleware for frontend
+    # Build allowed origins from FRONTEND_URL + localhost for development
+    def _get_cors_origins() -> list[str]:
+        """Get CORS allowed origins from configuration."""
+        origins = [
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "http://localhost:4400",
+        ]
+        # Add configured frontend URL (for production)
+        if app_config.frontend_url:
+            origins.append(app_config.frontend_url)
+            # Also allow without trailing slash and with different protocols
+            url = app_config.frontend_url.rstrip("/")
+            if url not in origins:
+                origins.append(url)
+            # If http, also allow https variant
+            if url.startswith("http://"):
+                https_url = url.replace("http://", "https://", 1)
+                if https_url not in origins:
+                    origins.append(https_url)
+        return origins
+
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_get_cors_origins(),
+        # Allow private network access: single-word hostnames and any IPv4 addresses
+        allow_origin_regex=r"^(https?|capacitor)://([a-zA-Z0-9-]+|\d+\.\d+\.\d+\.\d+)(:\d+)?$",
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["*"],
+        expose_headers=["Content-Range", "Accept-Ranges", "Content-Length"],
+    )
+
+
+    #: Paths a visualizer plugin may read from an opaque origin.
+    #:
+    #: Media only, and read-only: cover art and the audio it is drawn over. Nothing here reveals
+    #: anything a listener on the network could not already fetch, which is the same argument the media
+    #: endpoints already rest on — a WiiM speaker holds no credential either.
+    _OPAQUE_ORIGIN_READABLE = ("/artwork", "/stream")
+
+
+    @app.middleware("http")
+    async def allow_opaque_origin_media(request: Request, call_next):  # type: ignore[no-untyped-def]
+        """Let a sandboxed visualizer read cover art.
+
+        **A visualizer plugin has an opaque origin, so its requests arrive as `Origin: null`.** ADR-0087
+        point 1 loads plugin documents in an iframe with `sandbox="allow-scripts"` and deliberately
+        without `allow-same-origin`, which is what makes the origin opaque. `null` is not a URL, so it
+        matches neither `_get_cors_origins()` nor `allow_origin_regex`, and `CORSMiddleware` therefore
+        sends no `Access-Control-Allow-Origin` at all.
+
+        The symptom is silent and does not look like CORS: `beat-tiles` loads its cover with
+        `THREE.TextureLoader` and `setCrossOrigin('anonymous')`, so a refused read lands in the error
+        callback, which sets the texture to `null` — and the scene draws a grid of plain white cubes
+        with no error anywhere.
+
+        `familiar-apple` already fixed exactly this for the plugin's *own* folder: its custom scheme
+        handler attaches `Access-Control-Allow-Origin` with the same reasoning, found when a converted
+        visualizer could not load its own model. Artwork comes from this server instead, so it needs the
+        same answer here.
+
+        **Deliberately not `allow_credentials`.** The header is added only for `Origin: null`, only on
+        media paths, and only for reads. Adding `"null"` to the allow-list instead would have widened
+        every endpoint to opaque origins *with* credentials, which is a much larger claim than "a
+        sandboxed drawing surface may see the album cover".
+        """
+        response = await call_next(request)
+        if (
+            request.headers.get("origin") == "null"
+            and request.method in ("GET", "HEAD", "OPTIONS")
+            and any(part in request.url.path for part in _OPAQUE_ORIGIN_READABLE)
+            and "access-control-allow-origin" not in response.headers
+        ):
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            # **And drop the credentials claim, which `CORSMiddleware` attaches to any request carrying
+            # an `Origin` — allowed or not.** `Allow-Origin: *` with `Allow-Credentials: true` is a
+            # contradiction: a browser refuses the pair outright for a credentialed request, and for the
+            # anonymous read this exists for the claim is untrue anyway. Leaving it would make the one
+            # response that says "anyone may read this" also say "and you may send cookies".
+            # `del`, not `pop`: Starlette's `MutableHeaders` has no `pop`, and calling it raises inside
+            # the middleware — which surfaces as the header simply never being set, not as an error.
+            if "access-control-allow-credentials" in response.headers:
+                del response.headers["access-control-allow-credentials"]
+        return response
+
+
+    # Global exception handlers
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(
+        request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
+        """Handle Pydantic validation errors."""
+        request_id = getattr(request.state, "request_id", None)
+        errors = exc.errors()
+        detail = "; ".join(
+            f"{'.'.join(str(loc) for loc in e['loc'])}: {e['msg']}" for e in errors
+        )
+        logger.warning(f"[{request_id}] Validation error: {detail}")
+        return create_error_response(
+            status_code=422,
+            message="Validation error",
+            detail=detail,
+            request_id=request_id,
+        )
+
+
+    @app.exception_handler(SQLAlchemyError)
+    async def sqlalchemy_exception_handler(
+        request: Request, exc: SQLAlchemyError
+    ) -> JSONResponse:
+        """Handle database errors."""
+        request_id = getattr(request.state, "request_id", None)
+        logger.error(f"[{request_id}] Database error: {exc}", exc_info=True)
+        return create_error_response(
+            status_code=500,
+            message="Database error",
+            detail=str(exc) if app_config.debug else None,
+            request_id=request_id,
+        )
+
+
+    @app.exception_handler(FamiliarError)
+    async def familiar_exception_handler(
+        request: Request, exc: FamiliarError
+    ) -> JSONResponse:
+        """Handle custom Familiar exceptions."""
+        request_id = getattr(request.state, "request_id", None)
+        # Only log 500-level errors at error level
+        if exc.status_code >= 500:
+            logger.error(f"[{request_id}] {exc.__class__.__name__}: {exc.message}", exc_info=True)
+        else:
+            logger.warning(f"[{request_id}] {exc.__class__.__name__}: {exc.message}")
+        return create_error_response(
+            status_code=exc.status_code,
+            message=exc.message,
+            detail=exc.detail,
+            request_id=request_id,
+        )
+
+
+
+    @app.exception_handler(HTTPException)
+    async def http_exception_handler(
+        request: Request, exc: HTTPException
+    ) -> JSONResponse:
+        """Normalize HTTPException responses to standard error envelope."""
+        request_id = getattr(request.state, "request_id", None)
+        if exc.status_code >= 500:
+            logger.error(f"[{request_id}] HTTPException {exc.status_code}: {exc.detail}")
+        else:
+            logger.warning(f"[{request_id}] HTTPException {exc.status_code}: {exc.detail}")
+        return create_error_response(
+            status_code=exc.status_code,
+            message=str(exc.detail) if exc.detail else "Request failed",
+            request_id=request_id,
+        )
+
+
+    @app.exception_handler(Exception)
+    async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        """Catch-all handler for unhandled exceptions."""
+        request_id = getattr(request.state, "request_id", None)
+        logger.error(f"[{request_id}] Unhandled error: {exc}", exc_info=True)
+        return create_error_response(
+            status_code=500,
+            message="Internal server error",
+            detail=str(exc) if app_config.debug else None,
+            request_id=request_id,
+        )
+
+    # Include routers — every one of them, in a single call (ADR-0072 point 6). The list lives in
+    # `app/api/routes/__init__.py`; see that module for why it is there and which part of its order is
+    # load-bearing.
+    #
+    # `DEFAULT_ERROR_RESPONSES` is attached to the aggregate router rather than to 249 individual
+    # routes (ADR-0007). Without it the schema documents only 200 and FastAPI's automatic 422 — and
+    # that 422 is the wrong shape, since `validation_exception_handler` below emits the Familiar
+    # envelope instead. Declaring 422 explicitly replaces FastAPI's `HTTPValidationError` with the
+    # shape the server actually sends. Routes add their own statuses on top where one is real control
+    # flow.
+    app.include_router(api_router, prefix="/api/v1")
+
+    # Moved paths announce themselves (ADR-0079 point 3). Registered as middleware rather than as a
+    # route dependency because the headers must survive an error response — see the class docstring.
+    app.add_middleware(DeprecatedPathHeaders)
+
+
+    def _openapi_with_global_security() -> dict[str, Any]:
+        """Publish the server token as a global security requirement (ADR-0045 point 2).
+
+        Point 2 says *"every operation carries a security requirement, and the allowlist goes to zero"*,
+        and cites 158 operations with none. That number is real — it is 160 today, having grown by two
+        since the ADR was written, which is the ADR's own argument about permanent allowlists making
+        itself. But the count conflates two axes that this codebase keeps separate:
+
+        - **Authentication** — does the caller hold the server token? That is not a property of an
+          individual operation here. `TokenAuthMiddleware` gates every `/api/` path and `/mcp` at once,
+          so the honest OpenAPI expression is a *global* `security` block, which the spec has never had
+          (`security` was absent entirely). One block covers all 264.
+        - **Profile scoping** — which profile may a request act as? That is per-operation, it is what
+          `lint_profile_contracts.py`'s 30-module allowlist tracks, and it is the genuinely large half
+          of point 2. It is untouched here and is a later phase.
+
+        Conflating them would let this look finished while the second half had not started, so the two
+        are separated deliberately rather than quietly.
+        """
+        if app.openapi_schema:
+            return app.openapi_schema
+
+        from fastapi.openapi.utils import get_openapi
+
+        from app.api.auth import TOKEN_HEADER
+
+        # `tags=` must be passed explicitly. `get_openapi` does not read it off the app, so the
+        # `openapi_tags` given to `FastAPI(...)` is silently dropped by any custom `openapi` hook that
+        # forgets it — the descriptions render as nothing and no error is raised anywhere.
+        schema = get_openapi(
+            title=app.title,
+            version=app.version,
+            description=app.description,
+            routes=app.routes,
+            tags=app.openapi_tags,
+        )
+        components = schema.setdefault("components", {})
+        schemes = components.setdefault("securitySchemes", {})
+        schemes["FamiliarToken"] = {
+            "type": "apiKey",
+            "in": "header",
+            "name": TOKEN_HEADER,
+            "description": (
+                "Server token (ADR-0045). Issue one at POST /api/v1/auth/token. When no token is "
+                "configured the server accepts unauthenticated requests, so generated clients must "
+                "treat this as optional-but-expected rather than required."
+            ),
         }
+        # Applies to every operation, including the ones that declare `ProfileHeader`: the two are
+        # different questions, and an operation can require both.
+        schema["security"] = [{"FamiliarToken": []}]
+
+        # The functional areas, grouped (ADR-0072 point 5). `x-tagGroups` is a ReDoc extension rather
+        # than core OpenAPI, which is why it is set here instead of on the `FastAPI(...)` call — there
+        # is no constructor argument for it. `/redoc` renders it as the left-hand navigation; a
+        # generator that does not understand the key ignores it, which is the intended failure mode.
+        schema["x-tagGroups"] = OPENAPI_TAG_GROUPS
+
+        # The contract numbers travel *inside* the schema so the client that generates from it can
+        # derive its own contract mechanically instead of anyone maintaining the number twice
+        # (ADR-0113). `familiar-apple`'s `scripts/vendor-schema.sh` reads these two keys and writes a
+        # Swift constant from them in the same run that copies this file.
+        schema["info"]["x-contract-version"] = API_CONTRACT_VERSION
+        schema["info"]["x-min-client-contract"] = MIN_CLIENT_CONTRACT
+
+        app.openapi_schema = schema
+        return schema
+
+
+    app.openapi = _openapi_with_global_security  # type: ignore[method-assign]
+
+
+    # Serve frontend static files in production
+    # The static folder is created during Docker build
+    if STATIC_DIR.exists():
+        # Serve static assets
+        app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
+        app.mount("/icons", StaticFiles(directory=STATIC_DIR / "icons"), name="icons")
+
+
+        # The PWA is retired (ADR-0059) — no manifest, no `registerSW.js`, no `workbox-*` chunks.
+        #
+        # `/sw.js` stays, and must. It now serves a tombstone worker whose whole job is to unregister
+        # the Workbox worker earlier versions installed. Letting this 404 would fall through to the SPA
+        # catch-all and answer with `index.html`, and a browser told its service worker is now an HTML
+        # document behaves less predictably than one handed a script that removes itself. See
+        # `packages/web/public/sw.js`.
+        @app.get("/sw.js")
+        async def service_worker() -> FileResponse:
+            return FileResponse(STATIC_DIR / "sw.js", media_type="application/javascript")
+
+        # Serve index.html for root
+        @app.get("/")
+        async def serve_root() -> FileResponse:
+            """Serve index.html for root path."""
+            return FileResponse(STATIC_DIR / "index.html")
+
+        # Registered before the catch-all below, which would otherwise swallow them and hand the web
+        # view the full app.
+        app.get("/embed", response_model=None)(serve_embed)
+
+        # SPA fallback - serve index.html for all non-API routes
+        app.get("/{full_path:path}", response_model=None)(spa_fallback)
+    else:
+        # Development mode - just show API info
+        @app.get("/")
+        async def root() -> dict[str, Any]:
+            """Root endpoint with API info."""
+            return {
+                "name": "Familiar",
+                "version": "0.1.0",
+                "docs": "/docs",
+            }
+
+    return app
+
+
+# The production application. `app.main:app` is what uvicorn and the Dockerfile name.
+app = create_app(app_config, build_services(app_config))

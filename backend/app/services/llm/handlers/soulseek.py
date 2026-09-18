@@ -21,7 +21,6 @@ from sqlalchemy import func, select
 from app.db.models import Track
 from app.services.soulseek import (
     SoulseekNotConfigured,
-    SoulseekService,
     SoulseekUnreachable,
 )
 
@@ -90,15 +89,12 @@ class SoulseekHandlersMixin:
         except (ValueError, TypeError):
             limit = 8
         try:
-            slsk = SoulseekService.from_settings()
+            async with self.services.soulseek.client() as slsk:
+                folders = await slsk.search(query, limit=limit)
         except SoulseekNotConfigured as e:
             return {"error": str(e)}
-        try:
-            folders = await slsk.search(query, limit=limit)
         except SoulseekUnreachable as e:
             return {"error": str(e), "query": query}
-        finally:
-            await slsk.close()
         return {
             "query": query,
             "folders": [f.to_dict() for f in folders],
@@ -117,24 +113,21 @@ class SoulseekHandlersMixin:
         self: ToolExecutor, username: str, directory: str
     ) -> dict[str, Any]:
         try:
-            slsk = SoulseekService.from_settings()
+            async with self.services.soulseek.client() as slsk:
+                folder = await slsk.folder(username, directory)
+                files = folder.audio_files
+                if not files:
+                    return {
+                        "error": f"{username} shares no audio files in that folder (or it is no longer shared).",
+                        "username": username,
+                        "directory": directory,
+                    }
+                queued = await slsk.enqueue(username, files)
+                download_root = await slsk.download_root()
         except SoulseekNotConfigured as e:
             return {"error": str(e)}
-        try:
-            folder = await slsk.folder(username, directory)
-            files = folder.audio_files
-            if not files:
-                return {
-                    "error": f"{username} shares no audio files in that folder (or it is no longer shared).",
-                    "username": username,
-                    "directory": directory,
-                }
-            queued = await slsk.enqueue(username, files)
-            download_root = await slsk.download_root()
         except SoulseekUnreachable as e:
             return {"error": str(e), "username": username, "directory": directory}
-        finally:
-            await slsk.close()
         handoff = _handoff(download_root, directory)
         return {
             "username": username,
@@ -152,19 +145,16 @@ class SoulseekHandlersMixin:
 
     async def _get_soulseek_transfers(self: ToolExecutor) -> dict[str, Any]:
         try:
-            slsk = SoulseekService.from_settings()
+            async with self.services.soulseek.client() as slsk:
+                status = await slsk.status()
+                if not status.reachable:
+                    return {"status": status.to_dict(), "transfers": [], "count": 0}
+                transfers = await slsk.downloads()
+                download_root = await slsk.download_root()
         except SoulseekNotConfigured as e:
             return {"error": str(e)}
-        try:
-            status = await slsk.status()
-            if not status.reachable:
-                return {"status": status.to_dict(), "transfers": [], "count": 0}
-            transfers = await slsk.downloads()
-            download_root = await slsk.download_root()
         except SoulseekUnreachable as e:
             return {"error": str(e)}
-        finally:
-            await slsk.close()
         # ADR-0117 point 6: "is it in yet?" is answerable. A settled folder whose sync has been
         # triggered is in Pending Review (or will be within the sync); one not yet triggered is
         # waiting for the next two-minute poll.

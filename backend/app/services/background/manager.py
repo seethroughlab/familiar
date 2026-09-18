@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 
+from app.container import Services
 from app.services.redis_client import ResilientRedisClient, get_resilient_redis
 
 from .analysis import AnalysisMixin
@@ -52,6 +53,10 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin, So
     def __init__(self):
         self._scheduler = None
         self._redis: ResilientRedisClient | None = None
+        # The application's container (ADR-0130), handed in by `startup()`. Until every domain
+        # has moved, the manager itself is still reached through `get_background_manager()`,
+        # so this is the one thing it is *given* rather than looks up.
+        self.services: Services = Services.unconfigured()
         # Initialize mixin state
         self._init_executor_state()
         self._init_analysis_state()
@@ -81,8 +86,15 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin, So
         except Exception as e:
             logger.warning(f"Failed to cleanup stale Redis state: {e}")
 
-    async def startup(self) -> None:
-        """Initialize scheduler on app startup."""
+    async def startup(self, services: Services | None = None) -> None:
+        """Initialize scheduler on app startup.
+
+        `services` is the container the polls resolve their dependencies from (ADR-0130 point
+        7): the Soulseek poll asks `services.soulseek`, never a settings singleton. Omitted, the
+        manager runs as a server with no integrations configured — what the tests want.
+        """
+        if services is not None:
+            self.services = services
         self._cleanup_stale_redis_state()
 
         # Start artwork fetcher

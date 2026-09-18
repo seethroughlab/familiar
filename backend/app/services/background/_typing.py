@@ -11,11 +11,14 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, Protocol
 
+from app.container import Services
 from app.services.redis_client import ResilientRedisClient
 
 
 class _BackgroundManagerProtocol(Protocol):
     """Protocol describing the interface available to background mixins."""
+
+    services: Services
 
     @property
     def redis(self) -> ResilientRedisClient: ...
