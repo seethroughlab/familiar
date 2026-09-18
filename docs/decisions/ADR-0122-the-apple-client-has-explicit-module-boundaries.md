@@ -51,21 +51,12 @@ isolation stays where that decision puts it.
    Ambient may depend on Domain but not on the app or on each other without a protocol owned by the
    consumer. AppCore composes those targets and `FamiliarAPI`. The Xcode app targets depend on
    AppCore and the feature modules to render SwiftUI and bridge platform lifecycle callbacks.
-   `FamiliarAPI` remains generated and does not depend on any domain target. **App extensions —
-   the Live Activity widget (ADR-0121), and any future widget or intents extension — depend on
-   `FamiliarDomain` and nothing else in the graph**; a type shared between the app and an extension
-   lives there. Today `DownloadActivityAttributes` and `CancelDownloadsIntent` are a folder compiled
-   into two targets by hand because the extension cannot link the audio engine to draw a card; that
-   folder is the first `FamiliarDomain` migration, and a small one.
+   `FamiliarAPI` remains generated and does not depend on any domain target.
 
 3. **The target graph is a destination, not a flag-day move.** New code goes to its intended owner;
    existing code moves when a feature is changed or when a move removes a source-text test. An
    intermediate `FamiliarKit` facade may re-export or wrap moved APIs while call sites migrate.
-   No target is created solely to shorten a file. The first question the migration meets is
-   platform: `App/Shared` is one folder both apps compile under `#if os(…)`, and the stores that are
-   Mac-only today (`VideosStore`, `MusicVideoAvailability`) must become either conditional source
-   inside `FamiliarAppCore` or a platform-specific target. This record does not decide that; the
-   first boundary to land does, and says why.
+   No target is created solely to shorten a file.
 
 4. **Public means cross-target API.** Moving a declaration is not permission to expose every member.
    Each feature publishes the smallest surface AppCore or another feature needs; engine internals

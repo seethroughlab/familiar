@@ -52,12 +52,8 @@ repeat.
 4. **SwiftUI lifecycle callbacks trigger the composition root but do not contain the wiring.** A view
    may call `start()`, report scene phase, or present its state. It does not register
    process-wide observers or assign collaborators directly. Platform delegates may enter the same
-   composition root for callbacks that occur before any scene exists. There are three such entries
-   today, and they are the cases where "the SwiftUI lifecycle triggers the composition root" is
-   false — the platform triggers it: background `URLSession` events (ADR-0111 point 9), CarPlay
-   scene attachment, and App Intents performed in the app (ADR-0121's stop button, a
-   `LiveActivityIntent` the system constructs in whichever process it lands in). Each enters through
-   the composition root's one static, not through a static of its own.
+   composition root for callbacks that occur before any scene exists, including background
+   downloads and CarPlay attachment.
 
 5. **Required collaborators are established through initialization where practical.** Runtime
    replaceable dependencies use named methods or grouped dependency values. A set of unrelated
@@ -89,14 +85,7 @@ repeat.
 
 - **Use global singletons for every process service.** `Downloads.shared` is justified by background
   relaunch behavior, but extending that shape would hide dependencies and make isolated tests
-  harder. Process lifetime does not require global access — but process-lifetime *entry* does
-  require exactly one static, because a background relaunch or an intent has nothing else to reach
-  for. The composition root is that static; `Downloads.shared` becomes reachable through it rather
-  than standing beside it as a peer, and ADR-0121's `DownloadActivityHooks.cancelAll` — an optional
-  closure installed by the app delegate and nil in the extension, the exact shape point 5 rules
-  out — is the first thing to fold in. In the extension process the intent still has to compile;
-  there the capability is an explicit stub that says the intent is performed in the app, not an
-  optional that happens to be nil.
+  harder. Process lifetime does not require global access.
 
 - **Let each screen attach what it consumes.** Rejected because radio, playback, ambient, casting,
   CarPlay and command subscriptions intentionally survive navigation. Screen ownership would create
