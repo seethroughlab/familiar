@@ -332,7 +332,7 @@ jobs:
         env:
           POSTGRES_USER: familiar
           POSTGRES_PASSWORD: familiar
-          POSTGRES_DB: familiar
+          POSTGRES_DB: familiar_test
         ports:
           - 5432:5432
         options: >-
@@ -369,17 +369,17 @@ jobs:
 
       - name: Apply migrations
         env:
-          DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar
+          DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar_test
         run: uv run python -m alembic upgrade head
 
       - name: Migration preflight
         env:
-          DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar
+          DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar_test
         run: uv run python -c "from app.db.migration_preflight import assert_database_at_head; assert_database_at_head()"
 
       - name: Run tests
         env:
-          DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar
+          TEST_DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar_test
           REDIS_URL: redis://localhost:6379/0
         # Baseline 2026-03-18: TBD (set from first CI run). Threshold set conservatively low.
         run: uv run pytest tests/test_contract_error_shapes.py tests/test_contract_auth_matrix.py tests/test_contract_envelope_parity.py tests/test_contract_happy_path.py tests/test_migrations.py -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=12 --junit-xml=results-contract.xml
@@ -417,7 +417,7 @@ jobs:
         env:
           POSTGRES_USER: familiar
           POSTGRES_PASSWORD: familiar
-          POSTGRES_DB: familiar
+          POSTGRES_DB: familiar_test
         ports:
           - 5432:5432
         options: >-
@@ -454,17 +454,17 @@ jobs:
 
       - name: Apply migrations
         env:
-          DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar
+          DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar_test
         run: uv run python -m alembic upgrade head
 
       - name: Migration preflight
         env:
-          DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar
+          DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar_test
         run: uv run python -c "from app.db.migration_preflight import assert_database_at_head; assert_database_at_head()"
 
       - name: Run tests
         env:
-          DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar
+          TEST_DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar_test
           REDIS_URL: redis://localhost:6379/0
         run: uv run pytest --ignore=tests/test_contract_error_shapes.py --ignore=tests/test_contract_auth_matrix.py --ignore=tests/test_contract_envelope_parity.py --ignore=tests/test_contract_happy_path.py --ignore=tests/test_migrations.py -k "not integration" -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=35 --junit-xml=results-core.xml
 
@@ -501,7 +501,7 @@ jobs:
         env:
           POSTGRES_USER: familiar
           POSTGRES_PASSWORD: familiar
-          POSTGRES_DB: familiar
+          POSTGRES_DB: familiar_test
         ports:
           - 5432:5432
         options: >-
@@ -538,17 +538,17 @@ jobs:
 
       - name: Apply migrations
         env:
-          DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar
+          DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar_test
         run: uv run python -m alembic upgrade head
 
       - name: Migration preflight
         env:
-          DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar
+          DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar_test
         run: uv run python -c "from app.db.migration_preflight import assert_database_at_head; assert_database_at_head()"
 
       - name: Run tests
         env:
-          DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar
+          TEST_DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar_test
           REDIS_URL: redis://localhost:6379/0
         # Baseline 2026-03-18: TBD (set from first CI run). Threshold set conservatively low; more variance due to --reruns.
         run: uv run pytest -k "integration" -v --tb=short --reruns 2 --reruns-delay 1 --cov=app --cov-report=term-missing --cov-fail-under=5 --junit-xml=results-integration.xml

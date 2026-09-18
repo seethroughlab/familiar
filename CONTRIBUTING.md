@@ -24,6 +24,10 @@ pnpm dev
 ```
 
 Backend tests need PostgreSQL and Redis. The compose stack above provides them for local work.
+**They run only against a database named `…_test`** (ADR-0128): `make test` creates `familiar_test`
+beside the development database, migrates it and runs the suite; a bare `pytest` without
+`TEST_DATABASE_URL` stops before collection and says so. The suite empties the tables it uses, which
+is why it will not take `DATABASE_URL`.
 
 ## Before Opening a PR
 
@@ -34,7 +38,7 @@ Run the focused checks for the area you touched.
 cd backend
 uv run ruff check .
 uv run mypy app --ignore-missing-imports
-uv run pytest tests/ -x -q
+make test                                          # or: TEST_DATABASE_URL=… uv run pytest -x -q
 
 # Frontend
 pnpm --filter @familiar/frontend run lint

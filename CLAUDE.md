@@ -285,7 +285,7 @@ flight), not `DownloadManager.states`. A drained queue ends it "Finished" for fi
 The stop button is a `LiveActivityIntent` reaching `DownloadManager.cancelAll()` through a hook
 `AppDelegate` installs on every launch — the first control that discards a whole queue.
 
-**`ADR-0122`–`ADR-0130` are all `proposed` (2026-09-17) and none is accepted yet.** They are about
+**`ADR-0122`–`ADR-0130` are `proposed` (2026-09-17), except `0128`, accepted and built the same day.** They are about
 structure rather than features: how the Apple client, the backend, the web client and the docs are put
 together. Two of them exist because a routine command is dangerous — `uv run pytest tests/ -x -q` under Running Tests below
 deletes every row from eighteen tables in whatever database `DATABASE_URL` names (`0128`), and CI's
@@ -294,7 +294,7 @@ again differs from the numbering:
 
 | # | ADR | Why here |
 |---|---|---|
-| 1 | `0128` | Smallest and protects real data. `TEST_DATABASE_URL`, a `_test` suffix with no second marker, CI renamed to `familiar_test`. Its guard runs in `conftest.py` until `0130` gives it a factory. |
+| 1 | `0128` | **Built 2026-09-17.** `TEST_DATABASE_URL`, a `_test` suffix with no second marker, CI renamed to `familiar_test`. Its guard runs in the rootdir `conftest.py` until `0130` gives it a factory. |
 | 2 | `0130` | `create_app(settings, services)`; the first domain moved is **Soulseek**, chosen because it touches every boundary the record names and has the fewest callers. Library sync and analysis go last. |
 | 3 | `0129` | `@hey-api/openapi-ts`, pinned; the first slice is the one whose interceptor greps English (`base.ts:197`). Before `0126` so the new screens consume feature adapters, not `api/*.ts`. |
 | 4 | `0126` | Overview / Library / Settings. **Gated**: a mocked Overview is reviewed against the idle NAS and a failing server, desktop and 400px, before the record is accepted. Old router paths redirect — this is not an `0079` alias. |
@@ -527,8 +527,9 @@ make deploy-dev  # Build + rsync to NAS + restart (~16-30s)
 
 ```bash
 # Backend (from backend/)
-make test                    # pytest with coverage
-uv run pytest tests/ -x -q   # quick run, stop on first failure
+make test                    # creates + migrates familiar_test, then pytest (ADR-0128)
+make test-db                 # just the database; then `uv run pytest -x -q` works, TEST_DATABASE_URL exported
+# A bare `uv run pytest` without TEST_DATABASE_URL refuses to run — it would empty DATABASE_URL's database.
 
 # Frontend unit tests (from packages/frontend/)
 pnpm test                   # vitest run

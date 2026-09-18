@@ -1,4 +1,4 @@
-.PHONY: install dev run reset-db migrate test test-contract lint lint-contracts openapi openapi-check contract-lock contract-lock-check format backfill-artists backfill-albums adopt-videos backfill-video-posters match-videos refetch-videos find-stills
+.PHONY: install dev run reset-db migrate test-db test test-contract lint lint-contracts openapi openapi-check contract-lock contract-lock-check format backfill-artists backfill-albums adopt-videos backfill-video-posters match-videos refetch-videos find-stills
 
 # Install dependencies
 install:
@@ -20,13 +20,24 @@ reset-db:
 migrate:
 	uv run python -m alembic upgrade head
 
-# Run tests
-test:
+# The database the suite is allowed to empty (ADR-0128). Beside the development one on the
+# compose stack's PostgreSQL; the `_test` suffix is what the suite checks for, and there is no
+# opt-out. Override to point at another server, not to point at a real database.
+TEST_DATABASE_URL ?= postgresql+asyncpg://familiar:familiar@localhost:5432/familiar_test
+export TEST_DATABASE_URL
+
+# Create the test database if it is missing, and migrate it. Idempotent; `test` runs it first.
+test-db:
+	uv run python scripts/ensure_test_database.py
+
+# Run tests — against the test database only. `uv run pytest` on its own refuses to run
+# without TEST_DATABASE_URL, with the same instructions, rather than emptying whatever
+# DATABASE_URL names; that is the whole of ADR-0128.
+test: test-db
 	uv run pytest -v
 
 # Run backend API contract tests with required migration preflight
-test-contract:
-	uv run python -m alembic upgrade head
+test-contract: test-db
 	uv run pytest tests/test_contract_error_shapes.py tests/test_contract_auth_matrix.py tests/test_contract_envelope_parity.py -v --tb=short --no-cov
 
 # Lint code
