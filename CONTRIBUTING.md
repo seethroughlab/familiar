@@ -27,7 +27,8 @@ Backend tests need PostgreSQL and Redis. The compose stack above provides them f
 **They run only against a database named `…_test`** (ADR-0128): `make test` creates `familiar_test`
 beside the development database, migrates it and runs the suite; a bare `pytest` without
 `TEST_DATABASE_URL` stops before collection and says so. The suite empties the tables it uses, which
-is why it will not take `DATABASE_URL`.
+is why it will not take `DATABASE_URL`. Without the compose stack, `make test-services test` runs the
+same thing against a throwaway Postgres and Redis on 5434/6380; `make test-services-down` removes them.
 
 ## Before Opening a PR
 
