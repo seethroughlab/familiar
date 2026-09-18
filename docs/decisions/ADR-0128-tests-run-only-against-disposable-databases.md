@@ -1,8 +1,24 @@
 # ADR-0128: Tests Run Only Against Disposable Databases
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-17
+
+Implementation:
+- **Accepted 2026-09-17**, the day it was proposed, as written; built the same day.
+- **Built 2026-09-17.** `backend/conftest.py` (rootdir, loaded before `tests/conftest.py` imports
+  `app.config`) calls `tests/disposable_database.install`, which reads `TEST_DATABASE_URL` only,
+  requires a database name ending in `_test`, and installs it as `DATABASE_URL` for the process
+  — the application and alembic read that until ADR-0130's factory. A missing or wrongly named
+  URL is a `pytest.UsageError` before collection, with the instructions. Four unit tests, no
+  database. `scripts/ensure_test_database.py` creates the database from a maintenance
+  connection if it is missing and runs `alembic upgrade head`; `make test` and
+  `make test-contract` run it first, with `TEST_DATABASE_URL` defaulting to `familiar_test` on the
+  compose stack's server. CI's three pytest jobs use a service database named `familiar_test`
+  and pass `TEST_DATABASE_URL` to pytest (migrations and preflight still take `DATABASE_URL`,
+  pointed at the same database); the E2E job runs the application, not the suite, and is
+  unchanged. Point 7 (labelling pure tests) is not done: today every run needs the variable
+  set, though pure tests do not connect and run fine against a name that does not exist.
 
 ## Context
 

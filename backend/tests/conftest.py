@@ -98,6 +98,13 @@ def make_profile_headers(profile: dict) -> dict[str, str]:
 # Shared async DB fixture for integration tests
 # ---------------------------------------------------------------------------
 
+# **Destructive, on purpose, and only because `conftest.py` at the rootdir has already proved the
+# database is disposable** (ADR-0128 point 5). `async_db` deletes every row of these tables before
+# and after each test — which, until that guard, it did to whatever `DATABASE_URL` named, the
+# development library included. Deleting rather than wrapping each test in a transaction is
+# deliberate: the application, its background work and the session-scoped client hold their own
+# connections, and a rollback cannot take back what they wrote.
+#
 # Tables to clean in correct FK order (children before parents).
 # ArtistAlias FKs to Artist with CASCADE; Track.canonical_artist_id FKs
 # to Artist with SET NULL — so deleting tracks first then artists is safe.
