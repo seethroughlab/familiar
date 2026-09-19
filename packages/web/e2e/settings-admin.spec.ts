@@ -13,7 +13,8 @@ test.describe('Settings', () => {
     // point of the catch-all; asserting it here keeps that promise honest.
     await page.goto('/settings');
     await page.waitForLoadState('domcontentloaded');
-    await expect(page.getByRole('heading', { name: 'Library', exact: true }).first())
+    // The catch-all lands on the Overview (ADR-0126 point 3).
+    await expect(page.getByRole('heading', { name: 'Overview', exact: true }).first())
       .toBeVisible({ timeout: 10000 });
   });
 

@@ -39,14 +39,14 @@ test.describe('Profiles', () => {
     await page.waitForSelector('a:has-text("Library"), a:has-text("Tools")', { timeout: 5000 });
   });
 
-  test('the Server destination has a profile section', async ({ page }) => {
+  test('Server → People has the profile section', async ({ page }) => {
     await page.goto('/');
     await ensureProfile(page);
     // Profiles are infrastructural (ADR-0057 point 2); under ADR-0126 they are Server → People.
     await navigateToDestination(page, 'Server');
     await navigateToSection(page, 'People');
 
-    const profileHeading = page.getByRole('heading', { name: 'Profiles' });
+    const profileHeading = page.getByRole('heading', { name: 'People' });
     await expect(profileHeading).toBeVisible({ timeout: 5000 });
 
     // Should have Switch button
