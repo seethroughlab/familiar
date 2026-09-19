@@ -302,6 +302,14 @@ jobs:
       - name: Lint import boundaries
         run: uv run python scripts/lint_boundaries.py
 
+      # ADR-0127 points 6 and 9: the current-state docs name only things that exist, and the ADR
+      # index is regenerated from the records. Pure Python over the tree; no database.
+      - name: Docs name only what exists
+        working-directory: .
+        run: |
+          python3 scripts/check_docs.py
+          python3 scripts/adr_index.py --check
+
       # Imports app.main, so it needs `uv sync --extra dev` above — it cannot move to
       # the migration-lint job, which deliberately runs stdlib-only scripts. This job
       # also runs on a bare checkout with no backend/static/, which matters: a built

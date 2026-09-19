@@ -299,7 +299,7 @@ again differs from the numbering:
 | 3 | `0129` | **First slice built 2026-09-18.** `packages/api-client` is generated from `backend/openapi.json` by `@hey-api/openapi-ts` 0.99.0 and checked in CI; `base.ts` installs one transport on both the wrappers' and the generated client's instances; the interceptor switches on the envelope's `code` — the prose match it replaced had never fired for a dead profile, because the sentence was in `message`, not `detail`. Soulseek status is the first feature on the generated path. Remaining features migrate one at a time. |
 | 4 | `0126` | **Built 2026-09-19.** Overview / Library / Analysis / Server, section rails with routes, ancestor matching in one `isUnder`, `/tools/*` redirects. A provider is one card (`ProviderCards.tsx`); the pipeline is one destination; the Overview's rules are pure (`screens/overview/attention.ts`) and read the backlog from the worker phase queues. Its gate was a mock; the built page was then checked against the NAS and the demo. Not done: pending review (no screen), a persisted duplicates count. |
 | 5 | `0125` | **Built 2026-09-19.** `packages/visualizer-sdk`; the four visualizers are workspace members at last (they never were — `packages/*` does not recurse) building to their own `dist/`, vendored into `familiar-apple` by `scripts/build-visualizers.sh`. Bridge tests on recorded events; `packages/visualizers/e2e` runs every built document in a sandboxed frame. |
-| 6 | `0127` | `docs/START-HERE.md`, `make doctor`, `make check`, and a CI check that cited paths exist. Last so the traced slice goes through the generated web client and the factory. Its follow-up reconciles this file with `AGENTS.md`. |
+| 6 | `0127` | **Built 2026-09-19.** `docs/START-HERE.md` (map, the Soulseek-status slice traced through eleven current files, five golden paths, the security posture), `make doctor`, `make check`, `docs/ADR-INDEX.md` (generated), `docs/HEALTH.md` (the debt register that replaced the archived backlog), and `scripts/check_docs.py` in CI — which found six wrong claims in START-HERE's own first draft. Follow-up: one shared source for this file and `AGENTS.md`. |
 | — | `0122` → `0123` → `0124` | The Apple track, in `familiar-apple`, in parallel with all of the above. `FamiliarAppCore` is the first boundary, because `0123`'s `FamiliarApplication` and `0124`'s repositories both live there. |
 
 Two things the numbers in those records settle that the text would have let you assume otherwise: the
@@ -374,6 +374,8 @@ docs/
 | Smart playlists UI | `packages/frontend/src/components/SmartPlaylists/` |
 | Settings | `packages/frontend/src/components/Settings/` |
 | Docker setup | `docker/Dockerfile`, `docker/docker-compose.prod.yml`, `docker/start.sh` |
+| Where to start, what is wrong, the decisions | `docs/START-HERE.md`, `docs/HEALTH.md`, `docs/ADR-INDEX.md` (generated — `make adr-index`) |
+| Is this machine set up? | `make doctor`; `make check` before a PR |
 | CLAP smoke test | `backend/scripts/smoke_test_clap.py` |
 
 ## Frontend Architecture

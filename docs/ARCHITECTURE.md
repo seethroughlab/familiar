@@ -12,16 +12,19 @@ music.
 | Apple clients | The REST/OpenAPI contract they consume | Native playback implementation, library listening UX |
 | Visualizers | Document contract, catalog, bundled examples, sandboxed iframe host | Arbitrary in-page plugin execution |
 
-The browser used to be a PWA/player. That path was retired: the current web app intentionally has no
-service worker, no install prompt, no browser playback engine, and no offline track cache. The Mac
-and iPhone apps own listening.
+The web app is an administration tool with no install prompt, no browser playback engine and no
+offline track cache; the Mac and iPhone apps own listening. `packages/web/public/sw.js` still exists
+and must keep answering: it is a tombstone that unregisters the service worker browsers installed
+before the PWA was retired, and a 404 there would leave those browsers on a cached app forever.
 
 ## Backend Shape
 
 The backend is a FastAPI app backed by PostgreSQL, pgvector and Redis.
 
-- `backend/app/main.py` wires startup, middleware, static files, OpenAPI customization and error
-  handlers.
+- `backend/app/main.py` holds `create_app(settings, services)`: middleware in the one order that
+  works, static files, OpenAPI customization and error handlers. `backend/app/container.py` is the
+  container it is given and the only place a long-lived resource or singleton is reached for.
+- `backend/app/operations/` holds use cases a route invokes by dependency; they contain no HTTP.
 - `backend/app/api/routes/__init__.py` aggregates the REST surface once, preserving route order where
   dynamic paths could otherwise swallow specific routes.
 - `backend/app/api/deps.py` owns database/profile dependencies and the streaming connection-release
@@ -46,16 +49,22 @@ Only bump the phase that changed. Re-analysis is triggered by library sync, not 
 
 ## Frontend Shape
 
-The frontend workspace has two main packages:
+The frontend workspace has four kinds of package:
 
-- `packages/frontend`: shared React modules, API clients, Zustand stores, hooks, panels and screens.
+- `packages/frontend`: the React — API adapters, Zustand stores, hooks, panels and screens.
 - `packages/web`: Vite entry points for the administration app, embedded discovery document and
   visualizer document host.
+- `packages/api-client`: the transport client generated from `backend/openapi.json`. Only
+  `packages/frontend/src/api/` may import it; screens consume the adapters there.
+- `packages/visualizers/*`: the first-party visualizer documents, each building to its own folder,
+  shipped by `familiar-apple`.
 
 Important boundaries:
 
-- `packages/frontend/src/app/routes.ts` is the source of truth for top-level web destinations.
-- `packages/frontend/src/api/base.ts` owns API origin, server token and profile headers.
+- `packages/frontend/src/app/routes.ts` is the source of truth for the four destinations and every
+  section under them; a section's path is its route, and one `isUnder()` decides what is lit.
+- `packages/frontend/src/api/base.ts` owns API origin, server token and profile headers, installed
+  once on both the hand-written wrappers' axios instance and the generated client's.
 - `packages/frontend/.dependency-cruiser.cjs` enforces cross-module import rules.
 - `packages/web/src/main.tsx` deliberately does not register an audio engine.
 - `packages/web/src/embed.tsx` and `packages/web/src/visualizer.tsx` register the small null/audio
