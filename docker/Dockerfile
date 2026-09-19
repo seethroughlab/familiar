@@ -19,6 +19,7 @@ ENV NPM_CONFIG_FETCH_RETRIES=5 \
 
 # Copy workspace config and package files for dependency caching
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+COPY packages/api-client/package.json packages/api-client/
 COPY packages/frontend/package.json packages/frontend/
 COPY packages/web/package.json packages/web/
 
@@ -29,6 +30,10 @@ RUN pnpm install --frozen-lockfile --filter @familiar/web...
 # There is no sessions relay build argument. Listening sessions signal through the Familiar server
 # this image *is* (ADR-0036); a build argument that silently sent listeners' session codes, chat and
 # reactions to a third party was the thing that decision removed.
+# `api-client` is the generated transport client (ADR-0129), a workspace dependency of `frontend`
+# consumed as source — so it is copied like the others, not built. Its generated files are
+# committed; nothing regenerates here.
+COPY packages/api-client/ packages/api-client/
 COPY packages/frontend/ packages/frontend/
 COPY packages/web/ packages/web/
 RUN pnpm --filter @familiar/web run build
