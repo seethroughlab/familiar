@@ -1,0 +1,14 @@
+{
+  "name": "@familiar/visualizers",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "The first-party visualizer documents' contract check (ADR-0125 point 4): every built document against the same recorded host events.",
+  "scripts": {
+    "build": "pnpm -r --filter './packages/visualizers/*' build",
+    "test:documents": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2"
+  }
+}

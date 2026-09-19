@@ -14,7 +14,7 @@
  * It shares `LyricWordField` rather than copying it. A second implementation would drift from the
  * first, and the whole point is that this is the same field.
  */
-import type { VisualizerProps } from './types';
+import type { VisualizerProps } from '@familiar/visualizer-sdk';
 import { LyricWordField } from './LyricWordField';
 
 export function LyricStorm({ lyrics, track, artworkUrl }: VisualizerProps) {

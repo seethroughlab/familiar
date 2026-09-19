@@ -13,12 +13,7 @@ import { useRef, useMemo, useEffect, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { type VisualizerProps } from './types';
-import type { TrackFeatures } from './types';
-import { useAudioAnalyser, getAudioData } from './familiar';
-import { useArtworkPalette } from './useArtworkPalette';
-import { AudioReactiveEffects } from './AudioReactiveEffects';
-import { FrameScheduler } from './FrameScheduler';
+import { AudioReactiveEffects, FrameScheduler, getAudioData, useArtworkPalette, useAudioAnalyser, feature, type TrackFeatures, type VisualizerProps } from '@familiar/visualizer-sdk';
 const isMobile = () => window.matchMedia('(max-width: 768px)').matches;
 
 const mobile = isMobile();
@@ -262,7 +257,7 @@ function VaporwaveTerrain({ palette, features }: { palette: string[]; features: 
   const hemi = useRef<THREE.HemisphereLight>(null);
   const zoff = useRef(0);
 
-  const valence = features?.valence ?? 0.4;
+  const valence = feature(features, 'valence', 0.4);
   const isSun = valence >= 0.5;
 
   useEffect(() => {
@@ -423,8 +418,8 @@ function Backdrop({ palette, features }: { palette: string[]; features: TrackFea
   const matRef = useRef<THREE.ShaderMaterial>(null);
   const { size } = useThree();
 
-  const valence = features?.valence ?? 0.4;
-  const energy = features?.energy ?? 0.5;
+  const valence = feature(features, 'valence', 0.4);
+  const energy = feature(features, 'energy', 0.5);
   const isSun = valence >= 0.5;
 
   const uniforms = useMemo(
@@ -1255,7 +1250,7 @@ function CVOverlay() {
 function TerrainScene({ palette, features }: { palette: string[]; features: TrackFeatures | null }) {
   useAudioAnalyser(true);
 
-  const valence = features?.valence ?? 0.4;
+  const valence = feature(features, 'valence', 0.4);
   const isSun = valence >= 0.5;
 
   // Fog colour = the sunset horizon, so the road dissolves INTO the sky.

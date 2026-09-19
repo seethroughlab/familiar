@@ -194,6 +194,45 @@ not define it, and your bundle throws `process is not defined` on its first line
 define: { 'process.env.NODE_ENV': '"production"' }
 ```
 
+## Authoring with the SDK — one path, not the contract
+
+Everything above is the contract, and a document that handles the four events itself is complete.
+If you are writing a React + three.js visualizer, the four first-party ones share an authoring package
+that does the repetitive part for you (ADR-0125): `@familiar/visualizer-sdk`, in this repository's
+workspace.
+
+```ts
+import { announceReady, useTrack, usePlaybackState, getAudioData, feature } from '@familiar/visualizer-sdk';
+
+function App() {
+  const track = useTrack();                       // familiar:track, or null when the queue empties
+  const { isPlaying, currentTime } = usePlaybackState();  // familiar:state
+  useEffect(() => { announceReady(); }, []);      // familiar:ready — last, once you are listening
+  // in your frame loop:
+  const { bass, beat, onset, frequencyData } = getAudioData();  // the latest familiar:audio
+  const energy = feature(track?.features, 'energy', 0.5);       // a numeric feature, or the default
+}
+```
+
+It also has `FrameScheduler` (30 fps demand rendering on phones), `AudioReactiveEffects` (bloom and
+RGB shift driven by the frame), `useArtworkPalette` and `usePalette` (colours from the cover), and the
+`VisualizerProps`, `TrackInfo`, `LyricLine` and `TrackFeatures` types.
+
+Three things it decides so you do not have to, all pinned by tests against recorded host events:
+
+- **A message it does not understand is dropped, never thrown on.** A throw inside `window`'s
+  message listener is invisible in a sandboxed frame. A malformed `familiar:audio` keeps the last good
+  frame; a malformed `familiar:track` keeps the current track.
+- **`apiVersion` is negotiated.** Absent means 1 — hosts before the field existed. Present and not 1
+  is ignored, and said once in the console, rather than misread.
+- **It is a build-time dependency.** What you import is bundled into your `app.js`; the host serves
+  no shared JavaScript and promises no package at runtime. Your folder is still self-contained.
+
+The first-party sources are under `packages/visualizers/`; `pnpm --filter @familiar/visualizers build`
+builds each into its `dist/`, and `pnpm --filter @familiar/visualizers test:documents` runs every
+built document through the same recorded events in a sandboxed frame. `packages/visualizers/examples/`
+holds two visualizers that use none of this, on purpose.
+
 ## Affinity — what your visualizer suits
 
 Optional. Declares what a track should be like for the server to pick you when the listener has
