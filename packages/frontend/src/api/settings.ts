@@ -41,17 +41,6 @@ export interface AppSettingsResponse {
   update_channel: string;
 }
 
-export interface SoulseekStatus {
-  configured: boolean;
-  url: string | null;
-  reachable: boolean;
-  logged_in: boolean;
-  username: string | null;
-  version: string | null;
-  shared_files: number | null;
-  error: string | null;
-}
-
 export interface AppSettingsUpdate {
   lastfm_api_key?: string;
   lastfm_api_secret?: string;
@@ -86,14 +75,6 @@ export const appSettingsApi = {
     return data;
   },
 
-  /**
-   * Probe the configured slskd. Never throws for an unreachable client — that is a status with
-   * an `error` sentence, which is what the panel shows.
-   */
-  soulseekStatus: async (): Promise<SoulseekStatus> => {
-    const { data } = await api.get('/soulseek/status');
-    return data;
-  },
 
   clearLastfm: async (): Promise<{ status: string }> => {
     const { data } = await api.delete('/settings/lastfm');

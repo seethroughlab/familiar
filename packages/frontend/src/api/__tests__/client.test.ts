@@ -11,6 +11,8 @@ const mockApiInstance = {
   patch: vi.fn(),
   delete: vi.fn(),
   head: vi.fn(),
+  // The generated client's `setConfig` merges into `defaults` (ADR-0129 point 7).
+  defaults: { headers: {} },
   interceptors: {
     request: { use: vi.fn() },
     response: { use: vi.fn() },
@@ -36,13 +38,26 @@ describe('API client configuration', () => {
     vi.resetModules()
   })
 
-  it('should create axios instance with correct baseURL', async () => {
+  it('creates two instances on one transport: the wrappers under /api/v1, the generated client at the origin', async () => {
     const axios = (await import('axios')).default
     await import('../base')
 
-    expect(axios.create).toHaveBeenCalledWith({
-      baseURL: '/api/v1',
-    })
+    // One for the hand-written wrappers, one for the generated client (ADR-0129 point 7) — plus
+    // the generated client's own default instance at import, which `setConfig({ axios })`
+    // supersedes; `generatedTransport.test.ts` proves requests go through ours.
+    expect(vi.mocked(axios.create).mock.calls.length).toBeGreaterThanOrEqual(2)
+
+    // The base URL is decided per request by the first interceptor, not at creation, so the
+    // origin can change (`/visualizer`) without recreating anything. The wrappers' instance
+    // registers first; its prefix is /api/v1, the generated client's is empty.
+    const baseUrlHandlers = mockApiInstance.interceptors.request.use.mock.calls
+      .map((call) => call[0] as (c: { headers: Record<string, string> }) => { baseURL?: string })
+    const prefixes = new Set<string | undefined>()
+    for (const handler of baseUrlHandlers) {
+      prefixes.add(handler({ headers: {} }).baseURL)
+    }
+    expect(prefixes).toContain('/api/v1')
+    expect(prefixes).toContain('')
   })
 
   it('should set up request interceptor for profile header', async () => {
@@ -378,7 +393,7 @@ describe('favoritesApi', () => {
 
 describe('Error handling', () => {
   describe('401 profile invalidation', () => {
-    it('should dispatch profile-invalidated event on 401 with specific message', async () => {
+    it('should dispatch profile-invalidated event on a 401 coded INVALID_PROFILE', async () => {
       const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
       vi.resetModules()
 
@@ -392,7 +407,7 @@ describe('Error handling', () => {
       const error = {
         response: {
           status: 401,
-          data: { detail: 'Invalid profile, please re-register' },
+          data: { error: true, status_code: 401, message: '…', code: 'INVALID_PROFILE' },
         },
       }
 

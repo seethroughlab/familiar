@@ -41,6 +41,17 @@ module.exports = {
       to: { path: '@capacitor' },
     },
     {
+      name: 'generated-client-stays-behind-the-adapters',
+      comment:
+        'Only src/api/ may import @familiar/api-client (ADR-0129 point 5). Screens and components ' +
+        'consume feature adapters, queries and mutations, so cache keys, retries and error ' +
+        'behaviour stay beside the feature rather than in the component tree.',
+      severity: 'error',
+      from: { path: '^src/', pathNot: '^src/api/' },
+      // The workspace symlink resolves to the sibling package's source, so match that path.
+      to: { path: '(^|/)api-client/src/' },
+    },
+    {
       name: 'no-service-to-store',
       comment: 'Services should not depend on UI stores — invert the dependency via callbacks or events',
       severity: 'warn',

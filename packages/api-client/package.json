@@ -1,0 +1,22 @@
+{
+  "name": "@familiar/api-client",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "The web transport client, generated from backend/openapi.json (ADR-0129). Never edited by hand.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "generate": "openapi-ts",
+    "check": "openapi-ts && git diff --exit-code -- src/generated",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.90.12",
+    "axios": "^1.13.2"
+  },
+  "devDependencies": {
+    "@hey-api/openapi-ts": "0.99.0",
+    "typescript": "~5.9.3"
+  }
+}

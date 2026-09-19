@@ -8,6 +8,7 @@ from fastapi import Depends, HTTPException, Request
 from fastapi.security import APIKeyHeader
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.exceptions import InvalidProfileError
 from app.db.session import async_session_maker
 from app.utils.time import utcnow
 
@@ -116,7 +117,7 @@ async def get_current_profile(
 
     profile = await db.get(Profile, profile_id)
     if not profile:
-        raise HTTPException(401, "Invalid profile ID - please re-register")
+        raise InvalidProfileError()
 
     # Update last_seen timestamp (committed by get_db's auto-commit)
     profile.last_seen_at = utcnow()
@@ -150,7 +151,7 @@ async def require_profile(
 
     profile = await db.get(Profile, profile_id)
     if not profile:
-        raise HTTPException(401, "Invalid profile ID - please re-register")
+        raise InvalidProfileError()
 
     # Update last_seen timestamp (committed by get_db's auto-commit)
     profile.last_seen_at = utcnow()

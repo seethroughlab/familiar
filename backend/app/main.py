@@ -169,6 +169,7 @@ def create_error_response(
     message: str,
     detail: str | None = None,
     request_id: str | None = None,
+    code: str | None = None,
 ) -> JSONResponse:
     """Create a consistent error response."""
     content = {
@@ -180,6 +181,8 @@ def create_error_response(
         content["detail"] = detail
     if request_id:
         content["request_id"] = request_id
+    if code:
+        content["code"] = code
     # Also as a header. Starlette hoists the `@app.exception_handler(Exception)` catch-all
     # into `ServerErrorMiddleware`, which sits *outside* `RequestIDMiddleware` — so the
     # 500 it emits never passes through `send_with_request_id` and would otherwise be the
@@ -754,6 +757,7 @@ def create_app(settings: Settings, services: Services) -> FastAPI:
             status_code=exc.status_code,
             message=exc.message,
             detail=exc.detail,
+            code=exc.code,
             request_id=request_id,
         )
 

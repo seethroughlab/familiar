@@ -296,7 +296,7 @@ again differs from the numbering:
 |---|---|---|
 | 1 | `0128` | **Built 2026-09-17.** `TEST_DATABASE_URL`, a `_test` suffix with no second marker, CI renamed to `familiar_test`. Its guard runs in the rootdir `conftest.py` until `0130` gives it a factory. |
 | 2 | `0130` | **Soulseek slice built 2026-09-18.** `create_app(settings, services)` exists; `app/container.py` holds one gateway; the route, MCP executor and background poll are handed it. The pattern for the next domain is the ADR's Implementation block. Library sync and analysis go last; `scanner.py:126` still reads env at import. |
-| 3 | `0129` | `@hey-api/openapi-ts`, pinned; the first slice is the one whose interceptor greps English (`base.ts:197`). Before `0126` so the new screens consume feature adapters, not `api/*.ts`. |
+| 3 | `0129` | **First slice built 2026-09-18.** `packages/api-client` is generated from `backend/openapi.json` by `@hey-api/openapi-ts` 0.99.0 and checked in CI; `base.ts` installs one transport on both the wrappers' and the generated client's instances; the interceptor switches on the envelope's `code` — the prose match it replaced had never fired for a dead profile, because the sentence was in `message`, not `detail`. Soulseek status is the first feature on the generated path. Remaining features migrate one at a time. |
 | 4 | `0126` | Overview / Library / Analysis / Server — four, after a panel-level audit found the first draft's three split providers, the analysis pipeline and backup across groups, and placed two screens that don't exist (pending review; editable library paths). Its gate — a mocked Overview reviewed against the idle NAS and a failing server, desktop and 400px — was cleared the same day. Old router paths redirect — not an `0079` alias. |
 | 5 | `0125` | `@familiar/visualizer-sdk`, build-time only. Independent of everything above; the dependency-free path is already proven by `packages/visualizers/examples/`. |
 | 6 | `0127` | `docs/START-HERE.md`, `make doctor`, `make check`, and a CI check that cited paths exist. Last so the traced slice goes through the generated web client and the factory. Its follow-up reconciles this file with `AGENTS.md`. |
@@ -311,6 +311,8 @@ and the fifteen Apple tests that read Swift as text do so through two helpers, `
 
 ```
 packages/
+├── api-client/            # Generated from backend/openapi.json (ADR-0129); never edited by hand.
+│   └── src/generated/     # Only packages/frontend/src/api/ may import it.
 ├── frontend/              # Shared React code (components, hooks, stores, types)
 │   └── src/
 │       ├── components/    # React components
@@ -413,6 +415,14 @@ that the native clients live in `familiar-apple` and do not run this bundle.
 1. Create route in `backend/app/api/routes/`
 2. Register router in `main.py`
 3. Use dependency injection from `deps.py` for DB/auth
+4. `cd backend && make openapi && make contract-lock`, then `pnpm generate:api` from the root — the
+   web client is generated from `backend/openapi.json` (ADR-0129) and CI fails if either is stale.
+   Wrap the generated operation in a feature adapter under `packages/frontend/src/api/`; nothing
+   under `components/`, `panels/`, `screens/` or `app/` may import `@familiar/api-client`
+   (`check:boundaries` enforces it).
+5. If a client must *act* on a new error — not just show it — give the exception an `ErrorCode`
+   (`app/api/exceptions.py`) and document it in `docs/ERROR-CONTRACTS.md`. Clients switch on
+   `code`, never on `message`.
 
 ### Add a database migration
 1. Create file in `backend/migrations/versions/` named `YYYYMMDD_slug.py`

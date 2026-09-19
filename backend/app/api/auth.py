@@ -34,6 +34,8 @@ import secrets
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from app.api.exceptions import ErrorCode
+
 TOKEN_HEADER = "X-Familiar-Token"
 
 #: Paths that never require a token, matched against the path with any trailing slash removed.
@@ -163,6 +165,7 @@ class TokenAuthMiddleware:
             "status_code": 401,
             "message": "Authentication required",
             "detail": f"Send the server token in the {TOKEN_HEADER} header.",
+            "code": ErrorCode.SERVER_TOKEN_REQUIRED.value,
         }
         if request_id:
             body["request_id"] = request_id
