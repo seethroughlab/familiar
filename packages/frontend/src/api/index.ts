@@ -8,6 +8,7 @@ export * from './settings';
 export * from './soulseek';
 export * from './profiles';
 export * from './admin';
+export * from './system';
 export * from './metadata';
 export * from './backup';
 export * from './s3Backup';

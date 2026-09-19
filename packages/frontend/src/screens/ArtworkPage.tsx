@@ -18,7 +18,7 @@ import { libraryApi } from '../api/library';
 import { queryKeys } from '../api/queryKeys';
 import { offlineAwareRetry } from '../api/queryDefaults';
 import { useOfflineStatus } from '../hooks/useOfflineStatus';
-import { AdminPage, AdminSection } from './AdminPage';
+import { SectionPage, AdminSection } from './AdminPage';
 
 export function ArtworkPage() {
   const { isOffline } = useOfflineStatus();
@@ -48,7 +48,7 @@ export function ArtworkPage() {
   const real = data ? data.with_artwork - data.generated : 0;
 
   return (
-    <AdminPage title="Cover art" subtitle="What has real artwork, what has a placeholder, and what has none">
+    <SectionPage title="Cover art" subtitle="What has real artwork, what has a placeholder, and what has none">
       <AdminSection title="Coverage">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Figure label="Real art" value={real} loading={isLoading} tone="text-emerald-400" />
@@ -111,7 +111,7 @@ export function ArtworkPage() {
           )}
         </div>
       </AdminSection>
-    </AdminPage>
+    </SectionPage>
   );
 }
 

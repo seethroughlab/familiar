@@ -16,7 +16,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Copy, Search, Loader2 } from 'lucide-react';
 
 import { libraryApi, type DuplicateGroup, type DuplicateTrackInfo } from '../api/library';
-import { AdminPage, AdminSection } from './AdminPage';
+import { SectionPage, AdminSection } from './AdminPage';
 
 export function DuplicatesPage() {
   const [search, setSearch] = useState('');
@@ -35,7 +35,7 @@ export function DuplicatesPage() {
   };
 
   return (
-    <AdminPage
+    <SectionPage
       title="Duplicates"
       subtitle="Find tracks that appear more than once, and which copy is the better one"
     >
@@ -101,7 +101,7 @@ export function DuplicatesPage() {
           )}
         </AdminSection>
       )}
-    </AdminPage>
+    </SectionPage>
   );
 }
 

@@ -39,26 +39,29 @@
 
 ### The web app
 
-Three destinations — the library, the tools you run against it, and the server underneath.
+Four destinations. The Overview answers three questions before it shows a single total — is the
+server healthy, is anything running, what needs attention — and everything it lists links to the
+screen that owns it. Library is the collection, Analysis is the pipeline, Server is the installation,
+with one card per provider.
 
-| Library | Tools |
+| Overview | Server → Providers |
 |:--:|:--:|
-| ![Library](screenshots/01-library.png) | ![Tools](screenshots/02-tools.png) |
+| ![Overview](screenshots/01-overview.png) | ![Providers](screenshots/03-server-providers.png) |
 
 <details>
 <summary><strong>More screenshots</strong></summary>
 
-| Server | Duplicates |
+| Library | Analysis |
 |:--:|:--:|
-| ![Server](screenshots/03-server.png) | ![Duplicates](screenshots/05-tools-duplicates.png) |
+| ![Library](screenshots/02-library.png) | ![Analysis](screenshots/04-analysis.png) |
 
-| Artist cleanup |
-|:--:|
-| ![Artist cleanup](screenshots/06-artist-cleanup.png) |
+| Duplicates | Artist cleanup |
+|:--:|:--:|
+| ![Duplicates](screenshots/05-library-duplicates.png) | ![Artist cleanup](screenshots/06-artist-cleanup.png) |
 
 | Smart playlists (Mac) | Mobile |
 |:--:|:--:|
-| ![Smart playlists](screenshots/mac-smart-playlists.png) | ![Mobile](screenshots/07-mobile-library.png) |
+| ![Smart playlists](screenshots/mac-smart-playlists.png) | ![Mobile](screenshots/07-mobile-overview.png) |
 
 </details>
 
