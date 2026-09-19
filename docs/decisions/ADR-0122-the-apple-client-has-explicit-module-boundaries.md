@@ -4,6 +4,34 @@ Status: accepted
 
 Date: 2026-09-17
 
+Implementation:
+- **2026-09-19, `familiar-apple` #195 — the first boundary, `FamiliarAppCore`.** What exists, by
+  point:
+  1. One new target rather than the five named: `Sources/FamiliarAppCore` (imports `FamiliarKit`
+     and `FamiliarAPI`) with `Tests/FamiliarAppCoreTests`. Ten types moved out of `App/Shared`
+     — `ServerConfiguration`, `Connectivity`, `AudioEffects`, `Crossfade`, `InterfaceCommands`,
+     `PlaybackCommandClient`, the four `Server*Source` adapters — and `Playable` was extracted
+     from `BrowseSupport.swift`. `FamiliarDomain`/`Playback`/`Storage`/`Ambient` are still
+     `FamiliarKit`, per point 3: nothing needed the split yet, and a target created to shorten a
+     file is what point 3 forbids.
+  2. Both app targets depend on the new product (`Familiar.xcodeproj` gained the two product
+     dependencies). `FamiliarKit` still does not import `FamiliarAPI`; AppCore is the one target
+     that knows both.
+  4. Every moved declaration got the smallest `public` surface the app uses, with explicit public
+     initialisers where the memberwise one was internal. Two things the package could not
+     construct became injected: `PlaybackCommandClient.windowCapture` (AppKit's `WindowCapture`
+     stays in the app) and `ServerConfiguration.init(defaults:migratingFrom:)` — the migration
+     from the old `com.familiar.native` domain had been reading Jeff's real profile into a test.
+  5. `ServerConfigurationTests` (4, compiled) replaced two text tests in
+     `VisualizerAutoSelectTests`; `AppSource.text` learned to look in `Sources/FamiliarAppCore/`
+     for the tests that still read source. **The move found a real defect:**
+     `CastDurationWiringTests` failed on the extracted `Playable.swift` because two of its four
+     constructions dropped `durationSeconds` — the album and artist mappers — so a track cast
+     from an album row had no duration for the timeline. Fixed in the same PR.
+  Also in that PR: `scripts/vendor-schema.sh --fetch` re-vendored `openapi.json` after
+  ADR-0129 added `ErrorEnvelope.code`; every `familiar-apple` branch fails the schema gate until
+  that is done after a `familiar` schema change.
+
 Extends [ADR-0001](ADR-0001-native-apple-clients-supersede-capacitor.md) and
 [ADR-0008](ADR-0008-the-apple-app-shell-is-a-committed-xcode-project.md).
 

@@ -4,6 +4,37 @@ Status: accepted
 
 Date: 2026-09-17
 
+Implementation:
+- **2026-09-19, `familiar-apple` #196 — `FamiliarApplication`, built.** By point:
+  1. `Sources/FamiliarAppCore/FamiliarApplication.swift` owns configuration, player, effects,
+     crossfade, radio, ambient, casting, the command client, interface commands and connectivity.
+     `FamiliarApp` holds one `@StateObject`, hands the services to the environment, and does no
+     wiring: the hundred lines in its `.task` are gone, and so are the two `onChange` modifiers.
+  2. `start()` guards on `isStarted`, keeps the `addSeekObserver` token, and `stop()` releases
+     it. Measured: a second `start()` registers one seek observer, hands CarPlay the player once,
+     resumes downloads once. Removing the guard fails five tests.
+  3. `bindConfiguration()` is keyed on `(baseURL, profileID)`: the same identity keeps the ambient
+     transport it built — rebuilding one under a playing drone was the risk of making this
+     routine — and a different one replaces the sources; a disconnect takes radio and casting
+     offline. The root subscribes to the configuration's `@Published` projections
+     (`receive(on: .main)`, because the projection emits before the property is set) so nothing
+     depends on a view noticing.
+  4. `.task { await application.start() }` is the App's whole part. `AppDelegate` still reaches
+     `Downloads.shared` directly for a background relaunch (ADR-0111 point 9), unchanged.
+  5. `FamiliarApplication.Platform` — `windowCapture`, `sessionArtwork`, `attachPlayer` (the
+     CarPlay bridge), `prepareDownloads` — is the one grouped value for what the package cannot
+     build; each has a stated null and tests run under `Platform.none`.
+  6. `FamiliarAppCoreTests/FamiliarApplicationTests` (9): repeated start, a server arriving after
+     start, the process noticing its own configuration, same-identity idempotence, replacement,
+     the volume slider reaching a session, stop-then-start, persisted settings from the given
+     defaults. They replaced three text tests in `AmbientTransportSurfaceTests` that read
+     `FamiliarApp.swift` for line presence. `FamiliarKit` gained the probes that make counting
+     possible: `FamiliarPlayer.seekObserverCount`, a readable
+     `AmbientAudioTransport.masterVolume`, `hasSource` on the three controllers.
+  7. Every closure that moved carries the ADR it came from; nothing was folded into the root.
+  One behaviour change: ambient's `attach(persist:initial:)` is process-level, not re-run per
+  server, so a rebind no longer resets the controls from their persisted copy.
+
 Extends [ADR-0008](ADR-0008-the-apple-app-shell-is-a-committed-xcode-project.md) and
 [ADR-0122](ADR-0122-the-apple-client-has-explicit-module-boundaries.md).
 
