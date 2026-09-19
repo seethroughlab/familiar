@@ -675,6 +675,15 @@ jobs:
       - name: Run unit tests
         run: pnpm --filter @familiar/frontend test
 
+      # ADR-0125 point 4: the bridge against the recorded protocol, and every visualizer type-checked.
+      # The visualizers had never been through `tsc` — Vite strips types without looking, which is
+      # how an import of a type nothing exported shipped for months.
+      - name: Visualizer SDK tests and type checks
+        run: |
+          pnpm --filter @familiar/visualizer-sdk test
+          pnpm --filter @familiar/visualizer-sdk typecheck
+          pnpm -r --filter './packages/visualizers/*' typecheck
+
   frontend-build:
     name: Frontend Build
     # **Linux, not bare `self-hosted`.** These three are Node jobs with no reason to want macOS, and
@@ -711,6 +720,11 @@ jobs:
 
       - name: Build
         run: pnpm --filter @familiar/web run build
+
+      # ADR-0125: the four first-party visualizer documents build from the workspace, each into
+      # its own dist/. They are vendored into familiar-apple by hand; this proves they still build.
+      - name: Build visualizer documents
+        run: pnpm --filter @familiar/visualizers build
 
       - name: Bundle Budget Checks
         env:
@@ -943,6 +957,13 @@ jobs:
           LASTFM_API_SECRET: ${{ secrets.LASTFM_API_SECRET }}
         # Exclude screenshot specs - they're for README docs, not CI testing
         run: npx playwright test --grep-invert="screenshot"
+
+      # ADR-0125 point 4: each built visualizer document handshakes, survives the recorded events
+      # (malformed ones included) and keeps rendering — in a sandboxed frame, served from dist/.
+      - name: Visualizer document contract
+        run: |
+          pnpm --filter @familiar/visualizers build
+          pnpm --filter @familiar/visualizers test:documents
 
       - name: Check for flaky E2E tests (retry-only passes)
         if: always()

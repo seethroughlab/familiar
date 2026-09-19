@@ -7,6 +7,37 @@ Date: 2026-09-17
 Extends [ADR-0087](ADR-0087-a-visualizer-is-a-document-not-a-component.md). It does not reintroduce the
 host-provided runtime rejected by that record: each built document remains self-contained.
 
+Implementation:
+- **2026-09-19, `familiar` — built.** With a premise in this record's Context corrected first: the
+  four visualizers were **not** workspace packages. `pnpm-workspace.yaml` listed `packages/*`, which
+  does not recurse, so each was installed standalone — which is why each had a lockfile — and their
+  `vite.config.ts` wrote into `packages/web/public/visualizers/`, a directory ADR-0092 point 1
+  deleted. A source change here had no path to the document `familiar-apple` ships. By point:
+  1. `packages/visualizer-sdk` (`@familiar/visualizer-sdk`): the bridge (`familiar.ts`), the types,
+     `FrameScheduler`, `usePalette`/`useArtworkPalette`, `AudioReactiveEffects`, and a `feature()`
+     accessor. All six were used by all four documents; nothing else moved.
+  2. A `workspace:*` dependency of each visualizer; each still builds an IIFE into its own `dist/`.
+  3. `docs/VISUALIZER_API.md` gains an SDK section *after* the protocol, headed "one path, not the
+     contract".
+  4. `src/fixtures/events.ts` holds the recorded shapes (the ones `familiar-apple`'s contract spec
+     posts, plus older/newer-host variants and nine malformed ones); `familiar.test.ts` drives the
+     bridge with them; `packages/visualizers/e2e/documents.spec.ts` loads each built document in a
+     sandboxed frame, feeds the same events, and requires the handshake, a canvas, live
+     `familiar:stats` frames and no uncaught error. Both run in CI. The bridge now drops malformed
+     messages instead of throwing inside the listener, and ignores — once, loudly — an `apiVersion`
+     it does not speak.
+  5. Scene code, `useLyricTiming`, `analysisMetrics` and every `.tsx` scene stayed local.
+  6. `pnpm-workspace.yaml` adds `packages/visualizers/*`; the four lockfiles are deleted; `three` is
+     one version across the workspace (`^0.182`, from `^0.180` in the visualizers — they had drifted
+     from the frontend unnoticed).
+  7. The two documents in `packages/visualizers/examples/` are untouched and named in the doc.
+  Found by giving the packages a `tsc` for the first time: `reactive-terrain` imported a
+  `TrackFeatures` type nothing exported, and `lyrics` imported `LyricLine` from `../../../api` — a
+  path into `packages/frontend` that does not resolve. Vite strips type imports without looking, so
+  both shipped. Each visualizer now has a `typecheck` script, run in CI.
+  **`familiar-apple` half:** `scripts/build-visualizers.sh`, the counterpart of
+  `build-visualizer.sh`, vendors each `dist/` into `App/Shared/Visualizers.bundle/<id>/`.
+
 ## Context
 
 The four source-built visualizers under `packages/visualizers/` — `beat-tiles`, `lyric-storm`, `lyrics`

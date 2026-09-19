@@ -19,7 +19,7 @@
  * ```
  */
 import { useMemo } from 'react';
-import type { LyricLine } from '../../../api';
+import type { LyricLine } from '@familiar/visualizer-sdk';
 
 export interface LyricTimingData {
   /** Current lyric line being sung, null if none */

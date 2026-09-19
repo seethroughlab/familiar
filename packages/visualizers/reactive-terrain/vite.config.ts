@@ -22,17 +22,18 @@ export default defineConfig({
     tailwindcss(),
     {
       // index.html is authored, not processed: it must reference a classic script, which Vite's
-      // HTML pipeline will not emit.
+      // HTML pipeline will not emit. `dist/` is the whole plugin folder; `familiar-apple`'s
+      // `scripts/build-visualizers.sh` vendors it into `App/Shared/Visualizers.bundle/` (ADR-0092).
       name: 'copy-plugin-files',
       closeBundle() {
         for (const file of ['index.html', 'familiar-plugin.json']) {
-          copyFileSync(file, `../../web/public/visualizers/reactive-terrain/${file}`);
+          copyFileSync(file, `dist/${file}`);
         }
         // **The model, which `emptyOutDir` deletes and nothing put back.** It reached the output
         // folder by hand once and was committed there, so the build looked fine for as long as
         // nobody re-ran it — then a rebuild wiped it and the scene lost its car with only a 404 in
         // a console no one can see. An asset a plugin loads at runtime is part of the plugin.
-        copyFileSync('src/car.glb', '../../web/public/visualizers/reactive-terrain/car.glb');
+        copyFileSync('src/car.glb', 'dist/car.glb');
       },
     },
   ],
@@ -41,7 +42,7 @@ export default defineConfig({
   // sandboxed frame where the error is invisible unless you go looking.
   define: { 'process.env.NODE_ENV': '"production"' },
   build: {
-    outDir: '../../web/public/visualizers/reactive-terrain',
+    outDir: 'dist',
     emptyOutDir: true,
     lib: { entry: 'src/main.tsx', formats: ['iife'], name: 'ReactiveTerrain', fileName: () => 'app.js', cssFileName: 'style' },
   },

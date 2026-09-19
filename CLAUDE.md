@@ -298,7 +298,7 @@ again differs from the numbering:
 | 2 | `0130` | **Soulseek slice built 2026-09-18.** `create_app(settings, services)` exists; `app/container.py` holds one gateway; the route, MCP executor and background poll are handed it. The pattern for the next domain is the ADR's Implementation block. Library sync and analysis go last; `scanner.py:126` still reads env at import. |
 | 3 | `0129` | **First slice built 2026-09-18.** `packages/api-client` is generated from `backend/openapi.json` by `@hey-api/openapi-ts` 0.99.0 and checked in CI; `base.ts` installs one transport on both the wrappers' and the generated client's instances; the interceptor switches on the envelope's `code` — the prose match it replaced had never fired for a dead profile, because the sentence was in `message`, not `detail`. Soulseek status is the first feature on the generated path. Remaining features migrate one at a time. |
 | 4 | `0126` | **Built 2026-09-19.** Overview / Library / Analysis / Server, section rails with routes, ancestor matching in one `isUnder`, `/tools/*` redirects. A provider is one card (`ProviderCards.tsx`); the pipeline is one destination; the Overview's rules are pure (`screens/overview/attention.ts`) and read the backlog from the worker phase queues. Its gate was a mock; the built page was then checked against the NAS and the demo. Not done: pending review (no screen), a persisted duplicates count. |
-| 5 | `0125` | `@familiar/visualizer-sdk`, build-time only. Independent of everything above; the dependency-free path is already proven by `packages/visualizers/examples/`. |
+| 5 | `0125` | **Built 2026-09-19.** `packages/visualizer-sdk`; the four visualizers are workspace members at last (they never were — `packages/*` does not recurse) building to their own `dist/`, vendored into `familiar-apple` by `scripts/build-visualizers.sh`. Bridge tests on recorded events; `packages/visualizers/e2e` runs every built document in a sandboxed frame. |
 | 6 | `0127` | `docs/START-HERE.md`, `make doctor`, `make check`, and a CI check that cited paths exist. Last so the traced slice goes through the generated web client and the factory. Its follow-up reconciles this file with `AGENTS.md`. |
 | — | `0122` → `0123` → `0124` | The Apple track, in `familiar-apple`, in parallel with all of the above. `FamiliarAppCore` is the first boundary, because `0123`'s `FamiliarApplication` and `0124`'s repositories both live there. |
 
@@ -314,6 +314,9 @@ packages/
 ├── api-client/            # Generated from backend/openapi.json (ADR-0129); never edited by hand.
 │   └── src/generated/     # Only packages/frontend/src/api/ may import it.
 ├── frontend/              # Shared React code (components, hooks, stores, types)
+├── visualizer-sdk/        # The bridge and helpers the first-party visualizers share (ADR-0125)
+├── visualizers/           # The four first-party visualizer sources, each building to its own dist/;
+│                          # vendored into familiar-apple's Visualizers.bundle by hand (ADR-0092)
 │   └── src/
 │       ├── components/    # React components
 │       ├── hooks/         # Custom hooks (useFavorites, useAutoDownload, etc.)
