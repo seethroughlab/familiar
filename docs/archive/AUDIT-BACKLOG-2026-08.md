@@ -1,4 +1,14 @@
-# Audit Backlog
+# Audit Backlog (archived 2026-09-19)
+
+**This is a record, not a to-do list.** It was the consolidated backlog from the frontend and
+backend audits of mid-2026. Of its items, 111 were done and struck through here as they landed —
+including work on files that have since been deleted (`ios/src/CapacitorEngine.ts`,
+`TrackListBrowser.tsx`, `playerStore.ts`), which is why it reads as a diary rather than a state.
+Under ADR-0127 point 7 it is archived as it stood. The seven items still open when it was archived
+were either carried into `docs/HEALTH.md`, where each names an owner boundary, its evidence and what
+closes it, or retired as aspirations nobody owned (dashboards, alerting, a merge queue, a soak
+profile — worth doing, not currently debt).
+
 
 Consolidated unimplemented action items from all audit documents (frontend + backend).
 Items are organized by area with priority levels (P0 = critical, P1 = high, P2 = medium).

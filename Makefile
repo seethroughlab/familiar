@@ -15,9 +15,15 @@ help:
 	@echo "  make deploy-frontend - Deploy frontend only"
 	@echo "  make deploy-backend  - Deploy backend only"
 	@echo ""
-	@echo "iOS:"
-	@echo "  make deploy-device      - Build & install to connected iPhone (~2 min)"
-	@echo "  make release-testflight - Build & upload to TestFlight"
+	@echo "Redirects (the Apple apps live in ../familiar-apple; these print where and exit non-zero):"
+	@echo "  make deploy-device      - not here — see familiar-apple"
+	@echo "  make release-testflight - not here — see familiar-apple"
+	@echo ""
+	@echo "Knowing where you stand:"
+	@echo "  make doctor       - What this machine can do with this checkout (read-only)"
+	@echo "  make check        - The safe local equivalents of CI's required checks"
+	@echo "  make check-docs   - The current-state docs name only things that exist"
+	@echo "  make adr-index    - Regenerate docs/ADR-INDEX.md"
 	@echo ""
 	@echo "Testing:"
 	@echo "  make smoke-test-docker  - Run CLAP smoke test in Docker (~1.5GB model download on first run)"
@@ -78,3 +84,39 @@ smoke-test-docker:
 	docker build -t familiar-smoke-test -f docker/Dockerfile . && \
 	docker run --rm -v familiar-hf-cache:/root/.cache/huggingface \
 		familiar-smoke-test python /app/scripts/smoke_test_clap.py
+
+# ---------------------------------------------------------------------------------------------
+# Knowing where you stand (ADR-0127 point 4).
+#
+# `doctor` is read-only: runtimes, whether the services answer, which database that is, migration
+# state, and whether the committed schema, its lock and the generated web client agree. `check` runs
+# the safe local equivalents of CI's required checks — everything that needs no database. The
+# backend suite needs a disposable one: `cd backend && make test`.
+# ---------------------------------------------------------------------------------------------
+.PHONY: doctor check check-docs adr-index
+
+doctor:
+	@./scripts/doctor.sh
+
+check:
+	@echo "── backend lint, types, contracts"
+	cd backend && uv run ruff check . && uv run mypy app --ignore-missing-imports && $(MAKE) -s lint-contracts && uv run python scripts/dump_openapi.py --check && uv run python scripts/check_contract_bump.py --check
+	@echo "── frontend lint, boundaries, unit tests, generated client"
+	pnpm --filter @familiar/frontend run lint
+	pnpm --filter @familiar/frontend run check:boundaries
+	pnpm --filter @familiar/frontend run check:embed-guardrails
+	pnpm --filter @familiar/frontend test
+	pnpm --filter @familiar/api-client run check
+	pnpm --filter @familiar/api-client run typecheck
+	@echo "── docs"
+	python3 scripts/check_docs.py
+	python3 scripts/adr_index.py --check
+	@echo "All local checks passed. The backend suite is separate: cd backend && make test"
+
+# The current-state docs name only things that exist (ADR-0127 point 9).
+check-docs:
+	python3 scripts/check_docs.py
+
+# Regenerate docs/ADR-INDEX.md after adding or changing a record (ADR-0127 point 6).
+adr-index:
+	python3 scripts/adr_index.py
