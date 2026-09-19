@@ -131,7 +131,9 @@ Each names the contract, test and documentation work, not just the first file to
    need no build at all.
 2. A React + three.js one lives under `packages/visualizers/`, builds an IIFE into a dist folder of its own,
    and is shipped by `familiar-apple`, which vendors that folder into its bundle. Nothing here serves
-   it at runtime.
+   it at runtime. The bridge, the shared effects and the event fixtures come from
+   `packages/visualizer-sdk` (ADR-0125) — import `@familiar/visualizer-sdk` rather than copying
+   `familiar.ts` from a sibling, which is how four visualizers came to carry six identical files.
 3. Its manifest's `affinity` is what lets the server pick it for a track.
 
 ## Two commands
