@@ -19,7 +19,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { describe, it, expect } from 'vitest';
-import { DESTINATIONS } from '../app/routes';
+import { DESTINATIONS, LEGACY_REDIRECTS, SECTIONS } from '../app/routes';
 
 /**
  * Links are checked against the routes that actually exist in `App.tsx`.
@@ -60,6 +60,25 @@ describe('navigation links resolve to mounted routes', () => {
         isMounted(d.path),
         `Destination "${d.label}" (${d.path}) has no route in App.tsx — it would hit the catch-all`,
       ).toBe(true);
+    }
+  });
+
+  // ADR-0126 point 8: every routed section, not only the destinations. The rails render these
+  // links; a section here with no route would be the #76 shape one level down.
+  it('every section in a rail is mounted', () => {
+    for (const sections of Object.values(SECTIONS)) {
+      for (const s of sections) {
+        expect(isMounted(s.path), `Section "${s.label}" (${s.path}) has no route in App.tsx`).toBe(true);
+      }
+    }
+  });
+
+  it('every legacy redirect source is mounted and its target is too', () => {
+    for (const [from, to] of Object.entries(LEGACY_REDIRECTS)) {
+      // `App.tsx` maps `LEGACY_REDIRECTS` into `<Route path={from}>` — a variable, so the regex
+      // above cannot see it; assert the mapping is there and the target is a real route.
+      expect(appSource.includes('Object.entries(LEGACY_REDIRECTS)'), 'App.tsx no longer mounts the redirects').toBe(true);
+      expect(isMounted(to), `${from} → ${to}, which is not mounted`).toBe(true);
     }
   });
 

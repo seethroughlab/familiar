@@ -20,7 +20,7 @@
  * Screenshots are written to `screenshots/` at the repo root.
  */
 import { test, expect } from '@playwright/test';
-import { ensureProfile, navigateToDestination } from './helpers';
+import { ensureProfile, navigateToDestination, navigateToSection } from './helpers';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -89,42 +89,52 @@ test.describe('Admin surfaces', () => {
     await ensureProfile(page);
   });
 
-  test('01 - Library destination screenshot', async ({ page }) => {
-    // Where the app opens (ADR-0058 point 1): the thing being administered, not a form.
+  test('01 - Overview screenshot', async ({ page }) => {
+    // Where the app opens (ADR-0126 point 3): is it healthy, is anything running, what needs attention.
+    await navigateToDestination(page, 'Overview');
+    await expect(page.getByRole('heading', { name: 'Overview', exact: true }).first()).toBeVisible({
+      timeout: 15000,
+    });
+    await takeScreenshot(page, '01-overview.png');
+  });
+
+  test('02 - Library destination screenshot', async ({ page }) => {
     await navigateToDestination(page, 'Library');
     await expect(page.getByRole('heading', { name: 'Library', exact: true }).first()).toBeVisible({
       timeout: 15000,
     });
-    await takeScreenshot(page, '01-library.png');
+    await takeScreenshot(page, '02-library.png');
   });
 
-  test('02 - Tools destination screenshot', async ({ page }) => {
-    await navigateToDestination(page, 'Tools');
-    await expect(page.getByRole('heading', { name: 'Tools', exact: true }).first()).toBeVisible({
-      timeout: 15000,
-    });
-    await takeScreenshot(page, '02-tools.png');
-  });
-
-  test('03 - Server destination screenshot', async ({ page }) => {
+  test('03 - Server providers screenshot', async ({ page }) => {
+    // ADR-0126 point 2: one card per provider.
     await navigateToDestination(page, 'Server');
-    await expect(page.getByRole('heading', { name: 'Server', exact: true }).first()).toBeVisible({
+    await navigateToSection(page, 'Providers');
+    await expect(page.getByRole('heading', { name: 'Providers', exact: true }).first()).toBeVisible({
       timeout: 15000,
     });
-    await takeScreenshot(page, '03-server.png');
+    await takeScreenshot(page, '03-server-providers.png');
+  });
+
+  test('04 - Analysis status screenshot', async ({ page }) => {
+    await navigateToDestination(page, 'Analysis');
+    await expect(page.getByRole('heading', { name: 'Analysis', exact: true }).first()).toBeVisible({
+      timeout: 15000,
+    });
+    await takeScreenshot(page, '04-analysis.png');
   });
 
   test('05 - Duplicates screenshot', async ({ page }) => {
     // Preview-only — the server exposes no apply route for it, which the page says on its face.
-    await page.goto('/tools/duplicates');
+    await page.goto('/library/duplicates');
     await page.waitForLoadState('domcontentloaded');
-    await takeScreenshot(page, '05-tools-duplicates.png');
+    await takeScreenshot(page, '05-library-duplicates.png');
   });
 
   test('06 - Artist cleanup screenshot', async ({ page }) => {
     // The one library browser the web app still mounts, and the reason it stayed: no native
     // equivalent, and its API tag is not in the generated Swift client.
-    await page.goto('/tools/artists');
+    await page.goto('/library/artists');
     await page.waitForLoadState('domcontentloaded');
     await takeScreenshot(page, '06-artist-cleanup.png');
   });
@@ -135,6 +145,6 @@ test.describe('Mobile', () => {
     await page.setViewportSize(MOBILE);
     await page.goto('/');
     await ensureProfile(page);
-    await takeScreenshot(page, '07-mobile-library.png');
+    await takeScreenshot(page, '07-mobile-overview.png');
   });
 });

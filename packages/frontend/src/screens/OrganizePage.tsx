@@ -22,7 +22,7 @@ import { FolderTree, Loader2, ArrowRight } from 'lucide-react';
 
 import { organizerApi, type OrganizeResult } from '../api/metadata';
 import { queryKeys } from '../api/queryKeys';
-import { AdminPage, AdminSection } from './AdminPage';
+import { SectionPage, AdminSection } from './AdminPage';
 
 const PREVIEW_LIMIT = 100;
 
@@ -52,7 +52,7 @@ export function OrganizePage() {
   };
 
   return (
-    <AdminPage
+    <SectionPage
       title="Organiser"
       subtitle="See where files would move under a naming template — nothing is renamed"
     >
@@ -118,7 +118,7 @@ export function OrganizePage() {
           )}
         </AdminSection>
       )}
-    </AdminPage>
+    </SectionPage>
   );
 }
 

@@ -10,6 +10,41 @@ Extends [ADR-0058](ADR-0058-the-web-app-is-an-administration-tool.md),
 and reduced the application to administration; this record revisits the information architecture after
 the remaining administration surface grew.
 
+Implementation:
+- **2026-09-19, `familiar` — built.** By point:
+  1. `DESTINATIONS` in `packages/frontend/src/app/routes.ts` is Overview, Library, Analysis, Server;
+     `TopBar.tsx` renders four at `w-[4.5rem]` on a phone, checked at 390px.
+  2. `panels/server/ProviderCards.tsx` is one card per provider — health (the old `DiscoverySources`
+     rules and tests, moved), the key with its environment variable named, and the provider's own
+     management panel inside the card. `ApiKeyStatus` and `DiscoverySources` are gone.
+     `DataManagement`'s heading is "Transfer" and it sits under Server → People; Server → Backup is
+     the S3 installation backup alone.
+  3. `screens/overview/attention.ts` derives the three answers, pure and tested against the NAS's
+     recorded shapes and a synthetic failing server; `OverviewPage.tsx` renders them, the attention
+     list, the Sync action, then the totals. Every item's `to` is checked against `App.tsx` by
+     test. Loading is distinguished from failure — the first cut said "Could not read the server"
+     for the half-second before the first answer, which the demo-server screenshot caught.
+  4. Library: Sync, Duplicates, Artists, Artwork, Organiser. No Review.
+  5. Analysis: `screens/analysis/StatusSection.tsx` (phase queues from `health/workers`, the worker,
+     failures, a link to Library → Sync) and `ConfigurationSection.tsx` (CLAP, community cache with
+     its own health line, AcoustID naming, a link to the provider card).
+  6. Server: Health (`SystemStatus` plus the library path, read-only, `MUSIC_LIBRARY_PATH` named),
+     Jobs, Providers, Backup, People, Access, Diagnostics — `screens/server/sections.tsx`.
+  7. `screens/SectionLayout.tsx`: the rail is a column on a desktop and a scrolling row on a phone,
+     over one `SECTIONS` registry.
+  8. `isUnder()` in `routes.ts` is the one ancestor rule, used by the bar and the rails;
+     `navigationIntegrity.test.ts` now checks every rail section and every redirect target.
+  9. On a phone the three tiles and the Sync button sit above the 844px fold; the first total starts
+     at it.
+  10. "Tools" and "Settings" are gone. Environment-only values (keys, the library path) say so and
+      name the variable.
+  Also: `healthApi`/`backgroundApi` moved to the generated client (`api/system.ts`) under ADR-0129,
+  because the hand-written `WorkerStatus` had no `phase_queues`; `docs/CONFIGURATION.md:32` no
+  longer claims the panel sets paths and keys; README screenshots regenerated against the demo.
+  **Still open from the follow-ups:** a pending-review screen; a persisted duplicates count (the
+  Overview shows no duplicates item); `analysis_progress` is untyped in the schema and narrowed
+  by hand in `StatusSection.tsx`; `health/system` and `library/stats` still disagree on pending.
+
 ## Context
 
 The top bar has three destinations: Library, Tools and Server (`packages/frontend/src/app/routes.ts:42-44`).

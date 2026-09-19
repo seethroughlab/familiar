@@ -29,7 +29,7 @@ cp .env.example .env
 FRONTEND_URL=http://myserver:4400
 ```
 
-API keys are configured via environment variables in your `.env` file (see below). Other settings (community cache, library paths) are in the **Settings** panel (gear icon).
+API keys and the library path are environment variables in your `.env` file (see below) — the web app shows them, with the variable named, but cannot set them. Everything else (community cache, CLAP, providers, backup schedule) is configured in the web app: Analysis → Configuration for the pipeline, Server → Providers for the services it talks to.
 
 ## Getting API Keys
 

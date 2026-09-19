@@ -250,9 +250,10 @@ export function DataManagement() {
         <div className="flex items-center gap-3 mb-2">
           <HardDrive className="w-5 h-5 text-zinc-400" />
           <div>
-            <h4 className="font-medium text-white">Backup & Restore</h4>
+            <h4 className="font-medium text-white">Transfer</h4>
             <p className="text-sm text-zinc-400">
-              Create a backup of your Familiar data for migration or safekeeping
+              Export play history, favourites and playlists to move them to another server. Not the
+              installation backup — that is S3, under Server → Backup.
             </p>
           </div>
         </div>

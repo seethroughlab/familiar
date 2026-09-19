@@ -297,7 +297,7 @@ again differs from the numbering:
 | 1 | `0128` | **Built 2026-09-17.** `TEST_DATABASE_URL`, a `_test` suffix with no second marker, CI renamed to `familiar_test`. Its guard runs in the rootdir `conftest.py` until `0130` gives it a factory. |
 | 2 | `0130` | **Soulseek slice built 2026-09-18.** `create_app(settings, services)` exists; `app/container.py` holds one gateway; the route, MCP executor and background poll are handed it. The pattern for the next domain is the ADR's Implementation block. Library sync and analysis go last; `scanner.py:126` still reads env at import. |
 | 3 | `0129` | **First slice built 2026-09-18.** `packages/api-client` is generated from `backend/openapi.json` by `@hey-api/openapi-ts` 0.99.0 and checked in CI; `base.ts` installs one transport on both the wrappers' and the generated client's instances; the interceptor switches on the envelope's `code` — the prose match it replaced had never fired for a dead profile, because the sentence was in `message`, not `detail`. Soulseek status is the first feature on the generated path. Remaining features migrate one at a time. |
-| 4 | `0126` | Overview / Library / Analysis / Server — four, after a panel-level audit found the first draft's three split providers, the analysis pipeline and backup across groups, and placed two screens that don't exist (pending review; editable library paths). Its gate — a mocked Overview reviewed against the idle NAS and a failing server, desktop and 400px — was cleared the same day. Old router paths redirect — not an `0079` alias. |
+| 4 | `0126` | **Built 2026-09-19.** Overview / Library / Analysis / Server, section rails with routes, ancestor matching in one `isUnder`, `/tools/*` redirects. A provider is one card (`ProviderCards.tsx`); the pipeline is one destination; the Overview's rules are pure (`screens/overview/attention.ts`) and read the backlog from the worker phase queues. Its gate was a mock; the built page was then checked against the NAS and the demo. Not done: pending review (no screen), a persisted duplicates count. |
 | 5 | `0125` | `@familiar/visualizer-sdk`, build-time only. Independent of everything above; the dependency-free path is already proven by `packages/visualizers/examples/`. |
 | 6 | `0127` | `docs/START-HERE.md`, `make doctor`, `make check`, and a CI check that cited paths exist. Last so the traced slice goes through the generated web client and the factory. Its follow-up reconciles this file with `AGENTS.md`. |
 | — | `0122` → `0123` → `0124` | The Apple track, in `familiar-apple`, in parallel with all of the above. `FamiliarAppCore` is the first boundary, because `0123`'s `FamiliarApplication` and `0124`'s repositories both live there. |
@@ -438,15 +438,18 @@ def upgrade():
 4. Add corresponding field to the SQLAlchemy model in the matching `backend/app/db/models/*.py`
 5. `deploy-dev.sh` auto-runs `alembic upgrade head` on deploy
 
-### Add a new settings section
-1. Add component in `packages/frontend/src/components/Settings/`
-2. Export from `Settings/index.tsx`
-3. Add to settings tabs in main Settings component
+### Add a section to a destination (ADR-0126)
+1. Decide the unit it belongs to: the collection → Library, the pipeline → Analysis, the
+   installation → Server. A provider is one card under Server → Providers, never a new section.
+2. Add the section to `SECTIONS` in `packages/frontend/src/app/routes.ts` — its path is its route.
+3. Mount it in `app/App.tsx` under that destination's `<SectionLayout>`, with an **absolute** path
+   (`navigationIntegrity.test.ts` reads `path="/…"` from that file and checks every rail link).
+4. The component uses `SectionPage` from `screens/AdminPage.tsx`; the layout owns the `<h2>`.
 
 ### Regenerate README screenshots
 
-**The web app's screenshots are of an administration tool** — the three destinations and Settings
-(ADR-0058 point 2). The listening screenshots are `mac-*.png`, taken from the Mac app by hand;
+**The web app's screenshots are of an administration tool** — the four destinations
+(ADR-0126 point 1). The listening screenshots are `mac-*.png`, taken from the Mac app by hand;
 there is no script for those, because the browser cannot render them.
 
 1. Backend with a library. Against the demo server: `familiar-demo.fly.dev` (~32 tracks).
@@ -463,7 +466,8 @@ device widths, linked from nowhere and used for spotting layout breakage).
 To add one:
 1. Add a test to `screenshots.spec.ts` whose title contains `screenshot` — the CI exclusion and the
    run command both match on that word.
-2. Navigate with `navigateToDestination()` (Library/Tools/Server) or `navigateToTab()`
+2. Navigate with `navigateToDestination()` (Overview/Library/Analysis/Server), then
+   `navigateToSection()` for a rail entry, or `navigateToTab()`
    (Library/Playlists/Settings). There is no `selectBrowser()`; the library browsers were unmounted
    by ADR-0050 and ADR-0057.
 3. Use the file's `takeScreenshot()`, which waits for spinners and "Loading…" to clear. **Do not use

@@ -12,7 +12,7 @@ import { Page } from '@playwright/test';
  * So: if the navigation is restructured again, this constant is the thing to change, and it is one
  * place rather than four copies of a `querySelectorAll` predicate.
  */
-const READY_LABELS = ['Library', 'Tools', 'Server'];
+const READY_LABELS = ['Overview', 'Library', 'Analysis', 'Server'];
 
 /**
  * Runs **in the browser**, so it takes its labels as an argument and references nothing from this
@@ -95,7 +95,7 @@ const VIEW_PATHS: Record<string, { destination: string; link: string } | null> =
   // left to reach: the browser registry is gone (ADR-0081 point 3) and artist cleanup is an
   // ordinary screen at `/tools/artists`.
   Tracks: null,
-  Cleanup: { destination: 'Library', link: 'Artist cleanup' },
+  Cleanup: { destination: 'Library', link: 'Artists' },
   Artists: null,
   Albums: null,
   'Mood Grid': null,
@@ -105,16 +105,23 @@ const VIEW_PATHS: Record<string, { destination: string; link: string } | null> =
 };
 
 /**
- * Go to one of the three destinations (ADR-0058 point 2).
+ * Go to one of the four destinations (ADR-0126 point 1).
  *
- * Most of what used to be on the Settings page now lives on one of these: scan and analysis on
- * Library, keys and profiles and diagnostics on Server, backup and community cache on Tools.
+ * Overview answers "is it healthy, is anything running, what needs attention"; Library owns the
+ * collection (sync, duplicates, artists, artwork, organiser); Analysis owns the pipeline; Server
+ * owns the installation (health, jobs, providers, backup, people, access, diagnostics). Each has
+ * a section rail whose links are routes — `navigateToSection` below clicks one.
  */
 export async function navigateToDestination(
   page: Page,
-  destination: 'Library' | 'Tools' | 'Server',
+  destination: 'Overview' | 'Library' | 'Analysis' | 'Server',
 ) {
   await clickNav(page, destination);
+}
+
+/** Click a section in the current destination's rail, e.g. `navigateToSection(page, 'Providers')`. */
+export async function navigateToSection(page: Page, section: string) {
+  await clickNav(page, section);
 }
 
 /**

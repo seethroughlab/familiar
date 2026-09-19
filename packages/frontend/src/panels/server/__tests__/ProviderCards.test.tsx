@@ -5,18 +5,22 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { DiscoverySources } from '../DiscoverySources';
-import { healthApi } from '../../../api/admin';
+import { ProviderCards } from '../ProviderCards';
+import { systemApi } from '../../../api';
 
-vi.mock('../../../api/admin', () => ({
-  healthApi: { getDiscoverySources: vi.fn() },
+vi.mock('../../../api', () => ({
+  systemApi: { discoverySources: vi.fn() },
+  appSettingsApi: { get: vi.fn(async () => ({ lastfm_configured: true, acoustid_configured: false })) },
 }));
+// The cards embed each provider's own management panel; those are tested on their own.
+vi.mock('../LastfmSettings', () => ({ LastfmSettings: () => null }));
+vi.mock('../SoulseekSettings', () => ({ SoulseekSettings: () => null }));
 
 function renderPanel() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <DiscoverySources />
+      <ProviderCards />
     </QueryClientProvider>,
   );
 }
@@ -41,9 +45,9 @@ const source = (over: Partial<Record<string, unknown>> = {}) => ({
 // and a second test finds the first test's DOM as well as its own.
 afterEach(cleanup);
 
-describe('DiscoverySources', () => {
+describe('ProviderCards — health', () => {
   it('a source failing for nineteen days does not look healthy', async () => {
-    vi.mocked(healthApi.getDiscoverySources).mockResolvedValue({
+    vi.mocked(systemApi.discoverySources).mockResolvedValue({
       status: 'failing',
       sources: [
         source({
@@ -63,7 +67,7 @@ describe('DiscoverySources', () => {
   });
 
   it('never succeeded is distinct from found nothing', async () => {
-    vi.mocked(healthApi.getDiscoverySources).mockResolvedValue({
+    vi.mocked(systemApi.discoverySources).mockResolvedValue({
       status: 'never_succeeded',
       sources: [source({ state: 'never_succeeded', last_success_at: null })],
     });
@@ -78,7 +82,7 @@ describe('DiscoverySources', () => {
   });
 
   it('backing off says when it will retry', async () => {
-    vi.mocked(healthApi.getDiscoverySources).mockResolvedValue({
+    vi.mocked(systemApi.discoverySources).mockResolvedValue({
       status: 'backing_off',
       sources: [
         source({
@@ -96,7 +100,7 @@ describe('DiscoverySources', () => {
   });
 
   it('leads with when a source last found something, not when it last ran', async () => {
-    vi.mocked(healthApi.getDiscoverySources).mockResolvedValue({
+    vi.mocked(systemApi.discoverySources).mockResolvedValue({
       status: 'working',
       sources: [source({ items_contributed: 600 })],
     });
@@ -107,18 +111,18 @@ describe('DiscoverySources', () => {
   });
 
   it('a failed read renders as an error, not as an empty healthy panel', async () => {
-    vi.mocked(healthApi.getDiscoverySources).mockRejectedValue(new Error('nope'));
+    vi.mocked(systemApi.discoverySources).mockRejectedValue(new Error('nope'));
     renderPanel();
 
     expect(
-      await screen.findByText(/Could not read discovery source health/),
+      await screen.findByText(/Could not read provider health/),
     ).toBeTruthy();
   });
 });
 
-describe('DiscoverySources — unmonitored sources', () => {
+describe('ProviderCards — unmonitored sources', () => {
   it('a source nothing has attempted reads as not monitored, not as broken', async () => {
-    vi.mocked(healthApi.getDiscoverySources).mockResolvedValue({
+    vi.mocked(systemApi.discoverySources).mockResolvedValue({
       status: 'working',
       sources: [
         source({ source: 'bandcamp', state: 'not_instrumented', last_success_at: null }),
@@ -133,9 +137,9 @@ describe('DiscoverySources — unmonitored sources', () => {
   });
 });
 
-describe('DiscoverySources — switched off', () => {
+describe('ProviderCards — switched off', () => {
   it('a disabled source reads as off, not as broken or as working', async () => {
-    vi.mocked(healthApi.getDiscoverySources).mockResolvedValue({
+    vi.mocked(systemApi.discoverySources).mockResolvedValue({
       status: 'working',
       sources: [source({ state: 'disabled', last_success_at: iso(30) })],
     });
@@ -149,3 +153,38 @@ describe('DiscoverySources — switched off', () => {
     expect(screen.queryByText('Failing')).toBeNull();
   });
 });
+
+describe('ProviderCards — a provider is one card (ADR-0126 point 2)', () => {
+  it('shows the key, whether it is set, and that it is not editable here, beside the health', async () => {
+    vi.mocked(systemApi.discoverySources).mockResolvedValue({
+      status: 'working',
+      sources: [source({ source: 'lastfm', state: 'not_instrumented', last_success_at: null })],
+    });
+    renderPanel();
+
+    const card = await screen.findByRole('region', { name: 'Last.fm' });
+    expect(card.textContent).toMatch(/Not monitored/);
+    expect(card.textContent).toMatch(/Key set/);
+    expect(card.textContent).toMatch(/LASTFM_API_KEY/);
+    expect(card.textContent).toMatch(/not editable here/);
+  });
+
+  it('a provider with no key says so rather than showing a key line', async () => {
+    vi.mocked(systemApi.discoverySources).mockResolvedValue({ status: 'working', sources: [source()] });
+    renderPanel();
+    const card = await screen.findByRole('region', { name: 'MusicBrainz' });
+    expect(card.textContent).toMatch(/No key needed/);
+    expect(card.textContent).not.toMatch(/_API_KEY/);
+  });
+
+  it('the nightly discovery job is a line above the cards, not a card', async () => {
+    vi.mocked(systemApi.discoverySources).mockResolvedValue({
+      status: 'working',
+      sources: [source({ source: 'discovery_batch', last_failure_kind: 'crashed' })],
+    });
+    renderPanel();
+    expect(await screen.findByText('Nightly discovery')).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Nightly discovery' })).toBeNull();
+  });
+});
+

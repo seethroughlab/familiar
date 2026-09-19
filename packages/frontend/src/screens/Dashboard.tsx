@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Disc3, Users, Music, Activity, Clock, AlertTriangle, Image } from 'lucide-react';
+import { Disc3, Users, Music, Clock, Image } from 'lucide-react';
 
 import { libraryApi } from '../api/library';
 import { playTrackingApi, type PlayStatsResponse } from '../api/profiles';
@@ -53,29 +53,9 @@ export function Dashboard() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const analysed = library ? library.analyzed_tracks : 0;
-  const total = library ? library.total_tracks : 0;
-  const coverage = total > 0 ? Math.round((analysed / total) * 100) : 0;
-
-  /**
-   * The four backlogs, named separately (point 7).
-   *
-   * `analysis`, `backfill`, `melodic` and `mood_tags` have their own version constants and their
-   * own reasons to stall — a single"pending" number hides which one is stuck, which is most of the
-   * reason to have this screen rather than a progress bar.
-   */
-  const queues = library
-    ? [
-        { label: 'Analysis', value: library.pending_analysis },
-        { label: 'Backfill', value: library.pending_backfill },
-        { label: 'Melodic', value: library.pending_melodic },
-        { label: 'Mood tags', value: library.pending_mood_tags },
-      ].filter((q) => q.value > 0)
-    : [];
-
   return (
-    // Page chrome (title, padding, width) belongs to `LibraryPage`; this is content only, so the
-    // same tiles can sit under a heading it does not own.
+    // Page chrome (title, padding, width) belongs to `OverviewPage`; this is content only, and it
+    // is the *secondary* half of that page (ADR-0126 point 3): what there is, after what is wrong.
     <div className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Stat icon={<Music className="w-5 h-5 text-accent" />} label="Tracks"
@@ -92,42 +72,9 @@ export function Dashboard() {
               value={library?.total_artists} loading={libraryLoading} />
       </div>
 
-      <section className="bg-zinc-800/50 rounded-lg p-4 space-y-3">
-        <div className="flex items-center gap-3">
-          <Activity className="w-5 h-5 text-accent" />
-          <h3 className="font-medium text-white">Analysis</h3>
-          <span className="ml-auto text-sm text-zinc-400 tabular-nums">
-            {libraryLoading ? '—' : `${analysed.toLocaleString()} of ${total.toLocaleString()}`}
-          </span>
-        </div>
-
-        <div className="h-2 rounded bg-zinc-700/50 overflow-hidden">
-          <div className="h-full bg-accent transition-[width] duration-500"
-               style={{ width: `${coverage}%` }} />
-        </div>
-        <p className="text-sm text-zinc-400">
-          {libraryLoading ? 'Loading…' : `${coverage}% analysed`}
-        </p>
-
-        {queues.length > 0 && (
-          <div className="pt-1 space-y-1">
-            <div className="flex items-center gap-2 text-sm text-zinc-300">
-              <AlertTriangle className="w-4 h-4 text-warning" />
-              <span>Waiting</span>
-            </div>
-
-            {queues.map((q) => (
-              <div key={q.label} className="flex items-center justify-between bg-zinc-900/50 rounded p-2">
-                <span className="text-sm text-zinc-300">{q.label}</span>
-                <span className="text-sm tabular-nums text-zinc-400">
-                  {q.value.toLocaleString()}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
+      {/* No analysis tile. Its "pending" came from `library/stats`, which disagreed with the worker
+          phase queues on the same library (52 against 0). The backlog is read from the queues alone,
+          on the Analysis destination and in the Overview's attention list (ADR-0126 point 3). */}
       {artwork && artwork.total_albums > 0 && (
         <section className="bg-zinc-800/50 rounded-lg p-4 space-y-3">
           <div className="flex items-center gap-3">
