@@ -285,7 +285,7 @@ flight), not `DownloadManager.states`. A drained queue ends it "Finished" for fi
 The stop button is a `LiveActivityIntent` reaching `DownloadManager.cancelAll()` through a hook
 `AppDelegate` installs on every launch — the first control that discards a whole queue.
 
-**`ADR-0122`–`ADR-0130` are all accepted (2026-09-17); only `0128` is built, the same day.** They are about
+**`ADR-0122`–`ADR-0130` are all accepted (2026-09-17), and every one has at least a first slice built (the table says which).** They are about
 structure rather than features: how the Apple client, the backend, the web client and the docs are put
 together. Two of them exist because a routine command was dangerous — until `0128` shipped, `uv run pytest`
 deleted every row from eighteen tables in whatever database `DATABASE_URL` named, and CI's
@@ -300,7 +300,7 @@ again differs from the numbering:
 | 4 | `0126` | **Built 2026-09-19.** Overview / Library / Analysis / Server, section rails with routes, ancestor matching in one `isUnder`, `/tools/*` redirects. A provider is one card (`ProviderCards.tsx`); the pipeline is one destination; the Overview's rules are pure (`screens/overview/attention.ts`) and read the backlog from the worker phase queues. Its gate was a mock; the built page was then checked against the NAS and the demo. Not done: pending review (no screen), a persisted duplicates count. |
 | 5 | `0125` | **Built 2026-09-19.** `packages/visualizer-sdk`; the four visualizers are workspace members at last (they never were — `packages/*` does not recurse) building to their own `dist/`, vendored into `familiar-apple` by `scripts/build-visualizers.sh`. Bridge tests on recorded events; `packages/visualizers/e2e` runs every built document in a sandboxed frame. |
 | 6 | `0127` | **Built 2026-09-19.** `docs/START-HERE.md` (map, the Soulseek-status slice traced through eleven current files, five golden paths, the security posture), `make doctor`, `make check`, `docs/ADR-INDEX.md` (generated), `docs/HEALTH.md` (the debt register that replaced the archived backlog), and `scripts/check_docs.py` in CI — which found six wrong claims in START-HERE's own first draft. Follow-up: one shared source for this file and `AGENTS.md`. |
-| — | `0122` → `0123` → `0124` | The Apple track, in `familiar-apple`, in parallel with all of the above. `FamiliarAppCore` is the first boundary, because `0123`'s `FamiliarApplication` and `0124`'s repositories both live there. |
+| — | `0122` → `0123` → `0124` | **Built 2026-09-19** (`familiar-apple` #195, #196, #197). `FamiliarAppCore` is the one target that knows both `FamiliarKit` and `FamiliarAPI`; `FamiliarApplication` there is the process — `start()` and `bindConfiguration()`, both idempotent and measured; `RepositoryError` is the one vocabulary a server-backed capability fails with, mapped once in `GeneratedResponses.swift`, casting the first slice. Each ADR's Implementation block has what moved and what it found. After a `familiar` schema change, every `familiar-apple` branch fails CI until `scripts/vendor-schema.sh --fetch` is run there. |
 
 Two things the numbers in those records settle that the text would have let you assume otherwise: the
 four first-party visualizers really are byte-identical in six files (one md5 each, 613 lines per package),

@@ -4,6 +4,33 @@ Status: accepted
 
 Date: 2026-09-17
 
+Implementation:
+- **2026-09-19, `familiar-apple` #197 — the vocabulary, and casting as the first slice.** The
+  follow-up's inventory and one vertical slice with mapping tests. By point:
+  1. `ServerCastOutputsSource` no longer builds errors from `String(describing: output)`; each
+     operation is a call plus a static mapping from the generated output to a domain result.
+  3. The protocol is still `CastOutputsSource` in `FamiliarKit`, owned by `CastController`.
+  4. `RepositoryError` (`Sources/FamiliarKit/RepositoryError.swift`): `unreachable(URLError.Code)`,
+     `rejected(status:code:message:)`, `notFound`, `serverFailed(status:)`, `unavailable`,
+     `malformed`. In `FamiliarKit`, beside the consumer-owned protocols it is thrown through.
+     `ServerErrorCode` mirrors ADR-0129's stable names as a `String` enum so no generated type
+     crosses in. `ServerErrorMessage.describe` words every case, reusing the transport sentences
+     for `unreachable`. `Sources/FamiliarAppCore/GeneratedResponses.swift` is the one mapping: a
+     thrown `ClientError` by its cause, a documented error case by its typed envelope, an
+     undocumented status by number with the raw envelope read for `code` and `message`. 503 is
+     `unavailable` — that is what `ServiceUnavailableError` means on this server, which
+     `MusicMapStore` had been matching by number.
+  5. `CastRepositoryTests` (14) construct generated outputs directly, no transport stub — the
+     `ContractCompatibilityTests` shape. `RepositoryErrorMessageTests` (5) cover the wording.
+  6. Inventory at the time: 21 files switch on generated outputs; `RowActions.swift` (12) is not
+     one capability and should split by what it does before it moves; the other three
+     `Server*Source` adapters (radio, ambient, metadata) still carry a private
+     `unexpectedResponse(String)` and are the next slices.
+  **Recorded, not fixed:** the generated `ErrorCode` is a closed `String` enum, so a server
+  naming a code this build does not know fails the typed envelope's decode and the call reads as
+  `malformed`, status lost. The fix is on the schema side (an open enum); until then a new code
+  ships to the app before the server.
+
 Extends [ADR-0007](ADR-0007-clients-are-generated-from-openapi.md) and
 [ADR-0122](ADR-0122-the-apple-client-has-explicit-module-boundaries.md).
 
