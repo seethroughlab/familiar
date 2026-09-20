@@ -48,6 +48,14 @@ async def ensure_database(url: str) -> bool:
         except asyncpg.InvalidCatalogNameError as error:
             last_error = error
             continue
+        except OSError as error:
+            # Connection refused is the common case — the compose stack is not up — and a forty-line
+            # asyncpg traceback says that worse than one sentence does.
+            raise SystemExit(
+                f"nothing is listening at {parts.host}:{parts.port or 5432} ({error.__class__.__name__}).\n"
+                "Start the database — from the repo root, `docker compose -f docker/docker-compose.yml up -d` —\n"
+                "or set TEST_DATABASE_URL to a PostgreSQL that is running (the name must still end in _test)."
+            ) from None
         try:
             exists = await connection.fetchval(
                 "SELECT 1 FROM pg_database WHERE datname = $1", name
