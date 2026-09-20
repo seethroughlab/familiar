@@ -55,13 +55,17 @@ jobs:
       - name: Check site claims
         run: python3 site/scripts/check-claims.py --offline
 
+      # `cloudflare/pages-action@v1` deployed this until 2026-09-04; by 2026-09-19 the repository
+      # behind it was gone (GitHub answers 404) and the job failed at "Set up job" before a step
+      # ran. Cloudflare's replacement is Wrangler through `wrangler-action`. `--branch=main` is
+      # explicit rather than inferred: ADR-0097 records four months of production deploys landing
+      # as previews because of a branch-name mismatch, and the flag makes the intent readable.
       - name: Deploy to Cloudflare Pages
-        uses: cloudflare/pages-action@v1
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
-          projectName: familiar-site
-          directory: _site
+          command: pages deploy _site --project-name=familiar-site --branch=main
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
 
       # ADR-0097: the live site served an April build for four months while every
