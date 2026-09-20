@@ -108,9 +108,10 @@ check:
 	pnpm --filter @familiar/frontend test
 	pnpm --filter @familiar/api-client run check
 	pnpm --filter @familiar/api-client run typecheck
-	@echo "── docs"
+	@echo "── docs, images"
 	python3 scripts/check_docs.py
 	python3 scripts/adr_index.py --check
+	python3 scripts/check_dockerfiles.py
 	@echo "All local checks passed. The backend suite is separate: cd backend && make test"
 
 # The current-state docs name only things that exist (ADR-0127 point 9).

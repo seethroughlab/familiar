@@ -310,6 +310,12 @@ jobs:
           python3 scripts/check_docs.py
           python3 scripts/adr_index.py --check
 
+      # Both Dockerfiles copy workspace packages by name; a package missing from one fails that
+      # image's build only when that image is next built — for the demo, silently on every push.
+      - name: Dockerfiles copy every workspace package the web build reaches
+        working-directory: .
+        run: python3 scripts/check_dockerfiles.py
+
       # Imports app.main, so it needs `uv sync --extra dev` above — it cannot move to
       # the migration-lint job, which deliberately runs stdlib-only scripts. This job
       # also runs on a bare checkout with no backend/static/, which matters: a built
