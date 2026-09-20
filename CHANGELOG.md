@@ -7,9 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Everything since `v0.2.0-beta6`, 2026-09-04 to 2026-09-14. **Reconstructed on 2026-09-14 from the
-commits**, as the entry below it was — this file last moved at alpha2, and eight tags went by
-without touching it.
+## [0.2.0-beta7] - 2026-09-20
+
+Everything since `v0.2.0-beta6`. The first half of it, 2026-09-04 to 2026-09-14, was
+**reconstructed on 2026-09-14 from the commits**, as the entry below it was — this file had last
+moved at alpha2, and eight tags went by without touching it. The rest was written as it landed.
+No migrations; the API contract stays at v1, so every existing client keeps working.
+
+### The admin UI is organised around what an operator is doing
+
+- **Four destinations — Overview, Library, Analysis, Server** — replace Library / Tools / Server
+  (ADR-0126). The first draft kept the old headings; auditing all fifteen panels by what each
+  reads and writes found a provider spread across four panels in three groups, the analysis
+  pipeline split four ways, and two links to screens that do not exist. Now a provider is one
+  card (Server → Providers), the pipeline is one destination, and the Overview says what needs
+  attention — backlog read from the worker queues, a scan or analysis in progress, a provider
+  with no key — with a link that goes where it says. Bookmarked `/tools/*` addresses redirect.
+- **The web client is generated from the schema** (ADR-0129), the way the Apple client has been
+  since ADR-0007: `packages/api-client` from `backend/openapi.json`, checked in CI, migrated one
+  feature at a time behind adapters in `src/api/`. Its first payoff was a bug: the "profile no
+  longer exists" handling had never fired, because it matched prose in the wrong field. **Errors
+  a client acts on now carry a stable `code`** (`SERVER_TOKEN_REQUIRED`, `INVALID_PROFILE`,
+  `SCAN_IN_PROGRESS`, `ANALYSIS_IN_PROGRESS`; `docs/ERROR-CONTRACTS.md`), and clients switch on
+  that, never on the sentence.
 
 ### The library learns which recordings it holds
 
@@ -29,8 +49,19 @@ without touching it.
   installation runs — a vector from another one is well-formed and useless, and was being accepted
   silently. The default cache URL points at a host that resolves.
 
+- **The corpus is asked by recording before it is asked by hash** (ADR-0119). clapback measured
+  that `fpcalc` and pyacoustid agree on 24 of 56 FLACs, so a miss by hash never meant the corpus
+  lacked the recording. With ~90% of tracks now naming one, a re-analysis asks
+  `/v1/recordings/{mbid}` first and falls back to the hash only on a definite no; the source is
+  written as `community_cache:recording` or `:hash` so the next run reports the split.
+
 ### Added
 
+- **A weighted shuffle applies to the queue that is playing** (ADR-0120). A preset had only ever
+  acted on a draw from the whole library — a button most listeners never press — while the
+  everyday queue is Favourites. `GET /tracks/ids?favorites=true` scopes every path (weighted,
+  random, sorted, `start_with`) to the profile's favourites; without a profile it is a 400, not a
+  whole-library answer that looks like the feature working.
 - **A phone can download a lossless track as AAC.** `GET /tracks/{id}/stream?format=aac` encodes a
   FLAC, ALAC, WAV or AIFF source once to 256 kbps AAC — a quarter of the size — and caches it; an
   MP3 or AAC source is served exactly as it is, never re-encoded. Playback is unchanged, and the
@@ -67,6 +98,38 @@ without touching it.
 - A sandboxed visualizer can read cover art; `beat-tiles` had been drawing white cubes.
 - The website names both apps and uses Apple's badges; the README describes the client split the
   code made a month earlier.
+- An ambient session no longer wanders into an audiobook: the seed path had gated speech since it
+  was written and the continuation path never did, so from the second track on speech was one
+  weight of seven.
+- `/health/file-responses` reports the stream, artwork and encoder ceilings' counters (ADR-0112's
+  follow-up) — the limiters had been enforcing numbers nobody could read.
+- `familiar-demo.fly.dev` had served the previous build on every push for a day, and the website
+  had not deployed since 09-04: `deploy/fly/Dockerfile` did not copy the new `api-client` package
+  (a check now keeps both Dockerfiles honest), and `cloudflare/pages-action` no longer exists
+  (`wrangler-action` replaces it). Both verified against what is actually served.
+
+### For people working on it
+
+- **`uv run pytest` can no longer empty a real database** (ADR-0128). It had `DELETE`d every row
+  from eighteen tables in whatever `DATABASE_URL` named, and CI's disposable database was itself
+  called `familiar`, so the name proved nothing. Tests take `TEST_DATABASE_URL` only, the name
+  must end `_test`, and a bare run refuses. `make test` creates and migrates it;
+  `make test-services` gives a machine without the compose stack a throwaway Postgres and Redis.
+- **The backend is assembled, not imported** (ADR-0130, first domain): `create_app(settings,
+  services)`, a `Services` container, and `build_services` as the only place allowed to reach a
+  singleton. Soulseek went first; a test builds two apps with two gateways and patches nothing.
+  `scripts/lint_boundaries.py` keeps operations HTTP-free.
+- **First-party visualizers share an authoring SDK** (ADR-0125): the bridge, the shared effects
+  and the event fixtures in `packages/visualizer-sdk`, where four packages had carried six
+  byte-identical files each. A Playwright contract test drives every shipped document with the
+  same events.
+- **`docs/START-HERE.md` is the front door** (ADR-0127): a map, one request traced through the
+  current code, five golden paths, and `make doctor` / `make check`. CI fails if a current-state
+  doc names a path, make target or pnpm script that does not exist, and `docs/ADR-INDEX.md` is
+  generated from the records.
+- The Apple client's own restructuring — a package boundary for the application objects, one
+  composition root, generated types stopping at repositories (ADR-0122–0124) — is recorded here
+  and shipped in `familiar-apple`.
 
 ## [0.2.0-beta6] - 2026-09-04
 
