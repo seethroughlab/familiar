@@ -66,6 +66,11 @@ jobs:
           apiToken: ${{ secrets.CF_API_TOKEN }}
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
           command: pages deploy _site --project-name=familiar-site --branch=main
+          # The action picks its package manager from the lockfile at the repo root and finds
+          # `pnpm-lock.yaml`, then fails because the runner has no pnpm. It only needs one to
+          # install Wrangler itself — the site is static and touches no workspace package — so
+          # npm, which the runner has, is the honest choice rather than installing pnpm for it.
+          packageManager: npm
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
 
       # ADR-0097: the live site served an April build for four months while every
