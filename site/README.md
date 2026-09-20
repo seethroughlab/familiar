@@ -21,7 +21,7 @@ Then visit <http://localhost:8000>. The symlink is gitignored.
 ## Publishing
 
 The workflow assembles `_site/` from `site/` plus the repo-root `screenshots/` directory, then
-deploys it with `cloudflare/pages-action@v1` to the Cloudflare Pages project **`familiar-site`**,
+deploys it with `cloudflare/wrangler-action@v4` (`wrangler pages deploy`; `pages-action` was withdrawn in September 2026) to the Cloudflare Pages project **`familiar-site`**,
 using the `CF_API_TOKEN` and `CF_ACCOUNT_ID` secrets.
 
 > **This section used to describe GitHub Pages** — a CNAME file the repository does not contain,
