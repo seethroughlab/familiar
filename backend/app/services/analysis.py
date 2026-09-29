@@ -46,6 +46,18 @@ def get_acoustid_api_key() -> str:
     except Exception:
         return ""
 
+def _models_missing() -> list[str]:
+    """CLAP encoder files this server does not have yet (ADR-0132 point 8).
+
+    Checked alongside `_embedder_available`: the package being installed says nothing about whether
+    its 614 MB of encoders are on disk. A server outside the image fetches them after startup, and
+    until they land embedding is off, rather than failing once per track.
+    """
+    from app.services.clap_artifacts import missing
+
+    return missing()
+
+
 # `get_device()` and `load_clap_model()` are gone with ADR-0105. Device selection
 # is now the embedder's, via CLAPBACK_PROVIDERS, and the model is an ONNX artifact
 # rather than a torch module — so there is nothing here to cache or move.
@@ -91,13 +103,18 @@ def get_analysis_capabilities() -> dict:
 
     clap_status = get_app_settings_service().get_clap_status()
 
-    embeddings_enabled = clap_status["enabled"] and _embedder_available
+    absent = _models_missing() if _embedder_available else []
+    embeddings_enabled = clap_status["enabled"] and _embedder_available and not absent
     embeddings_disabled_reason = None
 
     if not clap_status["enabled"]:
         embeddings_disabled_reason = clap_status["reason"]
     elif not _embedder_available:
         embeddings_disabled_reason = f"Embedder unavailable: {_torch_import_error or 'import failed'}"
+    elif absent:
+        from app.services.clap_artifacts import model_dir
+
+        embeddings_disabled_reason = f"CLAP encoders not yet present in {model_dir()}: {', '.join(absent)}"
 
     return {
         "embeddings_enabled": embeddings_enabled,
@@ -119,10 +136,10 @@ def check_analysis_capabilities() -> None:
     """
     caps = get_analysis_capabilities()
     if not caps["embeddings_enabled"]:
+        remedy = "" if _embedder_available else " Install the embedder to enable: uv sync --extra analysis"
         logger.warning(
             f"CLAP embeddings DISABLED: {caps['embeddings_disabled_reason']}. "
-            "Audio similarity features (Music Map) will not work. "
-            "Install the embedder to enable: uv sync --extra analysis"
+            f"Audio similarity features (Music Map) will not work.{remedy}"
         )
     else:
         logger.info("Analysis capabilities: features=enabled, embeddings=enabled")
@@ -153,6 +170,9 @@ def extract_embedding(file_path: Path, target_sr: int = 48000) -> list[float] | 
     """
     if not _embedder_available:
         logger.debug("CLAP embeddings disabled (clapback-embed not installed)")
+        return None
+    if _models_missing():
+        logger.debug("CLAP embeddings disabled (encoders not present yet)")
         return None
 
     from app.services.app_settings import get_app_settings_service
@@ -220,6 +240,9 @@ def extract_text_embedding(text: str) -> list[float] | None:
     """
     if not _embedder_available:
         logger.debug("CLAP text embeddings disabled (clapback-embed not installed)")
+        return None
+    if _models_missing():
+        logger.debug("CLAP text embeddings disabled (encoders not present yet)")
         return None
 
     from app.services.app_settings import get_app_settings_service

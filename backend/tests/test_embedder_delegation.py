@@ -32,8 +32,8 @@ def clap_enabled():
     settings = MagicMock()
     settings.is_clap_embeddings_enabled.return_value = (True, "")
     with patch("app.services.analysis._embedder_available", True), patch(
-        "app.services.app_settings.get_app_settings_service", return_value=settings
-    ):
+        "app.services.analysis._models_missing", return_value=[]
+    ), patch("app.services.app_settings.get_app_settings_service", return_value=settings):
         yield
 
 
@@ -108,10 +108,27 @@ def test_disabled_clap_never_reaches_the_package():
     settings.is_clap_embeddings_enabled.return_value = (False, "Disabled by user")
     pkg = _fake_package()
     with patch("app.services.analysis._embedder_available", True), patch(
-        "app.services.app_settings.get_app_settings_service", return_value=settings
-    ), patch.dict(sys.modules, pkg):
+        "app.services.analysis._models_missing", return_value=[]
+    ), patch("app.services.app_settings.get_app_settings_service", return_value=settings), patch.dict(
+        sys.modules, pkg
+    ):
         assert analysis.extract_embedding(Path("track.mp3")) is None
     pkg["clapback_embed"].embed_file.assert_not_called()
+
+
+def test_missing_encoders_never_reach_the_package(clap_enabled):
+    """ADR-0132 point 8: a server still fetching its encoders has embeddings off, not failing."""
+    pkg = _fake_package()
+    with patch("app.services.analysis._models_missing", return_value=["clap_audio.onnx"]), patch.dict(
+        sys.modules, pkg
+    ):
+        assert analysis.extract_embedding(Path("track.mp3")) is None
+        assert analysis.extract_text_embedding("anything") is None
+        caps = analysis.get_analysis_capabilities()
+    assert caps["embeddings_enabled"] is False
+    assert "clap_audio.onnx" in caps["embeddings_disabled_reason"]
+    pkg["clapback_embed"].embed_file.assert_not_called()
+    pkg["clapback_embed"].embed_text.assert_not_called()
 
 
 def test_an_embedding_failure_is_raised_not_swallowed(clap_enabled):

@@ -426,7 +426,8 @@ class TestQueueTracksForEmbeddings:
 
         with patch("app.db.session.async_session_maker", return_value=mock_session), \
              patch("app.services.background.get_background_manager", return_value=mock_manager), \
-             patch("app.services.app_settings.get_app_settings_service", return_value=mock_settings):
+             patch("app.services.app_settings.get_app_settings_service", return_value=mock_settings), \
+             patch("app.services.analysis._models_missing", return_value=[]):
             from app.services.tasks import queue_tracks_for_embeddings
             queued = await queue_tracks_for_embeddings(limit=10)
 
@@ -444,6 +445,33 @@ class TestQueueTracksForEmbeddings:
             queued = await queue_tracks_for_embeddings()
 
         assert queued == 0
+
+    @pytest.mark.asyncio
+    async def test_missing_encoders_queue_nothing(self):
+        """ADR-0132 point 8: a server still fetching its encoders would fail every queued track."""
+        # A track that *would* be queued, so only the gate can make the answer 0.
+        mock_db = MagicMock()
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = [("12345678-1234-1234-1234-123456789abc",)]
+        mock_db.execute = AsyncMock(return_value=mock_result)
+        mock_session = MagicMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_db)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+
+        mock_settings = MagicMock()
+        mock_settings.is_clap_embeddings_enabled.return_value = (True, "enabled")
+        mock_manager = MagicMock()
+        mock_manager.run_analysis = AsyncMock()
+
+        with patch("app.db.session.async_session_maker", return_value=mock_session), \
+             patch("app.services.app_settings.get_app_settings_service", return_value=mock_settings), \
+             patch("app.services.background.get_background_manager", return_value=mock_manager), \
+             patch("app.services.analysis._models_missing", return_value=["clap_audio.onnx"]):
+            from app.services.tasks import queue_tracks_for_embeddings
+            queued = await queue_tracks_for_embeddings()
+
+        assert queued == 0
+        mock_manager.run_analysis.assert_not_called()
 
 
 class TestEmbeddingQueueExcludesUnplayableTracks:
@@ -486,7 +514,8 @@ class TestEmbeddingQueueExcludesUnplayableTracks:
         mock_settings.is_clap_embeddings_enabled.return_value = (True, "")
 
         with patch("app.db.session.async_session_maker", return_value=mock_session), \
-             patch("app.services.app_settings.get_app_settings_service", return_value=mock_settings):
+             patch("app.services.app_settings.get_app_settings_service", return_value=mock_settings), \
+             patch("app.services.analysis._models_missing", return_value=[]):
             from app.services.tasks import queue_tracks_for_embeddings
             await queue_tracks_for_embeddings(limit=10)
 
