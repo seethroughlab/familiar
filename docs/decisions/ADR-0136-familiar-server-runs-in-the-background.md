@@ -23,9 +23,14 @@ or not any player is open.
 
 A fact about the server that shapes this decision: **the zero-touch guarantee
 (`docs/ZERO-TOUCH.md`) is enforced only by Docker's read-only mount.** That document specifies a
-startup check that fails if the library is writable. None exists: a search of `backend/app` for
-`W_OK` and `os.access` finds nothing. A person's own Music folder is writable by that person, so a
-desktop server would lose the guarantee silently unless something else enforces it.
+startup check that fails if the library is writable. What exists instead is a warning:
+`validate_library_path` (`app/main.py`) creates a temporary file in the library, and if that
+succeeds it logs "Library path is writable" and starts anyway. On a writable library the check
+therefore writes, and deletes, a file in the collection it exists to protect.
+*(Correction, 2026-09-29: the first draft of this ADR said no check existed, because a search for
+`W_OK` and `os.access` found nothing; the check uses `tempfile` instead.)* A person's own Music
+folder is writable by that person, so a desktop server would lose the guarantee with only a log line
+to show for it unless something else enforces it.
 
 A second fact, which divides the problem: **of the server's processes, only Python reads music.**
 Postgres stores what Python tells it. `ffmpeg` is spawned by Python against files Python names.
@@ -67,10 +72,10 @@ database.
    Familiar Server's container.
 
 5. **Zero-touch is enforced twice.** The sandbox denies writes to the music folder, because
-   Familiar Server never held write access. `app.serve` also gains the preflight
-   `docs/ZERO-TOUCH.md` specified, which refuses to start on a writable library. The preflight runs
-   in Docker too, where it was always meant to, so an entitlement change or a compose file without
-   `:ro` fails closed.
+   Familiar Server never held write access. And `validate_library_path` becomes the check
+   `docs/ZERO-TOUCH.md` specified: it asks with `os.access` rather than by creating a file, and
+   it refuses to start on a writable library rather than warning. It runs in Docker too, so an
+   entitlement change or a compose file without `:ro` fails closed.
 
 6. **The menu is the server's status surface:**
    - the current state (idle, syncing, analysing *n* of *m*, paused and why, per ADR-0138)

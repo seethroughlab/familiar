@@ -131,8 +131,9 @@ pgvector, supplied by whoever packages it.
 
 - **Positive:** `alembic upgrade head` plus `python -m app.serve` against any Postgres with pgvector
   is a complete server. This is also a faster development loop than today's compose stack.
-- **Positive:** the zero-touch preflight that `docs/ZERO-TOUCH.md` specified and was never built
-  gets a natural home in `app.serve` (see ADR-0136 point 5).
+- **Positive:** the zero-touch check can become the refusal `docs/ZERO-TOUCH.md` specified. Today
+  it is a warning in `validate_library_path` (`app/main.py`) that tests by writing a temporary file
+  into the library (ADR-0136 point 5).
 - **Tradeoff:** there are now two runtimes to keep working. The Docker smoke test covers one; CI
   needs a job that runs the backend suite on macOS without the image.
 - **Tradeoff:** the release pipeline gains about 614 MB of assets per version and a hash table that
