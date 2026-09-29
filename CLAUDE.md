@@ -307,7 +307,7 @@ four first-party visualizers really are byte-identical in six files (one md5 eac
 and the fifteen Apple tests that read Swift as text do so through two helpers, `AppSource.swift` and
 `EngineSource.swift`, so they are found by searching for those rather than for the file paths.
 
-**`ADR-0131`–`ADR-0138` make the server its own app** (`0131` and `0132` accepted, the rest `proposed`, 2026-09-29). `0131` frames it:
+**`ADR-0131`–`ADR-0138` make the server its own app** (`0131`–`0133` accepted, the rest `proposed`, 2026-09-29). `0131` frames it:
 Familiar is a server and the clients that play from it, installed and paired separately. The server
 comes as **Familiar Server** (a Developer ID menu-bar Mac app, source at `desktop/macos/` in this repo)
 or as Docker on Linux/NAS, and both are first-class. The Mac player stays in the App Store and carries
