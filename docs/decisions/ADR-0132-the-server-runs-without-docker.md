@@ -1,6 +1,6 @@
 # ADR-0132: The Server Runs Without Docker
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-29
 

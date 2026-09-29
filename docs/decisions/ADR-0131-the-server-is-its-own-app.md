@@ -1,6 +1,6 @@
 # ADR-0131: The Server Is Its Own App
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-29
 
