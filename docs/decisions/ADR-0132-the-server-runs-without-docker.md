@@ -4,6 +4,34 @@ Status: accepted
 
 Date: 2026-09-29
 
+Implementation:
+- **2026-09-29, `familiar`: points 2–6.** Point 8 (the CLAP artifacts as release assets) is the
+  remaining slice, because it changes `release.yml` and adds a download path of its own. Point 7
+  needed no code.
+  - **Point 2.** `Settings.data_dir` is read from `FAMILIAR_DATA_DIR` only. `populate_by_name` stays
+    off, because with it on pydantic-settings also reads a bare `DATA_DIR`, and a test pins that.
+    `art_path`, `videos_path`, `profiles_path` and `mixtapes_path` default under it through
+    `default_factory`, so `ART_PATH` and the others still win. The nine working-directory sites
+    outside `config.py` now read `settings_file`, `outputs_file`, `transcode_cache_dir`,
+    `restore_safety_dir`, `analysis_data_dir` and `models_dir`. `scripts/lint_data_paths.py` runs in
+    `make lint-contracts` and CI, and it reports all nine against the old sources.
+  - **Point 3 is built differently from its text.** It reads a `VERSION` file beside `app/`
+    (`BACKEND_ROOT / "VERSION"`), not `importlib.metadata`. In the image that path *is*
+    `/app/VERSION`, so nothing moved. Metadata was wrong for two reasons: every checkout has
+    `familiar 0.1.0` installed, and the update checker skips only the literal `"dev"`. A
+    development server would have been told a release was waiting. A native packager writes the
+    file, as the Dockerfile does.
+  - **Point 5 was already true, and this ADR's Context was wrong about it.** The baseline migration
+    (`20241231_000000_baseline.py`) runs `CREATE EXTENSION IF NOT EXISTS` for `vector` and
+    `pg_trgm`, and nothing uses `uuid-ossp`. No migration was added. Proved on a new, empty
+    pgvector database: `app.serve.migrate()` run from outside `backend/` reaches
+    `20260831_seed_listenbrainz` with both extensions and 25 tables.
+  - **Point 6.** `python -m app.serve [--host] [--port]`, defaulting to `127.0.0.1:4400`. It is
+    migrate, then uvicorn with one worker, with both steps injectable for tests. It was started from
+    a scratch directory with `FAMILIAR_DATA_DIR` set: `/api/v1/health` answered `healthy`, the
+    socket was bound to 127.0.0.1 only, and a settings write landed in the data directory.
+  - Tests: `tests/test_server_without_docker.py` and `tests/test_lint_data_paths.py`.
+
 Extends [ADR-0131](ADR-0131-the-server-is-its-own-app.md)
 
 ## Context

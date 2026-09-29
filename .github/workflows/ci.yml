@@ -302,6 +302,11 @@ jobs:
       - name: Lint import boundaries
         run: uv run python scripts/lint_boundaries.py
 
+      # ADR-0132 point 2: server state derives from settings.data_dir, never the working
+      # directory, so a server started outside /app finds it. Pure AST; needs no database.
+      - name: Lint data paths
+        run: uv run python scripts/lint_data_paths.py
+
       # ADR-0127 points 6 and 9: the current-state docs name only things that exist, and the ADR
       # index is regenerated from the records. Pure Python over the tree; no database.
       - name: Docs name only what exists
