@@ -25,6 +25,7 @@ from .base import (
     TrackStatus,
 )
 from .frontend_log import FrontendLog
+from .kv import KVEntry, KVListItem
 from .metadata import ProposedChange
 from .mixtapes import MixTape
 from .playlists import Playlist, PlaylistTrack, SmartPlaylist
@@ -58,6 +59,8 @@ __all__ = [
     "ExternalAlbumCache",
     "ExternalArtistImageCache",
     "FrontendLog",
+    "KVEntry",
+    "KVListItem",
     "LastfmProfile",
     "MixTape",
     "PlayEvent",

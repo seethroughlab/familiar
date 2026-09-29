@@ -1,8 +1,43 @@
 # ADR-0133: Redis Is Optional
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-29
+
+Implementation:
+- **2026-09-29, `familiar`: all six points.**
+  - **Point 1.** `KeyValueStore` is a `runtime_checkable` Protocol in `app/services/kv/__init__.py`.
+    `ResilientRedisClient` is unchanged and satisfies it. `get_redis()` keeps its name.
+  - **Point 2.** `PostgresKeyValueStore` in `app/services/kv/postgres.py`: a `ThreadedConnectionPool`
+    of four per process, one transaction per call, and one retry on a dropped connection. The
+    tables are `kv_store`/`kv_list` (models in `app/db/models/kv.py`, migration
+    `20260929_kv_store`). An expired key is purged before any write to it, ignored on read, and
+    swept every ten minutes by a scheduler job that exists only when this store is in use.
+  - **Point 3 as written.** `set(nx=True)` is `ON CONFLICT DO NOTHING` after the purge, and expiry
+    is `now()` compared inside the statement.
+  - **Point 4 is built differently from its text.** The choice is made per process from
+    `settings.redis_url` (`build_store()` in `redis_client.py`), not once in `build_services`.
+    The scan and analysis pools are *spawned*, so each builds its own store, and a choice held
+    only by the parent's container would never reach them.
+    `test_a_spawned_process_writes_where_the_parent_reads` pins it. `Settings.redis_url` now
+    defaults to `None`. Every compose file already sets `REDIS_URL`, and `make doctor` reports an
+    unset one as the Postgres store rather than a missing Redis. A developer who ran
+    `make run` without `REDIS_URL`, and was silently using `localhost:6379`, now gets the Postgres
+    store.
+  - **Point 5.** `/health/system` reports `kv_store` instead of `redis` when there is no URL, and
+    it is not in the critical set, because a Postgres outage already fails the `database` check.
+  - **Point 6.** `tests/test_kv_store.py` runs 27 checks against both stores. They agree on
+    every edge, including `nx` on a live key, expiry, negative list indices, a list trimmed to
+    nothing, keys as bytes, and an int stored as its decimal. CI gains
+    `backend-test-no-redis`, the core selection with no Redis service. Locally, the full suite
+    passes both ways: 2,360 with Redis, and 2,333 plus 27 skipped (the Redis half) without.
+  - **The Consequence about coalescing progress writes did not survive measurement.** The scanner
+    already writes progress every 50 directories and every 10 files (`scanner.py:192,380`), so a
+    26k-track scan is about 2,600 writes. The store does about 1,500 `set`s per second (0.67 ms,
+    throwaway pgvector on the same Mac), so that is about 1.7 s of store time for the whole scan.
+    Nothing was coalesced.
+  - **Loose ends.** Three tests read Redis directly (`tests/test_scanner.py`). They now read
+    through `get_redis()`, so they test whichever store is in use.
 
 Extends [ADR-0132](ADR-0132-the-server-runs-without-docker.md)
 

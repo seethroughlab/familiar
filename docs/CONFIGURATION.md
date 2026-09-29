@@ -15,7 +15,7 @@ cp .env.example .env
 |----------|-------------|---------|
 | `MUSIC_LIBRARY_PATH` | Host path to your music folder (mounted at `/music`) | `/data/music` |
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql+asyncpg://...` |
-| `REDIS_URL` | Redis connection string | `redis://localhost:6379/0` |
+| `REDIS_URL` | Redis connection string. Unset, the server keeps the same state in PostgreSQL instead (ADR-0133); every Docker compose file sets it | *(none)* |
 | `FRONTEND_URL` | Base URL for OAuth callbacks | `http://localhost:4400` |
 | `S3_BACKUP_ACCESS_KEY_ID` | AWS access key for S3 backup | *(none)* |
 | `S3_BACKUP_SECRET_ACCESS_KEY` | AWS secret key for S3 backup | *(none)* |

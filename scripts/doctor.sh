@@ -80,10 +80,14 @@ if [ -n "${TEST_DATABASE_URL:-}" ]; then
 else
   warn "TEST_DATABASE_URL" "unset — make test sets it; bare pytest stops before collection"
 fi
-redis_url="${REDIS_URL:-redis://localhost:6379/0}"
-r_hostport=$(printf '%s' "$redis_url" | sed -E 's#^redis://([^@/]*@)?([^/?]+).*#\2#')
-r_host=${r_hostport%%:*}; r_port=${r_hostport##*:}; [ "$r_port" = "$r_host" ] && r_port=6379
-if have nc && nc -z -w 2 "$r_host" "$r_port" 2>/dev/null; then ok "redis" "$r_host:$r_port reachable"; else warn "redis" "$r_host:$r_port not reachable"; fi
+if [ -z "${REDIS_URL:-}" ]; then
+  # ADR-0133: with no REDIS_URL the server keeps this state in Postgres, which is checked above.
+  ok "redis" "REDIS_URL unset — the key/value store is the kv_store table in Postgres"
+else
+  r_hostport=$(printf '%s' "$REDIS_URL" | sed -E 's#^redis://([^@/]*@)?([^/?]+).*#\2#')
+  r_host=${r_hostport%%:*}; r_port=${r_hostport##*:}; [ "$r_port" = "$r_host" ] && r_port=6379
+  if have nc && nc -z -w 2 "$r_host" "$r_port" 2>/dev/null; then ok "redis" "$r_host:$r_port reachable"; else bad "redis" "REDIS_URL names $r_host:$r_port and it is not reachable"; fi
+fi
 
 echo "Migrations"
 if [ -d backend/.venv ] && have nc && nc -z -w 2 "$db_host" "$db_port" 2>/dev/null; then
