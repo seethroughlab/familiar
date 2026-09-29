@@ -1,0 +1,140 @@
+# ADR-0132: The Server Runs Without Docker
+
+Status: proposed
+
+Date: 2026-09-29
+
+Extends [ADR-0131](ADR-0131-the-server-is-its-own-app.md)
+
+## Context
+
+ADR-0131 gives the server a second form beside Docker: Familiar Server, a Mac app. Today the only
+way to get a server is Docker. This ADR is the server-side precondition for everything else in that set:
+- the server has to run as an ordinary process before Familiar Server can carry it (ADR-0136)
+- it has to run without Redis before it is one supervised thing rather than three (ADR-0133)
+
+Investigation found that the server is much closer to running natively than the install
+instructions suggest:
+
+- **The process model is already portable.** `app/main.py` forces the `spawn` start method at
+  import. The analysis, on-demand and scan pools use spawn contexts with top-level, picklable
+  entry points (`services/background/executors.py`, `services/tasks/library_sync.py`). The code
+  has no `os.fork`, signals, `fcntl` or inotify. The two Unix-only calls, `os.nice` in the pool
+  initialiser and `resource` in `tasks/common.py`, are each inside a `try`.
+- **The runtime no longer carries torch.** Since ADR-0105, CLAP runs on ONNX through
+  `clapback-embed`. torch exists only in the Dockerfile's `onnx-export` stage.
+- **What does assume a container** is a small set of paths and one executable lookup:
+  - `get_app_version()` reads `/app/VERSION` (`app/config.py:9`).
+  - `music_library_path` defaults to `/music` (`app/config.py:33`), and the startup warning tells
+    the user to configure it "in docker-compose.yml" (`app/main.py`).
+  - Thirteen state paths are relative to the working directory, which only works because the image's
+    `WORKDIR` is `/app` and `/app/data` is a volume:
+    - `data/settings.json` (`services/app_settings.py:169`, and three more times in
+      `services/s3_backup.py`)
+    - `data/outputs.json` (`services/outputs.py:33`)
+    - `data/transcode_cache` (`api/routes/tracks/streaming.py:176,248`)
+    - `data/restore-safety` (`services/s3_backup.py:691`)
+    - `data/analysis` (`services/track_analysis/constants.py:15`)
+    - `data/art`, `data/videos`, `data/profiles` and `data/mixtapes` (`app/config.py:44-47`)
+  - `services/vocal_detection.py` locates `silero_vad.onnx` relative to its own source file.
+  - `ffmpeg` and `ffprobe` are invoked by bare name (`services/artwork.py`, `flac_remux.py`,
+    `mixtape_export.py`, `video.py`, `api/routes/tracks/streaming.py`), so they resolve through
+    `PATH`.
+  - Database extensions are created by `docker/init-pgvector.sql` (`vector`, `uuid-ossp`,
+    `pg_trgm`) and by `docker/entrypoint.sh` (`vector`), not by migrations.
+- **The CLAP artifacts are built, not downloaded.** The Dockerfile's comment above the export stage
+  explains why: the two files (112 MB audio, 502 MB text) are "reproducible from the pinned
+  checkpoint rather than trusted from a URL". A native install has no export stage, so this ADR
+  has to say where they come from without discarding that reasoning.
+
+**Premise examined and dropped: port the database to SQLite so there is nothing to install.** This
+does not survive a count:
+- pgvector: an HNSW index and 8 `cosine_distance` call sites
+- `pg_trgm` GIN indexes
+- `on_conflict_do_*` upserts at 6 sites
+- 61 raw `text()` calls
+- at least 22 of the 53 migrations name JSONB, `postgresql` dialect types, extensions or `DO $$` blocks
+
+ADR-0128 rejected SQLite for tests on the same grounds. The native server keeps PostgreSQL 16 with
+pgvector, supplied by whoever packages it.
+
+## Decision
+
+1. **The server runs as an ordinary Python process with no container.** Docker stays the supported
+   path for the NAS and Linux, and nothing is removed from it. A native distribution (the first is
+   ADR-0136) is a second way to run the same code, not a fork of it.
+
+2. **One data directory anchors all server state.** `Settings.data_dir`, set by `FAMILIAR_DATA_DIR`,
+   defaults to `Path("data")`, so the container's `/app/data` is unchanged. Every path listed in
+   Context resolves against it, including the silero model and the transcode cache. A path given
+   explicitly by its own variable (`ART_PATH` and the others) still wins. `app/config.py` is the one
+   place these paths are derived, and a boundary lint forbids new bare `Path("data/…")` literals
+   under `app/`.
+
+3. **The version comes from package metadata.** `get_app_version()` reads
+   `importlib.metadata.version("familiar")`, with `/app/VERSION` checked first so the image keeps
+   its build-time stamp. The release workflow stamps the same version into `pyproject.toml` that it
+   writes to `VERSION`.
+
+4. **The library path has no container default outside the container.** The startup warning names
+   the setting rather than a compose file. A native distribution sets `MUSIC_LIBRARY_PATH` from the
+   folder the user chose.
+
+5. **Migrations own the extensions they depend on.** A new migration runs
+   `CREATE EXTENSION IF NOT EXISTS` for `vector`, `uuid-ossp` and `pg_trgm`. It is idempotent
+   against every existing database, which already has all three. The Docker init script and
+   entrypoint stay: they are harmless and cover databases created before the migration. After
+   this, `alembic upgrade head` against an empty Postgres with pgvector installed is a complete
+   setup.
+
+6. **One entry point for a native server:** `python -m app.serve`. It runs `alembic upgrade head`,
+   then starts uvicorn with one worker, which is what `docker/entrypoint.sh` and the Dockerfile's
+   `CMD` do. Host and port come from arguments; the default host is ADR-0134's. It does not install,
+   locate or start Postgres; that is the packager's job.
+
+7. **External programs are found on `PATH`, and the packager puts them there.** The bare `ffmpeg`
+   and `ffprobe` calls stay. A native distribution prepends its own `bin/` to the server's `PATH`.
+   `yt-dlp`, which updates itself at every container start (`docker/entrypoint.sh`), is not part of
+   a native distribution. Music videos are absent there, not broken, following the ADR-0116 pattern
+   of withholding what is not configured.
+
+8. **The CLAP artifacts become a release output, pinned by hash.** The release workflow already
+   builds the export stage. It additionally publishes `clap_audio.onnx`, `clap_text.onnx` (and its
+   `.data`) and `tokenizer.json` as release assets, and records their SHA-256 in the backend. A
+   native server looks for them under `data_dir/models/clapback` and, if they are missing,
+   downloads them from the release matching its own version and refuses any file whose hash
+   differs. This keeps the Dockerfile's premise: the files are produced by the pinned export and
+   verified, not trusted from a URL. They are no longer produced on the machine that runs them.
+   Until the download finishes, the server runs as it does with `DISABLE_CLAP_EMBEDDINGS`.
+
+## Alternatives Considered
+
+- **Port to SQLite (with sqlite-vec) so the native server needs no database server.** This would
+  remove the heaviest thing to package. Rejected on the count in Context: the pgvector, trigram,
+  upsert, raw-SQL and migration surface would all need rewriting, and every test would then prove
+  SQLite while the NAS runs Postgres. ADR-0128 records the same judgement for tests.
+- **Ship Docker in disguise: a bundled Colima or Podman VM behind an app icon.** This changes no
+  server code, and the Docker path is already proven. Rejected because it keeps the part that makes
+  the install heavy (a Linux VM, a multi-GB image, the RAM a VM holds) and hides it where a user
+  cannot debug it. It also puts a hypervisor in the background of someone's laptop, which is the opposite of
+  ADR-0137's etiquette.
+- **Leave the relative `data/` paths and have the packager `chdir` into the data directory.** It
+  works with no code change. Rejected because correctness would then depend on the process's
+  working directory, which nothing checks: one packager forgetting to `chdir` writes settings into
+  the app bundle, or fails in a sandbox. There are thirteen sites today, and a lint is cheap.
+- **Bundle the CLAP artifacts in every native package instead of downloading them.** This works
+  offline from the first launch. Not rejected outright; it is left to the packager. ADR-0136 may
+  bundle them. The server-side decision is only that a missing artifact is fetched and verified
+  rather than exported.
+
+## Consequences
+
+- **Positive:** `alembic upgrade head` plus `python -m app.serve` against any Postgres with pgvector
+  is a complete server. This is also a faster development loop than today's compose stack.
+- **Positive:** the zero-touch preflight that `docs/ZERO-TOUCH.md` specified and was never built
+  gets a natural home in `app.serve` (see ADR-0136 point 5).
+- **Tradeoff:** there are now two runtimes to keep working. The Docker smoke test covers one; CI
+  needs a job that runs the backend suite on macOS without the image.
+- **Tradeoff:** the release pipeline gains about 614 MB of assets per version and a hash table that
+  has to change whenever `clapback-embed`'s pinned checkpoint does.
+- **Follow-up:** `docs/MACOS.md`'s development setup can drop Docker once ADR-0133 lands.
