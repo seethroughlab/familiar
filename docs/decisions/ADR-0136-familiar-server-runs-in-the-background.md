@@ -104,8 +104,11 @@ database.
 
 9. **The payload, built in CI and signed with the team's Developer ID:**
    - CPython 3.11 from python-build-standalone, matching the image's 3.11.15
-   - a venv built by `uv` from `backend/uv.lock` with the `analysis` extra. On Darwin, basic-pitch
-     resolves to coremltools, not TensorFlow (`uv.lock`).
+   - a venv built by `uv` from `backend/uv.lock` with the `analysis` extra. On Darwin with Python
+     3.11, basic-pitch resolves to coremltools, not TensorFlow. **From Python 3.12 it resolves to
+     `tensorflow-macos`**, which has only cp311 wheels, so the extra does not even install
+     (`uv.lock`; found 2026-09-29 when a 3.12 venv refused it). The 3.11 pin is load-bearing, not
+     a matter of matching the image.
    - PostgreSQL 16 and pgvector as universal binaries
    - an LGPL build of `ffmpeg`/`ffprobe`
    - the backend, and the built web app in `static/`
