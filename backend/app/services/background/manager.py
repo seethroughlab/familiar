@@ -244,6 +244,7 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin, So
 
             # Register S3 backup schedule if enabled
             self._register_s3_backup_schedule()
+            self._make_background_jobs_deferrable()
 
             self._scheduler.start()
             logger.info("APScheduler started with periodic sync (every 2 hours)")
@@ -258,6 +259,63 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin, So
             logger.warning("APScheduler not installed - periodic tasks disabled")
         except Exception as e:
             logger.error(f"Failed to start scheduler: {e}")
+
+    #: Scheduled jobs that are *background work* and wait out a pause (ADR-0138 point 1). The rest
+    #: (health checks, metrics, log cleanup, the kv sweep, the restore checker) are housekeeping
+    #: that must keep running whatever the machine is doing.
+    DEFERRABLE_JOBS = (
+        "periodic_sync",
+        "discovery_batch",
+        "daily_external_albums",
+        "listenbrainz_fresh_releases",
+        "recording_backfill",
+        "soulseek_poll",
+        "daily_update_check",
+        "s3_backup",
+    )
+
+    def _make_background_jobs_deferrable(self) -> None:
+        """Wrap each deferrable job so a run that falls during a pause is skipped and recorded."""
+        from app.services.background.pause import background_pause
+
+        for job_id in self.DEFERRABLE_JOBS:
+            job = self._scheduler.get_job(job_id) if self._scheduler else None
+            if job is None:
+                continue
+            original = job.func
+            if getattr(original, "_familiar_deferrable", False):
+                continue  # already wrapped; safe to call again after a job is re-registered
+
+            async def deferrable(*args, _original=original, _job_id=job_id, **kwargs):
+                if background_pause.paused:
+                    background_pause.note_skipped(_job_id)
+                    logger.info("Skipping %s: background work is paused (%s)", _job_id, background_pause.reason)
+                    return None
+                result = _original(*args, **kwargs)
+                return await result if asyncio.iscoroutine(result) else result
+
+            deferrable._familiar_deferrable = True  # type: ignore[attr-defined]
+            job.modify(func=deferrable)
+
+    def pause_background(self, reason: str) -> dict:
+        """Pause background work (ADR-0138 point 1). Serving is never paused."""
+        from app.services.background.pause import background_pause
+
+        background_pause.pause(reason)
+        logger.info("Background work paused: %s", reason)
+        return background_pause.state()
+
+    def resume_background(self) -> dict:
+        """Resume. A periodic sync skipped while paused runs once now (ADR-0138 point 5)."""
+        from app.services.background.pause import background_pause
+
+        skipped = background_pause.resume()
+        logger.info("Background work resumed (skipped while paused: %s)", sorted(skipped) or "nothing")
+        if "periodic_sync" in skipped and not self.is_sync_running():
+            asyncio.get_running_loop().create_task(self._periodic_sync())
+        state = background_pause.state()
+        state["resumed_sync"] = "periodic_sync" in skipped
+        return state
 
     async def _sweep_kv_store(self) -> None:
         """Delete expired keys from the Postgres key/value store."""
