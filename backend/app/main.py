@@ -198,7 +198,7 @@ def validate_library_path() -> None:
     if not path.exists():
         logging.warning(
             f"⚠️  Library path does not exist: {path}. "
-            "Configure MUSIC_LIBRARY_PATH in docker-compose.yml"
+            "Set MUSIC_LIBRARY_PATH to your music folder (in Docker, the host side of the /music mount)"
         )
         return
 
@@ -216,7 +216,7 @@ def validate_library_path() -> None:
         if not has_audio:
             logging.warning(
                 f"⚠️  Library path appears empty (no audio files): {path}. "
-                "Check that MUSIC_LIBRARY_PATH in docker-compose.yml points to your music folder"
+                "Check that MUSIC_LIBRARY_PATH points to your music folder"
             )
     except PermissionError:
         logging.warning(f"⚠️  Cannot read library path (permission denied): {path}")

@@ -19,10 +19,11 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import StrEnum
-from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 from xml.sax.saxutils import escape
+
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ logger = logging.getLogger(__name__)
 # discovered) devices survive a container restart. Lives in the same `data/`
 # dir as settings.json (the persisted app_data volume). Browser outputs are
 # never persisted — "This Device" is re-created on each boot.
-_OUTPUTS_FILE = Path("data/outputs.json")
+_OUTPUTS_FILE = settings.outputs_file
 
 
 class OutputType(StrEnum):

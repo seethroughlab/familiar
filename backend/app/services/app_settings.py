@@ -166,7 +166,11 @@ class AppSettingsService:
     """Service for managing user-configurable app settings."""
 
     def __init__(self, settings_path: Path | None = None):
-        self.settings_path = settings_path or Path("data/settings.json")
+        if settings_path is None:
+            from app.config import settings as env_settings
+
+            settings_path = env_settings.settings_file
+        self.settings_path = settings_path
         self.settings_path.parent.mkdir(parents=True, exist_ok=True)
         self._settings: AppSettings | None = None
 

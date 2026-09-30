@@ -4,15 +4,16 @@ Note/chord tables, mode profiles, rhythm lookups, interval names,
 Roman numeral mappings, and common chord progressions.
 """
 
-from pathlib import Path
 
 import numpy as np
+
+from app.config import settings
 
 # Minimum track duration for analysis (seconds)
 MIN_DURATION_SECONDS = 30
 
 # MIDI data directory
-MIDI_DATA_DIR = Path("data/analysis")
+MIDI_DATA_DIR = settings.analysis_data_dir
 
 # ─── Note/chord name tables ───────────────────────────────────────────────
 

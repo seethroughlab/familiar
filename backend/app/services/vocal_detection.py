@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from app.config import settings
+
 if TYPE_CHECKING:
     import onnxruntime
 
@@ -32,7 +34,7 @@ def _model_input_names(session: onnxruntime.InferenceSession) -> set[str]:
     return {i.name for i in session.get_inputs()}
 
 # Default model location
-_MODEL_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "models"
+_MODEL_DIR = settings.models_dir
 _MODEL_PATH = _MODEL_DIR / "silero_vad.onnx"
 
 # silero-vad expects 16kHz audio

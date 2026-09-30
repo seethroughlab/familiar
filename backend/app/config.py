@@ -1,15 +1,26 @@
 import os
 from pathlib import Path
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# The directory holding `app/`: `/app` in the image, `backend/` in a checkout, and wherever a native
+# distribution unpacks the backend (ADR-0132).
+BACKEND_ROOT = Path(__file__).resolve().parent.parent
 
 
 def get_app_version() -> str:
-    """Get app version from VERSION file (set at Docker build time) or fallback."""
-    version_file = Path("/app/VERSION")
+    """The release this server was built from, or "dev".
+
+    Read from a `VERSION` file beside `app/`, written by whatever packaged the backend: the
+    Dockerfile writes `/app/VERSION`, which is this path in the image, and a native distribution
+    writes the same file (ADR-0132 point 3). Not `importlib.metadata`: the installed distribution is
+    `familiar 0.1.0` in every checkout, and a development server reporting "0.1.0" would be told by
+    the update checker that a release is waiting, where "dev" skips the check.
+    """
+    version_file = BACKEND_ROOT / "VERSION"
     if version_file.exists():
         return version_file.read_text().strip()
-    # Fallback for local development
     return "dev"
 
 
@@ -18,6 +29,13 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    # Everything the server writes, anchored in one place (ADR-0132 point 2). FAMILIAR_DATA_DIR,
+    # not DATA_DIR: the prefix keeps it from being picked up from an unrelated environment (and
+    # `populate_by_name` must stay off, or pydantic-settings reads DATA_DIR as well). The
+    # default is relative on purpose — `/app/data` in the image, where WORKDIR is `/app` and the
+    # directory is the `app_data` volume — so no existing installation moves.
+    data_dir: Path = Field(default=Path("data"), validation_alias=AliasChoices("FAMILIAR_DATA_DIR"))
 
     # Database
     database_url: str = "postgresql+asyncpg://familiar:familiar@localhost:5432/familiar"
@@ -34,17 +52,49 @@ class Settings(BaseSettings):
 
     @property
     def music_library_paths(self) -> list[Path]:
-        """Fixed music library path at /music.
-
-        Configure host path via docker-compose volume mount.
-        """
+        """The library roots: MUSIC_LIBRARY_PATH, or /music inside the container."""
         return [self.music_library_path]
 
-    # Data paths
-    art_path: Path = Path("data/art")
-    videos_path: Path = Path("data/videos")
-    profiles_path: Path = Path("data/profiles")
-    mixtapes_path: Path = Path("data/mixtapes")
+    # Data paths. Each defaults to a directory under `data_dir`; ART_PATH and the others still win
+    # when set, which is how the image puts them on their own volumes under `/data`.
+    art_path: Path = Field(default_factory=lambda data: data["data_dir"] / "art")
+    videos_path: Path = Field(default_factory=lambda data: data["data_dir"] / "videos")
+    profiles_path: Path = Field(default_factory=lambda data: data["data_dir"] / "profiles")
+    mixtapes_path: Path = Field(default_factory=lambda data: data["data_dir"] / "mixtapes")
+
+    # The rest of the server's state has no variable of its own and lives in `data_dir`.
+    # `scripts/lint_data_paths.py` fails on a new bare `Path("data/…")` under `app/`, so these
+    # properties are the only place such a path is spelled.
+
+    @property
+    def settings_file(self) -> Path:
+        """The admin UI's settings, API keys and the server token (`AppSettingsService`)."""
+        return self.data_dir / "settings.json"
+
+    @property
+    def outputs_file(self) -> Path:
+        """Registered network outputs, persisted across restarts."""
+        return self.data_dir / "outputs.json"
+
+    @property
+    def transcode_cache_dir(self) -> Path:
+        """Remuxed and AAC-encoded streams (ADR-0118)."""
+        return self.data_dir / "transcode_cache"
+
+    @property
+    def restore_safety_dir(self) -> Path:
+        """The local database dump taken before an S3 restore."""
+        return self.data_dir / "restore-safety"
+
+    @property
+    def analysis_data_dir(self) -> Path:
+        """Per-track MIDI and melodic analysis output."""
+        return self.data_dir / "analysis"
+
+    @property
+    def models_dir(self) -> Path:
+        """Models fetched at runtime, such as silero-vad."""
+        return self.data_dir / "models"
 
     # Analysis
     analysis_version: int = 1

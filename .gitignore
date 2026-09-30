@@ -89,6 +89,8 @@ plans
 
 # Backend runtime data (settings, artwork cache, profiles)
 backend/data/
+# Written by a packager beside app/ (ADR-0132 point 3); /app/VERSION in the image
+backend/VERSION
 TODO.md
 dev
 *accessKeys.csv

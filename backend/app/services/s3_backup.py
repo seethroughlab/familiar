@@ -356,7 +356,7 @@ class S3BackupService:
         }
 
         # Settings (tiny)
-        settings_path = Path("data/settings.json")
+        settings_path = app_config.settings_file
         settings_size = settings_path.stat().st_size if settings_path.exists() else 0
         categories["settings"] = {
             "size_bytes": settings_size,
@@ -442,7 +442,7 @@ class S3BackupService:
 
             # Phase: Settings
             progress.update(phase="settings", current_file="settings.json")
-            settings_path = Path("data/settings.json")
+            settings_path = app_config.settings_file
             if settings_path.exists():
                 s_key = _s3_key(prefix, "settings.json")
                 client.upload_file(
@@ -688,7 +688,7 @@ class S3BackupService:
         thaw to reach is not a safety copy. Raises if the dump fails, so a
         restore cannot proceed unprotected.
         """
-        safety_dir = Path("data/restore-safety")
+        safety_dir = app_config.restore_safety_dir
         safety_dir.mkdir(parents=True, exist_ok=True)
         stamp = utcnow().strftime("%Y%m%d_%H%M%S")
         out = safety_dir / f"pre-restore_{stamp}.sql.gz"
@@ -1135,7 +1135,7 @@ class S3BackupService:
                 progress.update(phase="settings", current_file="settings.json")
                 resp = client.get_object(Bucket=bucket, Key=settings_info["s3_key"])
                 settings_data = resp["Body"].read()
-                settings_path = Path("data/settings.json")
+                settings_path = app_config.settings_file
                 settings_path.parent.mkdir(parents=True, exist_ok=True)
                 settings_path.write_bytes(settings_data)
 

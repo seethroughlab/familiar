@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from app.api.concurrency import encoder_limiter
 from app.api.deps import DbSession, release_connection
 from app.api.exceptions import NotFoundError, TrackNotFoundError, TranscodeError, ValidationError
+from app.config import settings
 from app.db.models import Track
 from app.services.artwork import album_key_for_track, get_artwork_path
 from app.services.flac_remux import AAC, FLAC, TranscodeTarget, transcode_to_file
@@ -173,7 +174,7 @@ async def _get_or_transcode(
     """
     from app.api.streaming import stream_file
 
-    cache_dir = Path("data/transcode_cache")
+    cache_dir = settings.transcode_cache_dir
     cache_dir.mkdir(parents=True, exist_ok=True)
     cached = cache_dir / f"{track_id}{target.cache_suffix}"
 
@@ -245,7 +246,7 @@ async def report_playback_error(
         raise NotFoundError("Audio file not found")
 
     # Clear transcode cache if it exists — may be corrupt
-    cache_file = Path("data/transcode_cache") / f"{track_id}.flac"
+    cache_file = settings.transcode_cache_dir / f"{track_id}.flac"
     cache_cleared = False
     if cache_file.exists():
         cache_file.unlink(missing_ok=True)

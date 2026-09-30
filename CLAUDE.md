@@ -307,7 +307,7 @@ four first-party visualizers really are byte-identical in six files (one md5 eac
 and the fifteen Apple tests that read Swift as text do so through two helpers, `AppSource.swift` and
 `EngineSource.swift`, so they are found by searching for those rather than for the file paths.
 
-**`ADR-0131`–`ADR-0138` make the server its own app** (`0131`–`0134` accepted, the rest `proposed`, 2026-09-29). `0131` frames it:
+**`ADR-0131`–`ADR-0138` make the server its own app** (`0131`–`0134` accepted, `0132` built but for point 8, the rest `proposed`, 2026-09-29). `0131` frames it:
 Familiar is a server and the clients that play from it, installed and paired separately. The server
 comes as **Familiar Server** (a Developer ID menu-bar Mac app, source at `desktop/macos/` in this repo)
 or as Docker on Linux/NAS, and both are first-class. The Mac player stays in the App Store and carries
@@ -521,6 +521,10 @@ REDIS_URL=redis://localhost:6379/0
 
 # Optional (for Docker volume mounting only - actual paths configured in UI)
 MUSIC_LIBRARY_PATH=/data/music
+
+# Optional: where the server keeps settings.json, caches and profiles (ADR-0132).
+# Default `data`, relative to the working directory: /app/data in the image.
+FAMILIAR_DATA_DIR=/path/to/state
 ```
 
 ## Running Locally
@@ -528,6 +532,9 @@ MUSIC_LIBRARY_PATH=/data/music
 ```bash
 # Backend (from backend/)
 DATABASE_URL="..." REDIS_URL="..." uv run uvicorn app.main:app --reload --port 4400
+
+# Or as a server outside Docker runs it (ADR-0132): migrate to head, then serve on 127.0.0.1
+DATABASE_URL="..." REDIS_URL="..." FAMILIAR_DATA_DIR=... uv run python -m app.serve [--host] [--port]
 
 # Frontend (from packages/web/)
 pnpm dev
