@@ -1,6 +1,6 @@
 # ADR-0133: Redis Is Optional
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-29
 
