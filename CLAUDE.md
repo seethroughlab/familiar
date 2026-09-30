@@ -353,6 +353,11 @@ packages/
     └── vite.config.ts     # PWA plugin, dev proxy, manual chunks
                            # The Apple clients live in the familiar-apple repo (ADR-0001);
                            # packages/ios, the Capacitor app, was deleted 2026-08-11.
+desktop/
+└── macos/                 # Familiar Server, the Mac form of the server (ADR-0136): a Swift package
+                           # (menu-bar app, Postgres launch agent, FamiliarServerCore) assembled into
+                           # an .app by scripts/build-payload.sh + build-app.sh; integration-check.sh
+                           # runs the real bundle in the real sandbox.
 backend/
 ├── app/
 │   ├── api/routes/        # FastAPI endpoints (~29 route files)

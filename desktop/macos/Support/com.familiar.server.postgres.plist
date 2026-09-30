@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Registered with SMAppService.agent (ADR-0136 point 4). launchd starts Postgres at login and
+     restarts it if it crashes; a clean exit (Familiar Server quitting) is left alone. -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.familiar.server.postgres</string>
+	<key>BundleProgram</key>
+	<string>Contents/MacOS/familiar-postgres-agent</string>
+	<key>AssociatedBundleIdentifiers</key>
+	<array>
+		<string>com.familiar.server</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+	<key>ProcessType</key>
+	<string>Standard</string>
+</dict>
+</plist>
