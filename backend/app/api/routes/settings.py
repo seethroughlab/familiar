@@ -230,7 +230,10 @@ async def update_settings(request: SettingsUpdateRequest) -> SettingsResponse:
     if s3_schedule_keys & updates.keys():
         from app.services.background import get_background_manager
 
-        get_background_manager()._register_s3_backup_schedule()
+        manager = get_background_manager()
+        manager._register_s3_backup_schedule()
+        # The job was just re-added unwrapped; it must still wait out a pause (ADR-0138).
+        manager._make_background_jobs_deferrable()
 
     masked = service.get_masked()
 

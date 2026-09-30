@@ -169,3 +169,50 @@ async def get_background_jobs() -> BackgroundJobsResponse:
         jobs=jobs,
         active_count=len(jobs),
     )
+
+
+class PauseState(BaseModel):
+    """Whether background work is paused, and why (ADR-0138 point 1)."""
+
+    paused: bool
+    reason: str | None = None
+    #: Unix time the pause began.
+    since: float | None = None
+    #: Scheduled jobs that skipped a run during this pause.
+    skipped_jobs: list[str] = []
+    #: On resume: whether a periodic sync skipped during the pause was started now.
+    resumed_sync: bool = False
+
+
+class PauseRequest(BaseModel):
+    #: Shown wherever the pause is, e.g. "on battery", "Low Power Mode", "paused by you".
+    reason: str
+
+
+@router.get("/pause", response_model=PauseState)
+async def get_pause() -> PauseState:
+    """Whether background work (analysis, syncs, scheduled fetches) is paused. Serving never is."""
+    from app.services.background.pause import background_pause
+
+    return PauseState.model_validate(background_pause.state())
+
+
+@router.post("/pause", response_model=PauseState)
+async def pause_background(request: PauseRequest) -> PauseState:
+    """Pause background work (ADR-0138 point 1).
+
+    Work in flight finishes its current track; nothing new is dispatched, a running sync waits
+    without counting toward its time cap or stall detector, and scheduled background jobs skip
+    their runs. Streaming and the API carry on. Pausing again changes the reason.
+    """
+    from app.services.background import get_background_manager
+
+    return PauseState.model_validate(get_background_manager().pause_background(request.reason))
+
+
+@router.post("/resume", response_model=PauseState)
+async def resume_background() -> PauseState:
+    """Resume background work. A periodic sync skipped during the pause runs once now."""
+    from app.services.background import get_background_manager
+
+    return PauseState.model_validate(get_background_manager().resume_background())

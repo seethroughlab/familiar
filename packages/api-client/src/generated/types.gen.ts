@@ -4651,6 +4651,44 @@ export type PairingInfo = {
 };
 
 /**
+ * PauseRequest
+ */
+export type PauseRequest = {
+    /**
+     * Reason
+     */
+    reason: string;
+};
+
+/**
+ * PauseState
+ *
+ * Whether background work is paused, and why (ADR-0138 point 1).
+ */
+export type PauseState = {
+    /**
+     * Paused
+     */
+    paused: boolean;
+    /**
+     * Reason
+     */
+    reason?: string | null;
+    /**
+     * Resumed Sync
+     */
+    resumed_sync?: boolean;
+    /**
+     * Since
+     */
+    since?: number | null;
+    /**
+     * Skipped Jobs
+     */
+    skipped_jobs?: Array<string>;
+};
+
+/**
  * PendingGroupResponse
  *
  * A group of pending tracks from the same folder.
@@ -9046,6 +9084,129 @@ export type SystemGetBackgroundJobsResponses = {
 };
 
 export type SystemGetBackgroundJobsResponse = SystemGetBackgroundJobsResponses[keyof SystemGetBackgroundJobsResponses];
+
+export type SystemGetPauseData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/background/pause';
+};
+
+export type SystemGetPauseErrors = {
+    /**
+     * Bad Request
+     */
+    400: ErrorEnvelope;
+    /**
+     * Unauthorized
+     */
+    401: ErrorEnvelope;
+    /**
+     * Not Found
+     */
+    404: ErrorEnvelope;
+    /**
+     * Unprocessable Entity
+     */
+    422: ErrorEnvelope;
+    /**
+     * Internal Server Error
+     */
+    500: ErrorEnvelope;
+};
+
+export type SystemGetPauseError = SystemGetPauseErrors[keyof SystemGetPauseErrors];
+
+export type SystemGetPauseResponses = {
+    /**
+     * Successful Response
+     */
+    200: PauseState;
+};
+
+export type SystemGetPauseResponse = SystemGetPauseResponses[keyof SystemGetPauseResponses];
+
+export type SystemPauseBackgroundData = {
+    body: PauseRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/background/pause';
+};
+
+export type SystemPauseBackgroundErrors = {
+    /**
+     * Bad Request
+     */
+    400: ErrorEnvelope;
+    /**
+     * Unauthorized
+     */
+    401: ErrorEnvelope;
+    /**
+     * Not Found
+     */
+    404: ErrorEnvelope;
+    /**
+     * Unprocessable Entity
+     */
+    422: ErrorEnvelope;
+    /**
+     * Internal Server Error
+     */
+    500: ErrorEnvelope;
+};
+
+export type SystemPauseBackgroundError = SystemPauseBackgroundErrors[keyof SystemPauseBackgroundErrors];
+
+export type SystemPauseBackgroundResponses = {
+    /**
+     * Successful Response
+     */
+    200: PauseState;
+};
+
+export type SystemPauseBackgroundResponse = SystemPauseBackgroundResponses[keyof SystemPauseBackgroundResponses];
+
+export type SystemResumeBackgroundData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/background/resume';
+};
+
+export type SystemResumeBackgroundErrors = {
+    /**
+     * Bad Request
+     */
+    400: ErrorEnvelope;
+    /**
+     * Unauthorized
+     */
+    401: ErrorEnvelope;
+    /**
+     * Not Found
+     */
+    404: ErrorEnvelope;
+    /**
+     * Unprocessable Entity
+     */
+    422: ErrorEnvelope;
+    /**
+     * Internal Server Error
+     */
+    500: ErrorEnvelope;
+};
+
+export type SystemResumeBackgroundError = SystemResumeBackgroundErrors[keyof SystemResumeBackgroundErrors];
+
+export type SystemResumeBackgroundResponses = {
+    /**
+     * Successful Response
+     */
+    200: PauseState;
+};
+
+export type SystemResumeBackgroundResponse = SystemResumeBackgroundResponses[keyof SystemResumeBackgroundResponses];
 
 export type CommandsUploadArtifactData = {
     body: BodyCommandsUploadArtifact;

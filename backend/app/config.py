@@ -40,6 +40,14 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql+asyncpg://familiar:familiar@localhost:5432/familiar"
 
+    # Start even though the music library is writable (ADR-0136 point 5). Off by default: the
+    # server refuses a writable library, because Familiar never writes to one and a read-only mount
+    # makes that a guarantee rather than a promise. For libraries that are disposable copies,
+    # such as the Fly demo's seeded /data/music.
+    allow_writable_library: bool = Field(
+        default=False, validation_alias=AliasChoices("FAMILIAR_ALLOW_WRITABLE_LIBRARY")
+    )
+
     # Advertise this server on the local network as `_familiar._tcp` on this port (ADR-0134 point
     # 4). Unset, nothing is advertised: in Docker's default bridge network mDNS does not reach the
     # LAN and the container's port is not the host's, so advertising there would announce the wrong

@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import multiprocessing
+import os
 import time
 import uuid
 from collections.abc import AsyncGenerator
@@ -221,20 +222,25 @@ def validate_library_path() -> None:
     except PermissionError:
         logging.warning(f"⚠️  Cannot read library path (permission denied): {path}")
 
-    # Zero-touch enforcement: library should be read-only
-    try:
-        import tempfile
-        with tempfile.NamedTemporaryFile(dir=path, delete=True):
-            pass
-        # If we got here, the directory is writable — warn
-        logging.warning(
-            "⚠️  Library path is writable: %s. "
-            "For zero-touch safety, mount the music library as read-only (:ro in docker-compose).",
-            path,
+    # Zero-touch (docs/ZERO-TOUCH.md, ADR-0136 point 5): Familiar never writes to the library, and
+    # refuses to start where it *could*. Asked with `os.access` rather than by creating a file:
+    # the check this replaced wrote (and deleted) a temporary file in the collection it existed to
+    # protect, and only warned. ADR-0136's spike confirmed `os.access` tells the truth under the
+    # macOS sandbox, returning False on a read-only grant.
+    if os.access(path, os.W_OK):
+        if app_config.allow_writable_library:
+            logging.warning(
+                "⚠️  Library path is writable: %s. Allowed by FAMILIAR_ALLOW_WRITABLE_LIBRARY; "
+                "Familiar still never writes to it.",
+                path,
+            )
+            return
+        raise RuntimeError(
+            f"Refusing to start: the music library at {path} is writable. Familiar never writes to "
+            "your music, and a writable mount is where that promise would rest on the code alone. "
+            "Mount it read-only (`:ro` on the volume in docker-compose), or set "
+            "FAMILIAR_ALLOW_WRITABLE_LIBRARY=1 if this library is a disposable copy."
         )
-    except OSError:
-        # Expected — directory is read-only, which is what we want
-        pass
 
 
 @asynccontextmanager
@@ -242,6 +248,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan events."""
     # Startup
     logger.info(f"Starting Familiar API (debug={app_config.debug})")
+
+    # Before any pool exists: inside the macOS App Sandbox, semaphores need the app group's prefix
+    # (ADR-0136 point 3). A no-op unless Familiar Server set FAMILIAR_SEMAPHORE_PREFIX.
+    from app.process_setup import apply_semaphore_prefix
+    apply_semaphore_prefix()
 
     # Validate library path and log warnings
     import asyncio

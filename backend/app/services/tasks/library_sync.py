@@ -16,6 +16,7 @@ from typing import Any
 
 from app.config import EMBEDDING_VERSION, FEATURES_VERSION, MELODIC_VERSION, settings
 from app.services.background.events import record_background_event
+from app.services.background.pause import background_pause
 from app.services.redis_client import get_redis
 from app.services.tasks.library_sync_progress import (
     SYNC_GUARDRAIL_PHASES,
@@ -129,9 +130,13 @@ def _get_scan_executor() -> ProcessPoolExecutor:
         import atexit
         import multiprocessing as mp
 
+        from app.process_setup import apply_semaphore_prefix
+
         _scan_executor = ProcessPoolExecutor(
             max_workers=1,
             mp_context=mp.get_context("spawn"),
+            # Sandbox-safe semaphore names in the worker too (ADR-0136 point 3).
+            initializer=apply_semaphore_prefix,
         )
 
         if not _scan_atexit_registered:
@@ -373,6 +378,11 @@ async def run_library_sync(
             last_features_done = 0
 
             while True:
+                # ADR-0138: a pause holds the phase here, and its cap and stall clocks stop with it.
+                paused_for = await background_pause.wait_while_paused()
+                if paused_for:
+                    features_start_time += paused_for
+                    last_features_progress_time += paused_for
                 async with local_session_maker() as db:
                     total_result = await db.execute(select(func.count(Track.id)))
                     total_tracks = total_result.scalar() or 0
@@ -468,6 +478,11 @@ async def run_library_sync(
                 failure_cutoff = utcnow() - timedelta(hours=24)
 
                 while True:
+                    # ADR-0138: a pause holds the phase here, and its cap and stall clocks stop with it.
+                    paused_for = await background_pause.wait_while_paused()
+                    if paused_for:
+                        embedding_start_time += paused_for
+                        last_progress_time += paused_for
                     async with local_session_maker() as db:
                         from app.db.models import TrackAnalysis
 
@@ -593,6 +608,11 @@ async def run_library_sync(
             last_backfill_done = 0
 
             while True:
+                # ADR-0138: a pause holds the phase here, and its cap and stall clocks stop with it.
+                paused_for = await background_pause.wait_while_paused()
+                if paused_for:
+                    backfill_start += paused_for
+                    last_backfill_progress_time += paused_for
                 async with local_session_maker() as db:
                     from app.db.models import TrackAnalysis
 
@@ -693,6 +713,11 @@ async def run_library_sync(
                 last_melodic_done = 0
 
                 while True:
+                    # ADR-0138: a pause holds the phase here, and its cap and stall clocks stop with it.
+                    paused_for = await background_pause.wait_while_paused()
+                    if paused_for:
+                        melodic_start_time += paused_for
+                        last_melodic_progress_time += paused_for
                     async with local_session_maker() as db:
                         from app.db.models import TrackAnalysis
 
