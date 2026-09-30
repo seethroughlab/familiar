@@ -1,6 +1,6 @@
 # ADR-0138: A Desktop Server Yields to Its Owner
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-29
 
