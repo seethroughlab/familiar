@@ -82,5 +82,9 @@ records why that was reversed: it tied the listening machine to the server machi
 - **Tradeoff:** `familiar` gains Swift, an Xcode project, notarization and a Sparkle signing key. A
   leaked Sparkle key is a route to every desktop server, so it is kept as a repository secret used
   only by the release job.
+- **Follow-up, and a prerequisite:** the team (`7JL9RZ9C8P`) has **no Developer ID Application
+  certificate**, found 2026-09-29 while running ADR-0136's spike: only Apple Development and Apple
+  Distribution. Only the account holder can create one, in the developer portal, and nothing in this
+  ADR can ship without it.
 - **Follow-up:** the macOS install panel (ADR-0095) leads with the Familiar Server download once a
   notarized build exists.
