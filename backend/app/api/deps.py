@@ -8,11 +8,14 @@ from fastapi import Depends, HTTPException, Request
 from fastapi.security import APIKeyHeader
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.exceptions import InvalidProfileError
 from app.db.session import async_session_maker
 from app.utils.time import utcnow
 
 if TYPE_CHECKING:
+    from app.container import Services
     from app.db.models import Profile
+    from app.operations.soulseek import ProbeSoulseekStatus
 
 
 # The profile header, declared so it reaches the OpenAPI schema (ADR-0007).
@@ -114,7 +117,7 @@ async def get_current_profile(
 
     profile = await db.get(Profile, profile_id)
     if not profile:
-        raise HTTPException(401, "Invalid profile ID - please re-register")
+        raise InvalidProfileError()
 
     # Update last_seen timestamp (committed by get_db's auto-commit)
     profile.last_seen_at = utcnow()
@@ -148,7 +151,7 @@ async def require_profile(
 
     profile = await db.get(Profile, profile_id)
     if not profile:
-        raise HTTPException(401, "Invalid profile ID - please re-register")
+        raise InvalidProfileError()
 
     # Update last_seen timestamp (committed by get_db's auto-commit)
     profile.last_seen_at = utcnow()
@@ -160,3 +163,21 @@ async def require_profile(
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 CurrentProfile = Annotated["Profile", Depends(get_current_profile)]
 RequiredProfile = Annotated["Profile", Depends(require_profile)]
+
+
+# ---------------------------------------------------------------------------
+# Application services and operations (ADR-0130 points 2 and 3)
+# ---------------------------------------------------------------------------
+
+
+def get_services(request: Request) -> "Services":
+    """The container `create_app` was given. Routes never construct infrastructure themselves."""
+    return request.app.state.services
+
+
+def probe_soulseek_status(
+    services: Annotated["Services", Depends(get_services)],
+) -> "ProbeSoulseekStatus":
+    from app.operations.soulseek import ProbeSoulseekStatus
+
+    return ProbeSoulseekStatus(services.soulseek)

@@ -27,8 +27,10 @@ env:
 #   1. wait-for-ci   → poll ci.yml conclusion
 #   2. build (matrix) → build + push by digest per arch, in parallel
 #   3. merge         → combine digests into tagged manifest list
-#   4. smoke-test    → pull + run native CLAP smoke test per arch
-#   5. create-release → GitHub release with generated notes
+#   4. smoke-test    → pull + run native CLAP smoke test per arch; verify the
+#                      CLAP encoders against the hashes pinned in the backend,
+#                      and (amd64) extract them as release assets
+#   5. create-release → GitHub release with generated notes and the encoders
 
 jobs:
   wait-for-ci:
@@ -223,6 +225,37 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.merge.outputs.version }} \
             python /app/scripts/smoke_test_clap.py
 
+      # ADR-0132 point 8. The encoders are exported inside the image build, from a script the
+      # Dockerfile fetches from clapback's main branch. The backend pins their SHA-256
+      # (app/services/clap_artifacts.py) because the export has been byte-identical across
+      # releases and architectures. An export that drifts fails the release here, rather than
+      # silently moving every vector, and every server outside Docker would refuse the new files anyway.
+      - name: Verify CLAP encoders against the pinned hashes
+        run: |
+          docker run --rm \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.merge.outputs.version }} \
+            python -m app.services.clap_artifacts verify /app/models/clapback
+
+      # One copy is enough: the step above just proved both architectures carry identical bytes.
+      - name: Extract CLAP encoders
+        if: matrix.platform == 'linux/amd64'
+        run: |
+          mkdir -p /tmp/clap
+          cid=$(docker create ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.merge.outputs.version }})
+          docker cp "$cid:/app/models/clapback/clap_audio.onnx" /tmp/clap/
+          docker cp "$cid:/app/models/clapback/clap_text.onnx" /tmp/clap/
+          docker rm "$cid"
+          (cd /tmp/clap && sha256sum clap_audio.onnx clap_text.onnx > SHA256SUMS && cat SHA256SUMS)
+
+      - name: Upload CLAP encoders
+        if: matrix.platform == 'linux/amd64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: clap-encoders
+          path: /tmp/clap/*
+          if-no-files-found: error
+          retention-days: 1
+
   create-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
@@ -232,11 +265,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Download CLAP encoders
+        uses: actions/download-artifact@v4
+        with:
+          name: clap-encoders
+          path: clap-encoders
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-') }}
+          # Fetched by servers that run outside Docker, from the release matching their own
+          # version, and accepted only if they match the backend's pinned hashes (ADR-0132).
+          files: |
+            clap-encoders/clap_audio.onnx
+            clap-encoders/clap_text.onnx
+            clap-encoders/SHA256SUMS
           body: |
             ## Docker Installation
 

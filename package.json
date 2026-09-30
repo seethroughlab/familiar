@@ -4,9 +4,12 @@
     "dev": "pnpm --filter @familiar/web dev",
     "dev:remote": "pnpm --filter @familiar/web dev:remote",
     "build": "pnpm --filter @familiar/web build",
-    "build:cap": "pnpm --filter @familiar/web build:cap",
     "lint": "pnpm --filter @familiar/frontend lint",
-    "test": "pnpm --filter @familiar/frontend test",
-    "test:watch": "pnpm --filter @familiar/frontend test:watch"
+    "test": "pnpm --filter @familiar/frontend test && pnpm --filter @familiar/visualizer-sdk test",
+    "test:watch": "pnpm --filter @familiar/frontend test:watch",
+    "generate:api": "pnpm --filter @familiar/api-client run generate",
+    "check:api": "pnpm --filter @familiar/api-client run check",
+    "build:visualizers": "pnpm --filter @familiar/visualizers build",
+    "test:visualizers": "pnpm --filter @familiar/visualizers test:documents"
   }
 }

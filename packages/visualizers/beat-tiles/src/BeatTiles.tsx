@@ -13,11 +13,7 @@ import { useRef, useMemo, useState, useEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
-import { type VisualizerProps } from './types';
-import { useAudioAnalyser, getAudioData } from './familiar';
-import { useArtworkPalette } from './useArtworkPalette';
-import { AudioReactiveEffects } from './AudioReactiveEffects';
-import { FrameScheduler } from './FrameScheduler';
+import { AudioReactiveEffects, FrameScheduler, getAudioData, useArtworkPalette, useAudioAnalyser, type VisualizerProps } from '@familiar/visualizer-sdk';
 const isMobile = () => window.matchMedia('(max-width: 768px)').matches;
 
 const mobile = isMobile();

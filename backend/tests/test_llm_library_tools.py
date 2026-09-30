@@ -55,9 +55,10 @@ class TestWiring:
             assert f'"{spec["name"]}"' in source, f'{spec["name"]} has no dispatch entry'
 
     def test_the_new_tools_reach_the_mcp_surface(self):
+        from app.container import Services
         from app.mcp import exposed_tools
 
-        exposed = {t.name for t in exposed_tools()}
+        exposed = {t.name for t in exposed_tools(Services.unconfigured())}
         for tool in NEW_TOOLS:
             assert tool in exposed
 

@@ -1,18 +1,26 @@
 import os
 from pathlib import Path
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Library path - defaults to /music (Docker), can be overridden via MUSIC_LIBRARY_PATH env var
-MUSIC_LIBRARY_PATH = Path(os.environ.get("MUSIC_LIBRARY_PATH", "/music"))
+# The directory holding `app/`: `/app` in the image, `backend/` in a checkout, and wherever a native
+# distribution unpacks the backend (ADR-0132).
+BACKEND_ROOT = Path(__file__).resolve().parent.parent
 
 
 def get_app_version() -> str:
-    """Get app version from VERSION file (set at Docker build time) or fallback."""
-    version_file = Path("/app/VERSION")
+    """The release this server was built from, or "dev".
+
+    Read from a `VERSION` file beside `app/`, written by whatever packaged the backend: the
+    Dockerfile writes `/app/VERSION`, which is this path in the image, and a native distribution
+    writes the same file (ADR-0132 point 3). Not `importlib.metadata`: the installed distribution is
+    `familiar 0.1.0` in every checkout, and a development server reporting "0.1.0" would be told by
+    the update checker that a release is waiting, where "dev" skips the check.
+    """
+    version_file = BACKEND_ROOT / "VERSION"
     if version_file.exists():
         return version_file.read_text().strip()
-    # Fallback for local development
     return "dev"
 
 
@@ -22,25 +30,86 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # Everything the server writes, anchored in one place (ADR-0132 point 2). FAMILIAR_DATA_DIR,
+    # not DATA_DIR: the prefix keeps it from being picked up from an unrelated environment (and
+    # `populate_by_name` must stay off, or pydantic-settings reads DATA_DIR as well). The
+    # default is relative on purpose — `/app/data` in the image, where WORKDIR is `/app` and the
+    # directory is the `app_data` volume — so no existing installation moves.
+    data_dir: Path = Field(default=Path("data"), validation_alias=AliasChoices("FAMILIAR_DATA_DIR"))
+
     # Database
     database_url: str = "postgresql+asyncpg://familiar:familiar@localhost:5432/familiar"
 
-    # Redis
-    redis_url: str = "redis://localhost:6379/0"
+    # Start even though the music library is writable (ADR-0136 point 5). Off by default: the
+    # server refuses a writable library, because Familiar never writes to one and a read-only mount
+    # makes that a guarantee rather than a promise. For libraries that are disposable copies,
+    # such as the Fly demo's seeded /data/music.
+    allow_writable_library: bool = Field(
+        default=False, validation_alias=AliasChoices("FAMILIAR_ALLOW_WRITABLE_LIBRARY")
+    )
+
+    # Advertise this server on the local network as `_familiar._tcp` on this port (ADR-0134 point
+    # 4). Unset, nothing is advertised: in Docker's default bridge network mDNS does not reach the
+    # LAN and the container's port is not the host's, so advertising there would announce the wrong
+    # address. `python -m app.serve` sets it when it binds beyond loopback.
+    advertise_port: int | None = Field(default=None, validation_alias=AliasChoices("FAMILIAR_ADVERTISE_PORT"))
+
+    # Redis, when there is one. Unset, the server keeps the same state in Postgres instead
+    # (ADR-0133): every Docker install sets REDIS_URL, and a server outside Docker need not.
+    redis_url: str | None = None
+
+    # The library. /music inside the container; the host path is a docker-compose volume mount,
+    # and MUSIC_LIBRARY_PATH is the one way to point at something else. This used to be a module
+    # constant read from `os.environ` at import, moved here under ADR-0130 point 6 so that the
+    # environment enters through this object. `scanner.py`'s SCANNER_THREADS is the other
+    # import-time read; it moves with library sync, the domain the ADR schedules last.
+    music_library_path: Path = Path("/music")
 
     @property
     def music_library_paths(self) -> list[Path]:
-        """Fixed music library path at /music.
+        """The library roots: MUSIC_LIBRARY_PATH, or /music inside the container."""
+        return [self.music_library_path]
 
-        Configure host path via docker-compose volume mount.
-        """
-        return [MUSIC_LIBRARY_PATH]
+    # Data paths. Each defaults to a directory under `data_dir`; ART_PATH and the others still win
+    # when set, which is how the image puts them on their own volumes under `/data`.
+    art_path: Path = Field(default_factory=lambda data: data["data_dir"] / "art")
+    videos_path: Path = Field(default_factory=lambda data: data["data_dir"] / "videos")
+    profiles_path: Path = Field(default_factory=lambda data: data["data_dir"] / "profiles")
+    mixtapes_path: Path = Field(default_factory=lambda data: data["data_dir"] / "mixtapes")
 
-    # Data paths
-    art_path: Path = Path("data/art")
-    videos_path: Path = Path("data/videos")
-    profiles_path: Path = Path("data/profiles")
-    mixtapes_path: Path = Path("data/mixtapes")
+    # The rest of the server's state has no variable of its own and lives in `data_dir`.
+    # `scripts/lint_data_paths.py` fails on a new bare `Path("data/…")` under `app/`, so these
+    # properties are the only place such a path is spelled.
+
+    @property
+    def settings_file(self) -> Path:
+        """The admin UI's settings, API keys and the server token (`AppSettingsService`)."""
+        return self.data_dir / "settings.json"
+
+    @property
+    def outputs_file(self) -> Path:
+        """Registered network outputs, persisted across restarts."""
+        return self.data_dir / "outputs.json"
+
+    @property
+    def transcode_cache_dir(self) -> Path:
+        """Remuxed and AAC-encoded streams (ADR-0118)."""
+        return self.data_dir / "transcode_cache"
+
+    @property
+    def restore_safety_dir(self) -> Path:
+        """The local database dump taken before an S3 restore."""
+        return self.data_dir / "restore-safety"
+
+    @property
+    def analysis_data_dir(self) -> Path:
+        """Per-track MIDI and melodic analysis output."""
+        return self.data_dir / "analysis"
+
+    @property
+    def models_dir(self) -> Path:
+        """Models fetched at runtime, such as silero-vad."""
+        return self.data_dir / "models"
 
     # Analysis
     analysis_version: int = 1
@@ -300,3 +369,7 @@ AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".wav", ".
 
 # Global settings instance
 settings = Settings()
+
+#: The library path, for the six modules that name it as a constant. Derived from `settings`
+#: rather than read from the environment, so there is one reading of MUSIC_LIBRARY_PATH.
+MUSIC_LIBRARY_PATH = settings.music_library_path

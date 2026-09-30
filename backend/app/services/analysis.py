@@ -46,6 +46,18 @@ def get_acoustid_api_key() -> str:
     except Exception:
         return ""
 
+def _models_missing() -> list[str]:
+    """CLAP encoder files this server does not have yet (ADR-0132 point 8).
+
+    Checked alongside `_embedder_available`: the package being installed says nothing about whether
+    its 614 MB of encoders are on disk. A server outside the image fetches them after startup, and
+    until they land embedding is off, rather than failing once per track.
+    """
+    from app.services.clap_artifacts import missing
+
+    return missing()
+
+
 # `get_device()` and `load_clap_model()` are gone with ADR-0105. Device selection
 # is now the embedder's, via CLAPBACK_PROVIDERS, and the model is an ONNX artifact
 # rather than a torch module — so there is nothing here to cache or move.
@@ -91,13 +103,18 @@ def get_analysis_capabilities() -> dict:
 
     clap_status = get_app_settings_service().get_clap_status()
 
-    embeddings_enabled = clap_status["enabled"] and _embedder_available
+    absent = _models_missing() if _embedder_available else []
+    embeddings_enabled = clap_status["enabled"] and _embedder_available and not absent
     embeddings_disabled_reason = None
 
     if not clap_status["enabled"]:
         embeddings_disabled_reason = clap_status["reason"]
     elif not _embedder_available:
         embeddings_disabled_reason = f"Embedder unavailable: {_torch_import_error or 'import failed'}"
+    elif absent:
+        from app.services.clap_artifacts import model_dir
+
+        embeddings_disabled_reason = f"CLAP encoders not yet present in {model_dir()}: {', '.join(absent)}"
 
     return {
         "embeddings_enabled": embeddings_enabled,
@@ -119,10 +136,10 @@ def check_analysis_capabilities() -> None:
     """
     caps = get_analysis_capabilities()
     if not caps["embeddings_enabled"]:
+        remedy = "" if _embedder_available else " Install the embedder to enable: uv sync --extra analysis"
         logger.warning(
             f"CLAP embeddings DISABLED: {caps['embeddings_disabled_reason']}. "
-            "Audio similarity features (Music Map) will not work. "
-            "Install the embedder to enable: uv sync --extra analysis"
+            f"Audio similarity features (Music Map) will not work.{remedy}"
         )
     else:
         logger.info("Analysis capabilities: features=enabled, embeddings=enabled")
@@ -153,6 +170,9 @@ def extract_embedding(file_path: Path, target_sr: int = 48000) -> list[float] | 
     """
     if not _embedder_available:
         logger.debug("CLAP embeddings disabled (clapback-embed not installed)")
+        return None
+    if _models_missing():
+        logger.debug("CLAP embeddings disabled (encoders not present yet)")
         return None
 
     from app.services.app_settings import get_app_settings_service
@@ -220,6 +240,9 @@ def extract_text_embedding(text: str) -> list[float] | None:
     """
     if not _embedder_available:
         logger.debug("CLAP text embeddings disabled (clapback-embed not installed)")
+        return None
+    if _models_missing():
+        logger.debug("CLAP text embeddings disabled (encoders not present yet)")
         return None
 
     from app.services.app_settings import get_app_settings_service
@@ -725,17 +748,58 @@ def extract_features(file_path: Path) -> dict[str, float | str | None]:
         raise AnalysisError(f"Feature extraction failed: {e}") from e
 
 
-def generate_fingerprint(file_path: Path) -> tuple[int, str] | None:
-    """Generate AcoustID fingerprint for an audio file.
+#: Run in a child interpreter by `fingerprint_or_raise`. The decoder is part of the fingerprint:
+#: over 21 files from the NAS library, the same chromaprint agreed with the Docker image on 20 when
+#: audio was decoded by the ffmpeg command and on 11 when macOS's CoreAudio decoded it, which is what
+#: audioread picks on a Mac by default. `fpcalc` agreed on 10. The community cache keys on this
+#: string's hash (ADR-0114), so every installation decodes the way the image always has: WAV and
+#: AIFF by the standard library, everything else by `ffmpeg`. On Linux that is audioread's own
+#: choice, so nothing changes there.
+#:
+#: `FAMILIAR_CHROMAPRINT_LIBRARY` names a libchromaprint that is on no search path, which is how
+#: Familiar Server ships it (and where Homebrew puts it). pyacoustid opens the library only by its
+#: bare name, so while it is imported that name is answered with the path. Loading the path first
+#: and letting the name match it works only for some install names, so it is not relied on. Without
+#: the library at all, pyacoustid falls back to `fpcalc` as it always did.
+_IMPORT_ACOUSTID = """
+import ctypes, json, os, sys
+library = os.environ.get("FAMILIAR_CHROMAPRINT_LIBRARY")
+if library:
+    by_name = ctypes.CDLL
+    ctypes.CDLL = lambda name, *a, **k: by_name(library if name.startswith("libchromaprint") else name, *a, **k)
+    import acoustid
+    ctypes.CDLL = by_name
+import acoustid
+"""
+_FINGERPRINT_CHILD = _IMPORT_ACOUSTID + """
+if acoustid.have_chromaprint and acoustid.have_audioread:
+    import audioread
+    from audioread import ffdec, rawread
+    try:
+        with audioread.audio_open(sys.argv[1], backends=[rawread.RawAudioFile, ffdec.FFmpegAudioFile]) as f:
+            duration = f.duration
+            fingerprint = acoustid.fingerprint(f.samplerate, f.channels, iter(f), acoustid.MAX_AUDIO_LENGTH)
+    except audioread.DecodeError:
+        raise acoustid.FingerprintGenerationError("audio could not be decoded")
+else:
+    duration, fingerprint = acoustid.fingerprint_file(sys.argv[1])
+if isinstance(fingerprint, bytes):
+    fingerprint = fingerprint.decode()
+print(json.dumps([duration, fingerprint]))
+"""
 
-    Runs chromaprint in an isolated subprocess to prevent C-level assertion
-    failures (e.g. channel count mismatches) from killing the analysis worker.
 
-    Args:
-        file_path: Path to audio file
+def fingerprint_or_raise(file_path: Path) -> tuple[float, str]:
+    """Fingerprint an audio file: `(duration_seconds, fingerprint)`.
 
-    Returns:
-        Tuple of (duration_seconds, fingerprint_string) or None on error
+    Runs chromaprint in an isolated subprocess to prevent C-level assertion failures (e.g. channel
+    count mismatches) from killing the calling worker. Every fingerprint Familiar takes goes through
+    here, so analysis and identification cannot disagree about a file (`_FINGERPRINT_CHILD` says why
+    that matters).
+
+    Raises:
+        AcoustIDError: `chromaprint_missing` when neither the library nor `fpcalc` is available,
+            `fingerprint_error` for anything else, including a timeout.
     """
     import json
     import subprocess
@@ -743,27 +807,42 @@ def generate_fingerprint(file_path: Path) -> tuple[int, str] | None:
 
     try:
         result = subprocess.run(
-            [
-                sys.executable, "-c",
-                "import acoustid, json, sys; "
-                "d, f = acoustid.fingerprint_file(sys.argv[1]); "
-                "print(json.dumps([d, f.decode() if isinstance(f, bytes) else f]))",
-                str(file_path),
-            ],
+            [sys.executable, "-c", _FINGERPRINT_CHILD, str(file_path)],
             capture_output=True,
             text=True,
             timeout=60,
         )
-        if result.returncode == 0 and result.stdout.strip():
-            duration, fingerprint = json.loads(result.stdout.strip())
-            return (duration, fingerprint)
-        else:
-            stderr = result.stderr.strip()
-            if stderr:
-                logger.warning(f"Fingerprint subprocess failed for {file_path}: {stderr[:200]}")
-            return None
-    except subprocess.TimeoutExpired:
-        logger.warning(f"Fingerprint generation timed out for {file_path}")
+    except subprocess.TimeoutExpired as e:
+        raise AcoustIDError("Fingerprint generation timed out", error_type="fingerprint_error") from e
+    if result.returncode == 0 and result.stdout.strip():
+        duration, fingerprint = json.loads(result.stdout.strip())
+        return (duration, fingerprint)
+    stderr = result.stderr.strip()
+    if "NoBackendError" in stderr:
+        raise AcoustIDError(
+            "Audio fingerprinting requires chromaprint. Install via: "
+            "brew install chromaprint (macOS) or apt install libchromaprint-tools (Linux)",
+            error_type="chromaprint_missing",
+        )
+    raise AcoustIDError(
+        f"Failed to generate audio fingerprint: {stderr.splitlines()[-1] if stderr else 'no output'}",
+        error_type="fingerprint_error",
+    )
+
+
+def generate_fingerprint(file_path: Path) -> tuple[int, str] | None:
+    """Generate AcoustID fingerprint for an audio file, or `None` on any error (logged).
+
+    Args:
+        file_path: Path to audio file
+
+    Returns:
+        Tuple of (duration_seconds, fingerprint_string) or None on error
+    """
+    try:
+        return fingerprint_or_raise(file_path)
+    except AcoustIDError as e:
+        logger.warning(f"Fingerprint subprocess failed for {file_path}: {str(e)[:200]}")
         return None
     except Exception as e:
         logger.error(f"Unexpected error generating fingerprint for {file_path}: {e}")
@@ -788,11 +867,7 @@ def lookup_acoustid(file_path: Path) -> dict | None:
         return None
 
     try:
-        results = acoustid.match(
-            api_key,
-            str(file_path),
-            meta="recordings releases",
-        )
+        results = _match(api_key, file_path)
 
         for score, recording_id, title, artist in results:
             if score > 0.8:  # High confidence match
@@ -805,10 +880,7 @@ def lookup_acoustid(file_path: Path) -> dict | None:
 
         return None
 
-    except acoustid.NoBackendError:
-        logger.error("chromaprint/fpcalc not found. Install chromaprint.")
-        return None
-    except acoustid.FingerprintGenerationError as e:
+    except AcoustIDError as e:
         logger.error(f"Error generating fingerprint: {e}")
         return None
     except acoustid.WebServiceError as e:
@@ -817,6 +889,14 @@ def lookup_acoustid(file_path: Path) -> dict | None:
     except Exception as e:
         logger.error(f"Unexpected error in AcoustID lookup: {e}")
         return None
+
+
+def _match(api_key: str, file_path: Path):
+    """`acoustid.match`, fingerprinting the way analysis does rather than the way pyacoustid would."""
+    duration, fingerprint = fingerprint_or_raise(file_path)
+    # pyacoustid's default is no timeout at all; the recording backfill found out what that costs.
+    response = acoustid.lookup(api_key, fingerprint, duration, meta="recordings releases", timeout=30)
+    return acoustid.parse_lookup_result(response)
 
 
 class AcoustIDError(Exception):
@@ -856,11 +936,7 @@ def lookup_acoustid_candidates(
         )
 
     try:
-        results = acoustid.match(
-            api_key,
-            str(file_path),
-            meta="recordings releases",
-        )
+        results = _match(api_key, file_path)
 
         candidates = []
         seen_recordings = set()  # Deduplicate by recording ID
@@ -886,17 +962,8 @@ def lookup_acoustid_candidates(
         candidates.sort(key=lambda x: x["acoustid_score"], reverse=True)
         return candidates
 
-    except acoustid.NoBackendError:
-        raise AcoustIDError(
-            "Audio fingerprinting requires chromaprint. Install via: "
-            "brew install chromaprint (macOS) or apt install libchromaprint-tools (Linux)",
-            error_type="chromaprint_missing",
-        )
-    except acoustid.FingerprintGenerationError as e:
-        raise AcoustIDError(
-            f"Failed to generate audio fingerprint: {e}",
-            error_type="fingerprint_error",
-        )
+    except AcoustIDError:
+        raise
     except acoustid.WebServiceError as e:
         raise AcoustIDError(
             f"AcoustID API error: {e}",

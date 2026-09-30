@@ -1,0 +1,30 @@
+{
+  "name": "@familiar/visualizer-sdk",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Authoring SDK for first-party visualizer documents (ADR-0125): the host bridge, payload types, frame scheduler, palette and audio-reactive effects. A build-time dependency \u2014 every visualizer bundles what it imports.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "peerDependencies": {
+    "@react-three/fiber": "^9.4.2",
+    "react": "^19.0.0",
+    "three": "^0.182.0"
+  },
+  "devDependencies": {
+    "@react-three/fiber": "^9.4.2",
+    "@testing-library/react": "^16.3.0",
+    "@types/react": "^19.2.0",
+    "@types/three": "^0.183.1",
+    "jsdom": "^26.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "three": "^0.182.0",
+    "typescript": "~5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

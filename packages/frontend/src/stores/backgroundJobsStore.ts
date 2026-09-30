@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { backgroundApi, type BackgroundJob } from '../api';
+import { systemApi, type BackgroundJob } from '../api';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('BackgroundJobs');
@@ -30,7 +30,7 @@ export const useBackgroundJobsStore = create<BackgroundJobsState>((set, get) => 
 
   checkJobs: async () => {
     try {
-      const response = await backgroundApi.getJobs();
+      const response = await systemApi.jobs();
       const prevActiveCount = get().activeCount;
 
       set({

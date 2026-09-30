@@ -16,15 +16,25 @@ import { initializeProfile, type Profile } from '../services/profileService';
 
 // Layout
 import { AppShell } from './AppShell';
+import { LEGACY_REDIRECTS } from './routes';
+import { SectionLayout } from '../screens/SectionLayout';
 
 // Lazy-loaded route components
-const LibraryPage = lazy(() => import('../screens/LibraryPage').then(m => ({ default: m.LibraryPage })));
-const ToolsPage = lazy(() => import('../screens/ToolsPage').then(m => ({ default: m.ToolsPage })));
+const OverviewPage = lazy(() => import('../screens/overview/OverviewPage').then(m => ({ default: m.OverviewPage })));
+const SyncSection = lazy(() => import('../screens/library/SyncSection').then(m => ({ default: m.SyncSection })));
 const DuplicatesPage = lazy(() => import('../screens/DuplicatesPage').then(m => ({ default: m.DuplicatesPage })));
 const OrganizePage = lazy(() => import('../screens/OrganizePage').then(m => ({ default: m.OrganizePage })));
 const ArtworkPage = lazy(() => import('../screens/ArtworkPage').then(m => ({ default: m.ArtworkPage })));
-const ArtistsPage = lazy(() => import('../screens/ArtistsPage').then(m => ({ default: m.ArtistsPage })));
-const ServerPage = lazy(() => import('../screens/ServerPage').then(m => ({ default: m.ServerPage })));
+const ArtistsSection = lazy(() => import('../screens/library/ArtistsSection').then(m => ({ default: m.ArtistsSection })));
+const StatusSection = lazy(() => import('../screens/analysis/StatusSection').then(m => ({ default: m.StatusSection })));
+const ConfigurationSection = lazy(() => import('../screens/analysis/ConfigurationSection').then(m => ({ default: m.ConfigurationSection })));
+const HealthSection = lazy(() => import('../screens/server/sections').then(m => ({ default: m.HealthSection })));
+const JobsSection = lazy(() => import('../screens/server/sections').then(m => ({ default: m.JobsSection })));
+const ProvidersSection = lazy(() => import('../screens/server/sections').then(m => ({ default: m.ProvidersSection })));
+const BackupSection = lazy(() => import('../screens/server/sections').then(m => ({ default: m.BackupSection })));
+const PeopleSection = lazy(() => import('../screens/server/sections').then(m => ({ default: m.PeopleSection })));
+const AccessSection = lazy(() => import('../screens/server/sections').then(m => ({ default: m.AccessSection })));
+const DiagnosticsSection = lazy(() => import('../screens/server/sections').then(m => ({ default: m.DiagnosticsSection })));
 // The guest listener (ADR-0036). Lazy like every other route component, and worth it here: a guest
 // loads this page and nothing else, and everyone else never loads it at all.
 
@@ -177,50 +187,47 @@ function App() {
           {/* Main app routes inside AppShell */}
           <Route element={<AppShell />}>
 
-            {/* The other two destinations. Library is the index route below. */}
-            <Route path="/tools" element={
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <ToolsPage />
-              </Suspense>
-            } />
-            {/* Phase 4. Both preview-only — the server exposes no apply route for either. */}
-            <Route path="/tools/duplicates" element={
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <DuplicatesPage />
-              </Suspense>
-            } />
-            <Route path="/tools/artwork" element={
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <ArtworkPage />
-              </Suspense>
-            } />
-            <Route path="/tools/organize" element={
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <OrganizePage />
-              </Suspense>
-            } />
-            {/* ADR-0081 point 4: was `/library/artist-cleanup`, routed through the browser
-                registry. It is a job you run against the library, so it sits with the other jobs. */}
-            <Route path="/tools/artists" element={
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <ArtistsPage />
-              </Suspense>
-            } />
-            <Route path="/server" element={
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <ServerPage />
-              </Suspense>
-            } />
-            {/* Default redirect */}
-            {/* ADR-0058 point 1: the administrator lands on the thing being administered, not on a
-                form. This was `Navigate to="/settings"`; there is no settings route at all now —
-                ADR-0080 deleted it once theme was the only control left on it. The catch-all below
-                sends an old bookmark here. */}
+            {/* ADR-0126 point 1: four destinations. Overview is the index; the other three are
+                layouts with a section rail, every section a route of its own (point 7).
+                Child paths are written absolute so `navigationIntegrity.test.ts`, which reads
+                this file for `path="/…"`, sees every one of them. */}
             <Route index element={
               <Suspense fallback={<LazyLoadSpinner />}>
-                <LibraryPage />
+                <OverviewPage />
               </Suspense>
             } />
+
+            <Route path="/library" element={<SectionLayout destination="/library" />}>
+              <Route index element={<Suspense fallback={<LazyLoadSpinner />}><SyncSection /></Suspense>} />
+              {/* Preview-only — the server exposes no apply route for either. */}
+              <Route path="/library/duplicates" element={<Suspense fallback={<LazyLoadSpinner />}><DuplicatesPage /></Suspense>} />
+              <Route path="/library/artists" element={<Suspense fallback={<LazyLoadSpinner />}><ArtistsSection /></Suspense>} />
+              <Route path="/library/artwork" element={<Suspense fallback={<LazyLoadSpinner />}><ArtworkPage /></Suspense>} />
+              <Route path="/library/organize" element={<Suspense fallback={<LazyLoadSpinner />}><OrganizePage /></Suspense>} />
+            </Route>
+
+            <Route path="/analysis" element={<SectionLayout destination="/analysis" />}>
+              <Route index element={<Suspense fallback={<LazyLoadSpinner />}><StatusSection /></Suspense>} />
+              <Route path="/analysis/configuration" element={<Suspense fallback={<LazyLoadSpinner />}><ConfigurationSection /></Suspense>} />
+            </Route>
+
+            <Route path="/server" element={<SectionLayout destination="/server" />}>
+              <Route index element={<Suspense fallback={<LazyLoadSpinner />}><HealthSection /></Suspense>} />
+              <Route path="/server/jobs" element={<Suspense fallback={<LazyLoadSpinner />}><JobsSection /></Suspense>} />
+              <Route path="/server/providers" element={<Suspense fallback={<LazyLoadSpinner />}><ProvidersSection /></Suspense>} />
+              <Route path="/server/backup" element={<Suspense fallback={<LazyLoadSpinner />}><BackupSection /></Suspense>} />
+              <Route path="/server/people" element={<Suspense fallback={<LazyLoadSpinner />}><PeopleSection /></Suspense>} />
+              <Route path="/server/access" element={<Suspense fallback={<LazyLoadSpinner />}><AccessSection /></Suspense>} />
+              <Route path="/server/diagnostics" element={<Suspense fallback={<LazyLoadSpinner />}><DiagnosticsSection /></Suspense>} />
+            </Route>
+
+            {/* Old paths redirect to their successors (ADR-0126, Consequences). A router concern,
+                not an ADR-0079 API alias. */}
+            {Object.entries(LEGACY_REDIRECTS).map(([from, to]) => (
+              <Route key={from} path={from} element={<Navigate to={to} replace />} />
+            ))}
+
+            {/* An unknown path lands on the Overview. */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

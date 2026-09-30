@@ -106,8 +106,27 @@ export const queryKeys = {
   lastfmStatus: {
     all: ['lastfm-status'] as const,
   },
+  syncStatus: {
+    all: ['sync-status'] as const,
+  },
+  backgroundJobs: {
+    all: ['background-jobs'] as const,
+  },
+  systemHealth: {
+    all: ['system-health'] as const,
+  },
+  workerStatus: {
+    all: ['worker-status'] as const,
+  },
+  backupStatus: {
+    all: ['backup-status'] as const,
+  },
   soulseekStatus: {
     all: ['soulseek-status'] as const,
+  },
+  pairing: {
+    token: ['pairing', 'token'] as const,
+    info: ['pairing', 'info'] as const,
   },
   s3Backup: {
     all: ['s3-backup'] as const,

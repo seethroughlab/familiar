@@ -19,15 +19,12 @@ import {
   Download,
 } from 'lucide-react';
 import {
-  healthApi,
+  systemApi,
   diagnosticsApi,
   updatesApi,
   appSettingsApi,
   type SystemHealth,
   type ServiceStatus,
-  type ServiceDetails,
-  type AnalysisServiceDetails,
-  type BackgroundServiceDetails,
   type WorkerStatus,
   type DiagnosticsExport,
   type UpdateStatus,
@@ -62,8 +59,8 @@ export function SystemStatus() {
     try {
       setError(null);
       const [healthData, workerData] = await Promise.all([
-        healthApi.getSystemHealth(),
-        healthApi.getWorkerStatus(),
+        systemApi.health(),
+        systemApi.workers(),
       ]);
       setHealth(healthData);
       setWorkerStatus(workerData);
@@ -473,7 +470,7 @@ export function SystemStatus() {
       {/* Warnings (always visible if present) */}
       {hasWarnings && (
         <div className="mt-3 space-y-2">
-          {health.warnings.map((warning, i) => (
+          {(health.warnings ?? []).map((warning, i) => (
             <div
               key={i}
               className="flex items-start gap-2 p-2 bg-warning-surface/20 border border-warning-muted/50 rounded text-sm text-warning-subtle"
@@ -731,12 +728,16 @@ export function SystemStatus() {
   );
 }
 
-function isAnalysisDetails(d: ServiceDetails): d is AnalysisServiceDetails {
-  return d != null && 'analyzed' in d && 'total' in d;
+// `details` is the schema's free-form object (each service reports its own keys), so these
+// narrow it to what the two rows below read rather than declaring per-service types by hand.
+type ServiceDetails = NonNullable<ServiceStatus['details']>;
+
+function isAnalysisDetails(d: ServiceDetails): d is ServiceDetails & { analyzed: number; total: number } {
+  return d != null && typeof d.analyzed === 'number' && typeof d.total === 'number';
 }
 
-function isBackgroundDetails(d: ServiceDetails): d is BackgroundServiceDetails {
-  return d != null && 'workers' in d;
+function isBackgroundDetails(d: ServiceDetails): d is ServiceDetails & { workers: unknown[] } {
+  return d != null && Array.isArray(d.workers);
 }
 
 function ServiceStatusRow({ service }: { service: ServiceStatus }) {

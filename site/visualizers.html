@@ -166,6 +166,42 @@
 <p>If you bundle a library that reads <code>process.env.NODE_ENV</code> — React does — a library-mode build will</p>
 <p>not define it, and your bundle throws <code>process is not defined</code> on its first line. In Vite:</p>
 <pre><code>define: { 'process.env.NODE_ENV': '"production"' }</code></pre>
+<h2>Authoring with the SDK — one path, not the contract</h2>
+<p>Everything above is the contract, and a document that handles the four events itself is complete.</p>
+<p>If you are writing a React + three.js visualizer, the four first-party ones share an authoring package</p>
+<p>that does the repetitive part for you (ADR-0125): <code>@familiar/visualizer-sdk</code>, in this repository's</p>
+<p>workspace.</p>
+<pre><code>import { announceReady, useTrack, usePlaybackState, getAudioData, feature } from '@familiar/visualizer-sdk';
+
+function App() {
+  const track = useTrack();                       // familiar:track, or null when the queue empties
+  const { isPlaying, currentTime } = usePlaybackState();  // familiar:state
+  useEffect(() =&gt; { announceReady(); }, []);      // familiar:ready — last, once you are listening
+  // in your frame loop:
+  const { bass, beat, onset, frequencyData } = getAudioData();  // the latest familiar:audio
+  const energy = feature(track?.features, 'energy', 0.5);       // a numeric feature, or the default
+}</code></pre>
+<p>It also has <code>FrameScheduler</code> (30 fps demand rendering on phones), <code>AudioReactiveEffects</code> (bloom and</p>
+<p>RGB shift driven by the frame), <code>useArtworkPalette</code> and <code>usePalette</code> (colours from the cover), and the</p>
+<p><code>VisualizerProps</code>, <code>TrackInfo</code>, <code>LyricLine</code> and <code>TrackFeatures</code> types.</p>
+<p>Three things it decides so you do not have to, all pinned by tests against recorded host events:</p>
+<ul>
+<li><strong>A message it does not understand is dropped, never thrown on.</strong> A throw inside <code>window</code>'s</li>
+</ul>
+<p>message listener is invisible in a sandboxed frame. A malformed <code>familiar:audio</code> keeps the last good</p>
+<p>frame; a malformed <code>familiar:track</code> keeps the current track.</p>
+<ul>
+<li><strong><code>apiVersion</code> is negotiated.</strong> Absent means 1 — hosts before the field existed. Present and not 1</li>
+</ul>
+<p>is ignored, and said once in the console, rather than misread.</p>
+<ul>
+<li><strong>It is a build-time dependency.</strong> What you import is bundled into your <code>app.js</code>; the host serves</li>
+</ul>
+<p>no shared JavaScript and promises no package at runtime. Your folder is still self-contained.</p>
+<p>The first-party sources are under <code>packages/visualizers/</code>; <code>pnpm --filter @familiar/visualizers build</code></p>
+<p>builds each into its <code>dist/</code>, and <code>pnpm --filter @familiar/visualizers test:documents</code> runs every</p>
+<p>built document through the same recorded events in a sandboxed frame. <code>packages/visualizers/examples/</code></p>
+<p>holds two visualizers that use none of this, on purpose.</p>
 <h2>Affinity — what your visualizer suits</h2>
 <p>Optional. Declares what a track should be like for the server to pick you when the listener has</p>
 <p>"Match to the Music" on (<a href="decisions/ADR-0064-visualizers-declare-affinity-and-the-server-ranks-them.md">ADR-0064</a>).</p>

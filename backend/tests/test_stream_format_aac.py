@@ -101,6 +101,26 @@ def _is_mp4(body: bytes) -> bool:
     return body[4:8] == b"ftyp"
 
 
+def _audio_codec(body: bytes) -> str:
+    """What ffprobe says the bytes are — `aac`, `alac`, `flac`.
+
+    This, not size, is the evidence that a lossless source was encoded. The size comparison
+    these tests used to make (`len(aac) < len(source)`) held on the NAS's ffmpeg 5.1 — 18 KB
+    against a 20 KB one-second FLAC — and flipped on ffmpeg 8 (28 KB against 24 KB), because
+    at one second the MP4 container and encoder priming outweigh the audio. A pure sine is
+    also unusually small as FLAC, so the proxy was measuring the wrong thing even when it
+    passed.
+    """
+    with tempfile.NamedTemporaryFile(suffix=".m4a") as f:
+        f.write(body)
+        f.flush()
+        probe = ["-v", "error", "-select_streams", "a:0", "-show_entries", "stream=codec_name"]
+        out = subprocess.run(
+            ["ffprobe", *probe, "-of", "csv=p=0", f.name], capture_output=True, text=True, check=True
+        )
+    return out.stdout.strip()
+
+
 class TestLosslessIsEncoded:
     @pytest.mark.asyncio
     async def test_flac_becomes_aac_in_mp4(self, async_db, client, flac_file):
@@ -109,7 +129,7 @@ class TestLosslessIsEncoded:
         assert r.status_code == 200
         assert r.headers["content-type"].startswith("audio/mp4")
         assert _is_mp4(r.content)
-        assert len(r.content) < flac_file.stat().st_size
+        assert _audio_codec(r.content) == "aac"
         assert int(r.headers["content-length"]) == len(r.content)
 
     @pytest.mark.asyncio
@@ -130,7 +150,7 @@ class TestLosslessIsEncoded:
         assert r.status_code == 200
         assert _is_mp4(r.content)
         assert r.content != alac_file.read_bytes()
-        assert len(r.content) < alac_file.stat().st_size
+        assert _audio_codec(r.content) == "aac"
 
     @pytest.mark.asyncio
     async def test_without_the_parameter_a_flac_is_still_a_flac(self, async_db, client, flac_file):

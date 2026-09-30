@@ -11,6 +11,10 @@ preserve the current boundaries while making focused improvements.
 4. Check `docs/ERROR-CONTRACTS.md` before adding or changing API errors.
 5. Look for a relevant ADR in `docs/decisions/` when a choice seems surprising.
 
+New here? `docs/START-HERE.md` is the first document: what Familiar is now, how the pieces
+connect, one request traced through every layer, and the whole of five common changes. `make doctor`
+tells you what this machine can do with the checkout.
+
 ## Local Setup
 
 ```bash
@@ -27,11 +31,14 @@ Backend tests need PostgreSQL and Redis. The compose stack above provides them f
 **They run only against a database named `…_test`** (ADR-0128): `make test` creates `familiar_test`
 beside the development database, migrates it and runs the suite; a bare `pytest` without
 `TEST_DATABASE_URL` stops before collection and says so. The suite empties the tables it uses, which
-is why it will not take `DATABASE_URL`.
+is why it will not take `DATABASE_URL`. Without the compose stack, `make test-services test` runs the
+same thing against a throwaway Postgres and Redis on 5434/6380; `make test-services-down` removes them.
 
 ## Before Opening a PR
 
-Run the focused checks for the area you touched.
+`make check` runs every required check that needs no database — lints, types, frontend unit tests,
+contract and boundary checks, the docs check. The backend suite is `cd backend && make test`. Or run
+the focused checks for the area you touched:
 
 ```bash
 # Backend

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle, Loader2, Share2, XCircle } from 'lucide-react';
-import { appSettingsApi } from '../../api';
+import { appSettingsApi, soulseekApi } from '../../api';
 import { queryKeys } from '../../api/queryKeys';
 
 /**
@@ -24,7 +24,7 @@ export function SoulseekSettings() {
   });
   const { data: status, isFetching: probing } = useQuery({
     queryKey: queryKeys.soulseekStatus.all,
-    queryFn: appSettingsApi.soulseekStatus,
+    queryFn: soulseekApi.status,
     enabled: !!settings?.soulseek_configured,
   });
 

@@ -23,7 +23,10 @@ from typing import Any
 import httpx
 import pytest
 
+from app.container import Services
 from app.services.soulseek import (
+    SoulseekGateway,
+    SoulseekNotConfigured,
     SoulseekService,
     SoulseekUnreachable,
     _extension,
@@ -181,6 +184,31 @@ class FakeSlskd:
 
 def service(fake: FakeSlskd) -> SoulseekService:
     return SoulseekService("http://slskd:5030", "key", transport=httpx.MockTransport(fake.handler))
+
+
+class FakeSoulseekConfiguration:
+    """`SoulseekConfiguration` made of two strings — what a test hands the gateway (ADR-0130)."""
+
+    def __init__(self, url: str | None = "http://slskd:5030", api_key: str | None = "k") -> None:
+        self.url = url
+        self.api_key = api_key
+
+    def soulseek_url(self) -> str | None:
+        return self.url
+
+    def soulseek_api_key(self) -> str | None:
+        return self.api_key
+
+
+def services_for(
+    transport: httpx.AsyncBaseTransport | None, *, url: str | None = "http://slskd:5030"
+) -> Services:
+    """A container whose Soulseek gateway talks to `transport`, or is unconfigured if `url` is None.
+
+    This replaces monkeypatching `SoulseekService.from_settings` and the settings singleton's
+    `has_soulseek_configured`, which is what every test of the poll and the tools used to do.
+    """
+    return Services(soulseek=SoulseekGateway(FakeSoulseekConfiguration(url), transport=transport))
 
 
 class TestPaths:
@@ -479,3 +507,45 @@ class TestDownloadsSummary:
                 "settled": False,
             }
         ]
+
+
+class TestGateway:
+    """The application's handle on slskd (ADR-0130): configured-ness is asked every time."""
+
+    def test_unconfigured_when_the_url_is_empty(self):
+        for url in (None, ""):
+            gateway = SoulseekGateway(FakeSoulseekConfiguration(url))
+            assert gateway.configured is False
+            assert gateway.url is None
+
+    def test_the_url_alone_configures_it(self):
+        gateway = SoulseekGateway(FakeSoulseekConfiguration("http://slskd:5030", api_key=None))
+        assert gateway.configured is True
+
+    @pytest.mark.asyncio
+    async def test_a_client_is_closed_on_exit_and_talks_to_the_transport(self):
+        fake = FakeSlskd()
+        gateway = SoulseekGateway(
+            FakeSoulseekConfiguration(), transport=httpx.MockTransport(fake.handler)
+        )
+        async with gateway.client() as slsk:
+            status = await slsk.status()
+            assert status.logged_in is True
+        assert slsk._client.is_closed
+
+    @pytest.mark.asyncio
+    async def test_a_client_for_an_unconfigured_gateway_says_where_to_configure_it(self):
+        gateway = SoulseekGateway(FakeSoulseekConfiguration(None))
+        with pytest.raises(SoulseekNotConfigured, match="Integrations → Soulseek"):
+            async with gateway.client():
+                pass
+
+    @pytest.mark.asyncio
+    async def test_configuration_is_read_per_call_not_captured(self):
+        """Setting the URL in the panel takes effect on the next use, without a restart."""
+        configuration = FakeSoulseekConfiguration(None)
+        gateway = SoulseekGateway(configuration)
+        assert gateway.configured is False
+        configuration.url = "http://slskd:5030"
+        assert gateway.configured is True
+

@@ -17,6 +17,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from copy import deepcopy
 from typing import Any
 from uuid import UUID
@@ -28,6 +30,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from sqlalchemy import select
 
 from app.config import settings as app_config
+from app.container import Services
 from app.db.models import Profile
 from app.db.session import async_session_maker
 from app.mcp import playback as playback_tools
@@ -40,7 +43,6 @@ from app.mcp.playback import (
     navigate_tool,
     now_playing_tool,
 )
-from app.services.app_settings import get_app_settings_service
 from app.services.llm.tools import MUSIC_TOOLS, SOULSEEK_TOOL_NAMES
 
 logger = logging.getLogger(__name__)
@@ -69,7 +71,7 @@ PROFILE_ENV = "FAMILIAR_MCP_PROFILE_ID"
 EXCLUDED: frozenset[str] = frozenset()
 
 
-def withheld_tools() -> frozenset[str]:
+def withheld_tools(services: Services) -> frozenset[str]:
     """Tools this server cannot answer *right now*, as opposed to ever (ADR-0116 point 2).
 
     `EXCLUDED` is about the host; this is about the installation. The Soulseek tools exist only
@@ -78,8 +80,11 @@ def withheld_tools() -> frozenset[str]:
     absent, not present and failing once the listener has asked. Read per `tools/list` rather than
     at import, so configuring slskd in Settings takes effect on the host's next listing without a
     restart.
+
+    Asked of the container's gateway rather than the settings singleton (ADR-0130): a test that
+    wants an unconfigured server hands in a `Services` whose gateway says so.
     """
-    if get_app_settings_service().has_soulseek_configured():
+    if services.soulseek.configured:
         return frozenset()
     return SOULSEEK_TOOL_NAMES
 
@@ -93,10 +98,10 @@ class ProfileNotBound(Exception):
     """
 
 
-def exposed_tools() -> list[types.Tool]:
+def exposed_tools(services: Services) -> list[types.Tool]:
     """The tool surface, taken from MUSIC_TOOLS so it cannot drift."""
     tools: list[types.Tool] = []
-    hidden = EXCLUDED | withheld_tools()
+    hidden = EXCLUDED | withheld_tools(services)
     for spec in MUSIC_TOOLS:
         name = spec["name"]
         if name in hidden:
@@ -208,27 +213,28 @@ async def _verify_profile(profile_id: UUID) -> UUID | None:
 
 
 async def on_list_tools(
-    ctx: ServerRequestContext[Any], _params: types.PaginatedRequestParams | None
+    ctx: ServerRequestContext[Services], _params: types.PaginatedRequestParams | None
 ) -> types.ListToolsResult:
     # Resolving here as well as in call_tool is deliberate. Listing tools is the first thing every
     # host does, so an unbound connection fails immediately and says why — rather than presenting a
     # working-looking surface that fails on the first call (ADR-0043 point 9, and the "Listening
     # Ideas" defect one step later that ADR-0022 point 3 refused).
     await resolve_profile(ctx)
-    return types.ListToolsResult(tools=exposed_tools())
+    return types.ListToolsResult(tools=exposed_tools(ctx.lifespan_context))
 
 
 async def on_call_tool(
-    ctx: ServerRequestContext[Any], params: types.CallToolRequestParams
+    ctx: ServerRequestContext[Services], params: types.CallToolRequestParams
 ) -> types.CallToolResult:
     name = params.name
-    if name in withheld_tools():
+    services: Services = ctx.lifespan_context
+    if name in withheld_tools(services):
         # A host holding a listing from before slskd was unconfigured. Say why, not "unknown".
         return _error(
             f"{name!r} is unavailable: no Soulseek client is configured on this server. "
             "Set the slskd URL under Server → Integrations → Soulseek."
         )
-    if name in EXCLUDED or not any(t.name == name for t in exposed_tools()):
+    if name in EXCLUDED or not any(t.name == name for t in exposed_tools(services)):
         return _error(f"Unknown tool {name!r}.")
 
     arguments: dict[str, Any] = dict(params.arguments or {})
@@ -245,7 +251,9 @@ async def on_call_tool(
     from app.services.llm.executor import ToolExecutor
 
     async with async_session_maker() as session:
-        executor = ToolExecutor(session, profile_id=profile_id, user_message=generation_prompt)
+        executor = ToolExecutor(
+            session, profile_id=profile_id, user_message=generation_prompt, services=services
+        )
         if name in PLAYBACK_TOOLS:
             # Actuation, not a query: these travel the command channel to a subscribed client.
             # The executor is still handed over, because resolving track ids to tracks is its
@@ -286,10 +294,21 @@ def _error(message: str) -> types.CallToolResult:
     )
 
 
-def build_server() -> Server[Any]:
+def build_server(services: Services) -> Server[Services]:
+    """The MCP server over the application's container.
+
+    The SDK hands each request a `lifespan_context`; yielding the container there is how the
+    handlers above receive it without a module global (ADR-0130 point 2).
+    """
+
+    @asynccontextmanager
+    async def _with_services(_server: Server[Services]) -> AsyncIterator[Services]:
+        yield services
+
     return Server(
         name=SERVER_NAME,
         instructions=INSTRUCTIONS,
+        lifespan=_with_services,
         on_list_tools=on_list_tools,
         on_call_tool=on_call_tool,
     )
@@ -323,9 +342,9 @@ def _transport_security() -> TransportSecuritySettings:
     )
 
 
-def build_asgi_app() -> Any:
+def build_asgi_app(services: Services) -> Any:
     """The streamable-HTTP app, served at the mount point itself rather than a nested `/mcp`."""
-    return build_server().streamable_http_app(
+    return build_server(services).streamable_http_app(
         streamable_http_path="/",
         transport_security=_transport_security(),
     )

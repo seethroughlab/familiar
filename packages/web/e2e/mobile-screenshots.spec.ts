@@ -63,7 +63,7 @@ for (const [deviceName, viewport] of Object.entries(MOBILE_VIEWPORTS)) {
       await ensureProfile(page);
     });
 
-    for (const destination of ['Library', 'Tools', 'Server'] as const) {
+    for (const destination of ['Overview', 'Library', 'Analysis', 'Server'] as const) {
       test(`${destination.toLowerCase()} screenshot`, async ({ page }) => {
         await navigateToDestination(page, destination);
         await waitForSettled(page);

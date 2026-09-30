@@ -41,3 +41,32 @@ export function AdminSection({ title, children }: { title: string; children: Rea
     </section>
   );
 }
+
+
+/**
+ * A section inside a destination (ADR-0126 point 7).
+ *
+ * `SectionLayout` below owns the destination's heading and rail; a section owns only its own
+ * title and content. Rendered as an `<h3>` so the destination stays the page's one `<h2>` — the
+ * E2E boot probe and the screenshots wait on that heading by name.
+ */
+export function SectionPage({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-semibold text-white">{title}</h3>
+        {subtitle && <p className="text-sm text-zinc-400 mt-1">{subtitle}</p>}
+      </div>
+      {children}
+    </div>
+  );
+}
+

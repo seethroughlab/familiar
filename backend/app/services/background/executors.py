@@ -4,7 +4,6 @@ import asyncio
 import atexit
 import logging
 import multiprocessing as mp
-import os
 import time
 from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor
@@ -26,16 +25,14 @@ mp_context = mp.get_context("spawn")
 
 
 def _analysis_worker_init() -> None:
-    """Initialize analysis worker process with low priority.
+    """Initialize an analysis worker: sandbox-safe semaphore names and background priority.
 
-    Sets nice value to 10 (lower priority) so analysis doesn't starve
-    other system processes. Nice range is -20 (highest) to 19 (lowest).
+    `nice(10)` as before, plus on Darwin the background QoS clamp (ADR-0138 point 3). The body
+    lives in `app/process_setup.py`, beside the parent's half of the same adaptations.
     """
-    try:
-        os.nice(10)
-        logging.info(f"Analysis worker started with nice=10 (PID {os.getpid()})")
-    except Exception as e:
-        logging.warning(f"Could not set nice priority: {e}")
+    from app.process_setup import analysis_worker_init
+
+    analysis_worker_init()
 
 
 class ExecutorMixin:

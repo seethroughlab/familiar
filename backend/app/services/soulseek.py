@@ -27,8 +27,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Protocol
 
 import httpx
 
@@ -266,20 +268,6 @@ class SoulseekService:
             transport=transport,
         )
 
-    @classmethod
-    def from_settings(cls) -> SoulseekService:
-        """The instance the operator configured, or `SoulseekNotConfigured`."""
-        from app.services.app_settings import get_app_settings_service
-
-        svc = get_app_settings_service()
-        url = svc.get_effective("soulseek_url")
-        if not url:
-            raise SoulseekNotConfigured(
-                "No Soulseek client is configured. Set the slskd URL and API key under "
-                "Server → Integrations → Soulseek."
-            )
-        return cls(url, svc.get_effective("soulseek_api_key"))
-
     async def close(self) -> None:
         await self._client.aclose()
 
@@ -452,3 +440,77 @@ class SoulseekService:
                     }
                 )
         return summary
+
+
+# ── the boundary the application holds (ADR-0130 point 5) ─────────────────────────────────────
+
+
+class SoulseekConfiguration(Protocol):
+    """Where slskd is, as the operator configured it — read at call time, never cached.
+
+    The URL can be set or cleared in the settings panel while the server runs, and the tools that
+    depend on it must appear and disappear accordingly (ADR-0116 point 2), so this is a question
+    asked on every use rather than a value captured at startup. The application's settings
+    service answers it in production; a test answers it with two strings.
+    """
+
+    def soulseek_url(self) -> str | None: ...
+
+    def soulseek_api_key(self) -> str | None: ...
+
+
+NOT_CONFIGURED_MESSAGE = (
+    "No Soulseek client is configured. Set the slskd URL and API key under "
+    "Server → Integrations → Soulseek."
+)
+
+
+class SoulseekGateway:
+    """The application's one handle on slskd: whether it is configured, and a client when it is.
+
+    Held by the application container (ADR-0130 point 2) and handed to the route, the MCP
+    executor and the background poll by injection, in place of the `SoulseekService.from_settings`
+    classmethod every one of them used to reach for — which is what made "is slskd configured"
+    something tests could only answer by monkeypatching the settings singleton.
+
+    `transport` is for tests: an `httpx.MockTransport` stands in for slskd without a socket.
+    """
+
+    def __init__(
+        self,
+        configuration: SoulseekConfiguration,
+        *,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        self._configuration = configuration
+        self._transport = transport
+
+    @property
+    def url(self) -> str | None:
+        return self._configuration.soulseek_url() or None
+
+    @property
+    def configured(self) -> bool:
+        """A URL is enough; slskd can run without an API key (ADR-0116)."""
+        return self.url is not None
+
+    @asynccontextmanager
+    async def client(self, *, timeout: float = 10.0) -> AsyncIterator[SoulseekService]:
+        """A client for the configured slskd, closed on exit; `SoulseekNotConfigured` if none."""
+        url = self.url
+        if url is None:
+            raise SoulseekNotConfigured(NOT_CONFIGURED_MESSAGE)
+        service = SoulseekService(
+            url,
+            self._configuration.soulseek_api_key(),
+            timeout=timeout,
+            transport=self._transport,
+        )
+        try:
+            yield service
+        finally:
+            await service.close()
+
+    async def aclose(self) -> None:
+        """Nothing is held between calls; here so the container can close every gateway alike."""
+

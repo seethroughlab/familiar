@@ -4,7 +4,9 @@ import asyncio
 import json
 import logging
 
-from app.services.redis_client import ResilientRedisClient, get_resilient_redis
+from app.container import Services
+from app.services.kv import KeyValueStore
+from app.services.redis_client import get_resilient_redis
 
 from .analysis import AnalysisMixin
 from .backup import BackupMixin
@@ -51,15 +53,19 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin, So
 
     def __init__(self):
         self._scheduler = None
-        self._redis: ResilientRedisClient | None = None
+        self._redis: KeyValueStore | None = None
+        # The application's container (ADR-0130), handed in by `startup()`. Until every domain
+        # has moved, the manager itself is still reached through `get_background_manager()`,
+        # so this is the one thing it is *given* rather than looks up.
+        self.services: Services = Services.unconfigured()
         # Initialize mixin state
         self._init_executor_state()
         self._init_analysis_state()
         self._init_sync_state()
 
     @property
-    def redis(self) -> ResilientRedisClient:
-        """Lazy resilient Redis client with automatic retry."""
+    def redis(self) -> KeyValueStore:
+        """The key/value store: Redis, or Postgres when REDIS_URL is unset (ADR-0133)."""
         if self._redis is None:
             self._redis = get_resilient_redis()
         return self._redis
@@ -81,8 +87,15 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin, So
         except Exception as e:
             logger.warning(f"Failed to cleanup stale Redis state: {e}")
 
-    async def startup(self) -> None:
-        """Initialize scheduler on app startup."""
+    async def startup(self, services: Services | None = None) -> None:
+        """Initialize scheduler on app startup.
+
+        `services` is the container the polls resolve their dependencies from (ADR-0130 point
+        7): the Soulseek poll asks `services.soulseek`, never a settings singleton. Omitted, the
+        manager runs as a server with no integrations configured — what the tests want.
+        """
+        if services is not None:
+            self.services = services
         self._cleanup_stale_redis_state()
 
         # Start artwork fetcher
@@ -215,8 +228,23 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin, So
                 replace_existing=True,
             )
 
+            # The Postgres key/value store ignores expired keys on read but does not delete them;
+            # Redis does that itself. Without this, a key nobody reads again stays forever (ADR-0133).
+            # Decided from configuration, as `build_store()` decides, so that startup does not build
+            # the store early: the manager's store stays lazy, as it always was.
+            from app.config import settings as app_settings
+
+            if not app_settings.redis_url:
+                self._scheduler.add_job(
+                    self._sweep_kv_store,
+                    IntervalTrigger(minutes=10),
+                    id="kv_store_sweep",
+                    replace_existing=True,
+                )
+
             # Register S3 backup schedule if enabled
             self._register_s3_backup_schedule()
+            self._make_background_jobs_deferrable()
 
             self._scheduler.start()
             logger.info("APScheduler started with periodic sync (every 2 hours)")
@@ -231,6 +259,75 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin, So
             logger.warning("APScheduler not installed - periodic tasks disabled")
         except Exception as e:
             logger.error(f"Failed to start scheduler: {e}")
+
+    #: Scheduled jobs that are *background work* and wait out a pause (ADR-0138 point 1). The rest
+    #: (health checks, metrics, log cleanup, the kv sweep, the restore checker) are housekeeping
+    #: that must keep running whatever the machine is doing.
+    DEFERRABLE_JOBS = (
+        "periodic_sync",
+        "discovery_batch",
+        "daily_external_albums",
+        "listenbrainz_fresh_releases",
+        "recording_backfill",
+        "soulseek_poll",
+        "daily_update_check",
+        "s3_backup",
+    )
+
+    def _make_background_jobs_deferrable(self) -> None:
+        """Wrap each deferrable job so a run that falls during a pause is skipped and recorded."""
+        from app.services.background.pause import background_pause
+
+        for job_id in self.DEFERRABLE_JOBS:
+            job = self._scheduler.get_job(job_id) if self._scheduler else None
+            if job is None:
+                continue
+            original = job.func
+            if getattr(original, "_familiar_deferrable", False):
+                continue  # already wrapped; safe to call again after a job is re-registered
+
+            async def deferrable(*args, _original=original, _job_id=job_id, **kwargs):
+                if background_pause.paused:
+                    background_pause.note_skipped(_job_id)
+                    logger.info("Skipping %s: background work is paused (%s)", _job_id, background_pause.reason)
+                    return None
+                result = _original(*args, **kwargs)
+                return await result if asyncio.iscoroutine(result) else result
+
+            deferrable._familiar_deferrable = True  # type: ignore[attr-defined]
+            job.modify(func=deferrable)
+
+    def pause_background(self, reason: str) -> dict:
+        """Pause background work (ADR-0138 point 1). Serving is never paused."""
+        from app.services.background.pause import background_pause
+
+        background_pause.pause(reason)
+        logger.info("Background work paused: %s", reason)
+        return background_pause.state()
+
+    def resume_background(self) -> dict:
+        """Resume. A periodic sync skipped while paused runs once now (ADR-0138 point 5)."""
+        from app.services.background.pause import background_pause
+
+        skipped = background_pause.resume()
+        logger.info("Background work resumed (skipped while paused: %s)", sorted(skipped) or "nothing")
+        if "periodic_sync" in skipped and not self.is_sync_running():
+            asyncio.get_running_loop().create_task(self._periodic_sync())
+        state = background_pause.state()
+        state["resumed_sync"] = "periodic_sync" in skipped
+        return state
+
+    async def _sweep_kv_store(self) -> None:
+        """Delete expired keys from the Postgres key/value store."""
+        import asyncio
+
+        try:
+            store = self.redis
+            removed = await asyncio.to_thread(store.sweep)  # type: ignore[attr-defined]
+            if removed:
+                logger.debug("kv_store sweep removed %d expired keys", removed)
+        except Exception as e:
+            logger.warning(f"kv_store sweep failed: {e}")
 
     async def _log_metrics_summary(self) -> None:
         """Log a one-line metrics summary for operational visibility."""

@@ -1,4 +1,5 @@
-import axios from 'axios';
+import axios, { type AxiosInstance } from 'axios';
+import { client as generatedClient } from '@familiar/api-client';
 import { apiErrorTracker, extractAxiosError } from '../utils/apiErrorTracker';
 import { createLogger } from '../utils/logger';
 
@@ -90,6 +91,28 @@ let _serverToken = '';
  */
 export async function initServerToken(): Promise<void> {
   _serverToken = localStorage.getItem(SERVER_TOKEN_KEY) ?? '';
+  const handedOver = takeTokenFromFragment();
+  if (handedOver) await setServerToken(handedOver);
+}
+
+/**
+ * A token handed over in the URL fragment: `http://127.0.0.1:4400/#token=…` (ADR-0134 point 6).
+ *
+ * Familiar Server's "Open Admin" opens the admin this way, so the owner is not asked to paste a
+ * token the app already holds. A fragment is never sent to the server, so it is in no access log.
+ * It is removed from the address bar at once, so it is not left in history or copied along with
+ * the page's address. Other fragment parameters, if any, are kept.
+ */
+export function takeTokenFromFragment(): string | null {
+  if (typeof window === 'undefined' || !window.location.hash) return null;
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  const token = params.get('token')?.trim();
+  if (!token) return null;
+  params.delete('token');
+  const rest = params.toString();
+  const { pathname, search } = window.location;
+  window.history.replaceState(window.history.state, '', `${pathname}${search}${rest ? `#${rest}` : ''}`);
+  return token;
 }
 
 /** Persist a server token. Empty string clears it. */
@@ -116,17 +139,105 @@ export function getApiUrl(path: string): string {
   return `${getApiOrigin()}/api/v1${path}`;
 }
 
-const api = axios.create({
-  baseURL: '/api/v1',
-});
+/**
+ * Extra per-request options. Narrow to `headers` on purpose: the only caller is the
+ * outbox pinning a replay to the profile that queued it, and a full `AxiosRequestConfig`
+ * would invite callers to override things like `baseURL` or interceptor-managed fields.
+ */
+export type RequestOptions = { headers?: Record<string, string> };
 
-// Dynamic baseURL: prepend origin on native platform
-api.interceptors.request.use((config) => {
-  if (_apiOrigin) {
-    config.baseURL = `${_apiOrigin}/api/v1`;
-  }
-  return config;
-});
+/**
+ * Install the shared transport behaviour on an axios instance (ADR-0129 point 7).
+ *
+ * Origin, server token, profile header and the response handling below are decided **once,
+ * here**, and applied to both instances this module owns: `api`, the hand-written wrappers'
+ * instance whose paths omit `/api/v1`, and `transport`, the generated client's instance whose
+ * paths carry it. A generated operation never learns authentication on its own, and neither
+ * does a wrapper — the two coexist while features migrate (point 9) and behave identically.
+ *
+ * `pathPrefix` is the difference between them: appended to the origin as the base URL.
+ */
+function installTransport(instance: AxiosInstance, pathPrefix: string): AxiosInstance {
+  // Dynamic baseURL: same-origin by default, an explicit origin for `/visualizer`.
+  instance.interceptors.request.use((config) => {
+    config.baseURL = `${_apiOrigin}${pathPrefix}`;
+    return config;
+  });
+
+  // Add the server token to all requests (ADR-0045). Separate interceptor from the profile header
+  // below because they answer different questions: the token says whether this client may act at
+  // all, the profile says which listener it acts as.
+  instance.interceptors.request.use((config) => {
+    if (_serverToken && !config.headers['X-Familiar-Token']) {
+      config.headers['X-Familiar-Token'] = _serverToken;
+    }
+    return config;
+  });
+
+  // Add X-Profile-ID header to all requests (if a profile is selected)
+  instance.interceptors.request.use(async (config) => {
+    // An explicitly-supplied profile wins. The offline outbox replays actions against the
+    // profile that queued them, which is not necessarily the one selected now — before this,
+    // switching profiles while actions were pending sent them all to the wrong profile.
+    if (config.headers['X-Profile-ID']) {
+      return config;
+    }
+    try {
+      const profileId = await _profileProvider?.getSelectedProfileId();
+      if (profileId) {
+        config.headers['X-Profile-ID'] = profileId;
+      }
+    } catch (error) {
+      // Log but don't block requests if profile check fails
+      log.error('Failed to get profile ID:', error);
+    }
+    return config;
+  });
+
+  // Handle 401 errors and track all API errors for debugging
+  instance.interceptors.response.use(
+    (response) => response,
+    async (error) => {
+      // Track error for debugging visibility
+      const errorInfo = extractAxiosError(error);
+      apiErrorTracker.track(errorInfo);
+
+      // The two errors this client *acts on* are told apart by the envelope's `code`, never by
+      // its prose (ADR-0129 point 6). Until 2026-09-18 this searched `detail` for a sentence —
+      // and the profile 401 carries its sentence in `message` with no `detail` at all, so the
+      // branch that cleared a dead profile had never run in production.
+      const code = error.response?.status === 401 ? error.response?.data?.code : undefined;
+
+      // A missing or wrong server token (ADR-0045). Kept distinct from the profile case below:
+      // both are 401, but clearing the selected profile in response to a token failure would log
+      // the listener out of a profile that was never the problem, and then the profile selector
+      // itself would 401 too.
+      if (code === 'SERVER_TOKEN_REQUIRED') {
+        window.dispatchEvent(new CustomEvent('server-token-required'));
+        return Promise.reject(error);
+      }
+
+      if (code === 'INVALID_PROFILE') {
+        // Clear the invalid profile selection
+        await _profileProvider?.clearSelectedProfile();
+        // The app should redirect to profile selector
+        // Dispatch a custom event that App.tsx can listen for
+        window.dispatchEvent(new CustomEvent('profile-invalidated'));
+      }
+
+      return Promise.reject(error);
+    }
+  );
+
+  return instance;
+}
+
+/** The hand-written wrappers' instance: paths are relative to `/api/v1`. */
+const api = installTransport(axios.create(), '/api/v1');
+
+/** The generated client's instance: its operations carry the full `/api/v1/...` path. */
+const transport = installTransport(axios.create(), '');
+generatedClient.setConfig({ axios: transport });
 
 /**
  * Encode a value for use in a URL path segment.
@@ -136,76 +247,5 @@ api.interceptors.request.use((config) => {
 export function encodePathSegment(value: string): string {
   return encodeURIComponent(value).replace(/%2F/gi, '%252F');
 }
-
-// Add the server token to all requests (ADR-0045). Separate interceptor from the profile header
-// below because they answer different questions: the token says whether this client may act at
-// all, the profile says which listener it acts as.
-api.interceptors.request.use((config) => {
-  if (_serverToken && !config.headers['X-Familiar-Token']) {
-    config.headers['X-Familiar-Token'] = _serverToken;
-  }
-  return config;
-});
-
-// Add X-Profile-ID header to all requests (if a profile is selected)
-api.interceptors.request.use(async (config) => {
-  // An explicitly-supplied profile wins. The offline outbox replays actions against the
-  // profile that queued them, which is not necessarily the one selected now — before this,
-  // switching profiles while actions were pending sent them all to the wrong profile.
-  if (config.headers['X-Profile-ID']) {
-    return config;
-  }
-  try {
-    const profileId = await _profileProvider?.getSelectedProfileId();
-    if (profileId) {
-      config.headers['X-Profile-ID'] = profileId;
-    }
-  } catch (error) {
-    // Log but don't block requests if profile check fails
-    log.error('Failed to get profile ID:', error);
-  }
-  return config;
-});
-
-/**
- * Extra per-request options. Narrow to `headers` on purpose: the only caller is the
- * outbox pinning a replay to the profile that queued it, and a full `AxiosRequestConfig`
- * would invite callers to override things like `baseURL` or interceptor-managed fields.
- */
-export type RequestOptions = { headers?: Record<string, string> };
-
-// Handle 401 errors and track all API errors for debugging
-api.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    // Track error for debugging visibility
-    const errorInfo = extractAxiosError(error);
-    apiErrorTracker.track(errorInfo);
-
-    // A missing or wrong server token (ADR-0045). Checked before the profile case below and kept
-    // distinct from it: both are 401, but clearing the selected profile in response to a token
-    // failure would log the listener out of a profile that was never the problem, and then the
-    // profile selector itself would 401 too.
-    if (error.response?.status === 401 && error.response?.data?.detail?.includes('X-Familiar-Token')) {
-      window.dispatchEvent(new CustomEvent('server-token-required'));
-      return Promise.reject(error);
-    }
-
-    // Check if this is an "invalid profile" error
-    if (
-      error.response?.status === 401 &&
-      (error.response?.data?.detail?.includes('re-register') ||
-       error.response?.data?.detail?.includes('Invalid profile'))
-    ) {
-      // Clear the invalid profile selection
-      await _profileProvider?.clearSelectedProfile();
-      // The app should redirect to profile selector
-      // Dispatch a custom event that App.tsx can listen for
-      window.dispatchEvent(new CustomEvent('profile-invalidated'));
-    }
-
-    return Promise.reject(error);
-  }
-);
 
 export default api;

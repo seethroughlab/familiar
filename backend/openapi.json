@@ -2463,6 +2463,20 @@
             "title": "Min Client Contract",
             "type": "integer"
           },
+          "server_id": {
+            "title": "Server Id",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "server_name": {
+            "title": "Server Name",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "server_version": {
             "title": "Server Version",
             "type": "string"
@@ -3271,6 +3285,17 @@
         "title": "EncoderBudgetHealth",
         "type": "object"
       },
+      "ErrorCode": {
+        "description": "Stable, machine-readable names for the errors a client acts on (ADR-0129 point 6).\n\n`message` and `detail` are for people and may be reworded at any time; a client that needs\nto *do* something \u2014 prompt for a token, drop a dead profile \u2014 switches on `code`. Add a member\nwhen a client needs to distinguish a case, not for every exception class: most errors are\nshown, not handled. Documented in `docs/ERROR-CONTRACTS.md`.",
+        "enum": [
+          "SERVER_TOKEN_REQUIRED",
+          "INVALID_PROFILE",
+          "SCAN_IN_PROGRESS",
+          "ANALYSIS_IN_PROGRESS"
+        ],
+        "title": "ErrorCode",
+        "type": "string"
+      },
       "ErrorEnvelope": {
         "description": "The shape every error response takes (ADR-0007).\n\nMirrors `create_error_response` in `app/main.py` exactly. Every handler funnels through it:\nvalidation errors, `FamiliarError` subclasses, `HTTPException`, SQLAlchemy failures and the\ncatch-all 500.\n\nModelled here because it was previously described nowhere. The schema documented only 200 and\nFastAPI's automatic 422 \u2014 and that 422 was actively wrong, because the validation handler is\noverridden to emit *this* shape rather than `{\"detail\": [...]}`. A generated client therefore\nhad exactly one error model and it was the one the server never sends.\n\n`detail` and `request_id` are optional because they are **omitted** when absent rather than\nsent as null, so a client must treat them as missing keys and not as nullable values.",
         "example": {
@@ -3280,6 +3305,10 @@
           "status_code": 404
         },
         "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ErrorCode",
+            "description": "Stable machine-readable name, present on the errors a client acts on (ADR-0129 point 6). Switch on this, never on `message`."
+          },
           "detail": {
             "description": "Extra context. Present for validation errors and, in debug builds, for 500s.",
             "title": "Detail",
@@ -6393,6 +6422,104 @@
         ],
         "title": "OutputType",
         "type": "string"
+      },
+      "PairingInfo": {
+        "description": "What a pairing link carries (ADR-0134 point 5), for the web admin to render as a QR code.\n\nThe server does not build the link itself, because it does not know how the phone reaches it:\nbehind Docker its own addresses are the container's, and behind Tailscale the useful host is a\nname only the operator knows. The web admin knows the host it was loaded from and builds the link\nfrom that, falling back to `addresses` when that host is loopback.",
+        "properties": {
+          "addresses": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Addresses",
+            "type": "array"
+          },
+          "header": {
+            "default": "X-Familiar-Token",
+            "title": "Header",
+            "type": "string"
+          },
+          "port": {
+            "title": "Port",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "server_id": {
+            "title": "Server Id",
+            "type": "string"
+          },
+          "server_name": {
+            "title": "Server Name",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "server_id",
+          "server_name",
+          "token",
+          "addresses"
+        ],
+        "title": "PairingInfo",
+        "type": "object"
+      },
+      "PauseRequest": {
+        "properties": {
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "PauseRequest",
+        "type": "object"
+      },
+      "PauseState": {
+        "description": "Whether background work is paused, and why (ADR-0138 point 1).",
+        "properties": {
+          "paused": {
+            "title": "Paused",
+            "type": "boolean"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resumed_sync": {
+            "default": false,
+            "title": "Resumed Sync",
+            "type": "boolean"
+          },
+          "since": {
+            "title": "Since",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "skipped_jobs": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Skipped Jobs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "paused"
+        ],
+        "title": "PauseState",
+        "type": "object"
       },
       "PendingGroupResponse": {
         "description": "A group of pending tracks from the same folder.",
@@ -12808,6 +12935,78 @@
         ]
       }
     },
+    "/api/v1/auth/pairing": {
+      "get": {
+        "description": "Everything a `familiar://pair` link needs. Requires a token, and holding it.\n\nPairing hands a client the token, so a server without one has nothing to pair with. That is a\nconflict to resolve (create a token), not an authentication failure.",
+        "operationId": "auth_get_pairing",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get Pairing",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/api/v1/auth/token": {
       "delete": {
         "description": "Clear the token, returning the server to unauthenticated.\n\nKept because a token that cannot be removed is one an operator will work around by editing JSON\non the NAS \u2014 the thing rotation exists to prevent. It reopens the server, which is why it needs\nthe current token.",
@@ -13092,6 +13291,230 @@
         ]
       }
     },
+    "/api/v1/background/pause": {
+      "get": {
+        "description": "Whether background work (analysis, syncs, scheduled fetches) is paused. Serving never is.",
+        "operationId": "system_get_pause",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PauseState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get Pause",
+        "tags": [
+          "system"
+        ]
+      },
+      "post": {
+        "description": "Pause background work (ADR-0138 point 1).\n\nWork in flight finishes its current track; nothing new is dispatched, a running sync waits\nwithout counting toward its time cap or stall detector, and scheduled background jobs skip\ntheir runs. Streaming and the API carry on. Pausing again changes the reason.",
+        "operationId": "system_pause_background",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PauseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PauseState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Pause Background",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/api/v1/background/resume": {
+      "post": {
+        "description": "Resume background work. A periodic sync skipped during the pause runs once now.",
+        "operationId": "system_resume_background",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PauseState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Resume Background",
+        "tags": [
+          "system"
+        ]
+      }
+    },
     "/api/v1/commands/artifacts/{request_id}": {
       "post": {
         "description": "Hand back something a command asked this client to produce (ADR-0053 point 3).\n\nThe return half of the channel, and deliberately not on the channel: the SSE stream stays\none-way, and this is a request the client makes when it has something to send. That keeps\nADR-0044 point 2's reasoning intact rather than reversing it.\n\n`request_id` names one outstanding question. It is minted by the server when it issues the\ncommand, it is not a device identity, and it dies when the question is answered or times out \u2014\nwhich is why this does not reopen ADR-0029 point 5.\n\n**Profile-scoped, and checked rather than merely required.** The store remembers which profile\nasked, so holding *a* profile is not enough to answer somebody else's question. Caught by\n`lint_profile_contracts.py`, which is the rule this route was quietly outside.\n\nA late or unknown upload is **discarded, not stored** (point 8). The question it answers has\nalready been answered with a timeout, and keeping the image would mean keeping it forever.\n204 either way: the client cannot do anything useful with the difference, and telling it its\nscreenshot was too slow would only invite a retry nothing is waiting for.",
@@ -13296,7 +13719,7 @@
     },
     "/api/v1/contract": {
       "get": {
-        "description": "Report the API contract this server implements, and the oldest client it serves.",
+        "description": "Report the API contract this server implements, the oldest client it serves, and its identity.",
         "operationId": "system_get_api_contract",
         "responses": {
           "200": {

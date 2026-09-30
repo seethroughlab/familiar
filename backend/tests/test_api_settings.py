@@ -191,30 +191,35 @@ class TestSoulseekSettings:
         data = client.put("/api/v1/settings", json={"soulseek_url": ""}).json()
         assert data["soulseek_configured"] is False
 
-    def test_status_reports_unconfigured_without_probing(
-        self, client: TestClient, mock_settings_service
-    ) -> None:
-        with patch("app.api.routes.soulseek.get_app_settings_service", return_value=mock_settings_service):
+    # The status route receives its operation from the container (ADR-0130 point 3), so a test
+    # overrides `get_services` on the real app rather than patching module attributes.
+
+    def test_status_reports_unconfigured_without_probing(self, client: TestClient) -> None:
+        from app.api.deps import get_services
+        from app.container import Services
+
+        client.app.dependency_overrides[get_services] = Services.unconfigured  # type: ignore[attr-defined]
+        try:
             data = client.get("/api/v1/soulseek/status").json()
+        finally:
+            del client.app.dependency_overrides[get_services]  # type: ignore[attr-defined]
         assert data == {
             "configured": False, "url": None, "reachable": False, "logged_in": False,
             "username": None, "version": None, "shared_files": None, "error": None,
         }
 
-    def test_status_probes_the_configured_address(
-        self, client: TestClient, mock_settings_service: AppSettingsService
-    ) -> None:
-        from app.services.soulseek import SoulseekStatus
+    def test_status_probes_the_configured_address(self, client: TestClient) -> None:
+        import httpx
 
-        mock_settings_service.update(soulseek_url="http://slskd:5030", soulseek_api_key="k")
-        with (
-            patch("app.api.routes.soulseek.get_app_settings_service", return_value=mock_settings_service),
-            patch(
-                "app.api.routes.soulseek.SoulseekService.status",
-                return_value=SoulseekStatus(reachable=True, logged_in=True, username="otterbad", version="0.23.1", shared_files=25575),
-            ),
-        ):
+        from app.api.deps import get_services
+        from tests.test_soulseek import FakeSlskd, services_for
+
+        services = services_for(httpx.MockTransport(FakeSlskd().handler))
+        client.app.dependency_overrides[get_services] = lambda: services  # type: ignore[attr-defined]
+        try:
             data = client.get("/api/v1/soulseek/status").json()
+        finally:
+            del client.app.dependency_overrides[get_services]  # type: ignore[attr-defined]
         assert data["configured"] is True
         assert data["url"] == "http://slskd:5030"
         assert data["logged_in"] is True

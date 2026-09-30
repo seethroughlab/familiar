@@ -101,6 +101,3 @@ cannot recover writes made outside the fixture's transaction.
   need narrower imports.
 - **Follow-up:** backup/restore and migration tests need their own disposable-database rules because their
   intended behavior is broader than table cleanup.
-- **Follow-up:** point 4's command and ADR-0127's `make doctor` / `make check` assume a `Makefile` that
-  does not exist yet. Where the three targets live is one decision, taken once, not two records each
-  assuming the other will create it.

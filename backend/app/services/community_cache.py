@@ -341,8 +341,8 @@ class CommunityCacheService:
 
         **The hash is exact within one fingerprinting path and may differ across
         two.** clapback's `ADR-0019`, measured over 56 FLACs: the `fpcalc` binary
-        (this installation) and pyacoustid's library (beets) return the same
-        fingerprint for 24 of them. So a miss by hash does not mean the corpus
+        and pyacoustid's library (beets, and this installation — see
+        `analysis._FINGERPRINT_CHILD`) return the same fingerprint for 24 of them. So a miss by hash does not mean the corpus
         lacks the recording — it may hold it under another client's key — and the
         MusicBrainz recording id, which is the same on every path, is asked first.
         `GET /v1/recordings/{mbid}` returns every row claimed under the id, ordered

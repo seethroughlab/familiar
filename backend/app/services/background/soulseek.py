@@ -70,29 +70,23 @@ class SoulseekMixin(_Base):
 
     async def _soulseek_poll(self) -> None:
         """APScheduler entry. Returns at once when no slskd is configured."""
-        from app.services.app_settings import get_app_settings_service
-        from app.services.soulseek import (
-            SoulseekNotConfigured,
-            SoulseekService,
-            SoulseekUnreachable,
-        )
+        from app.services.soulseek import SoulseekNotConfigured, SoulseekUnreachable
 
-        if not get_app_settings_service().has_soulseek_configured():
+        soulseek = self.services.soulseek
+        if not soulseek.configured:
             return
 
         try:
-            slsk = SoulseekService.from_settings()
+            async with soulseek.client() as slsk:
+                transfers = await slsk.downloads()
         except SoulseekNotConfigured:
+            # Cleared in Settings between the check above and the call. Next poll sees it.
             return
-        try:
-            transfers = await slsk.downloads()
         except SoulseekUnreachable as e:
             # Debug, not warning: an operator who stopped slskd for the night should not find
             # 240 lines about it in the morning. The settings panel says the same thing louder.
             logger.debug("Soulseek poll: %s", e)
             return
-        finally:
-            await slsk.close()
 
         settled = [t for t in transfers if t.get("settled")]
         if not settled:

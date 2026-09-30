@@ -22,12 +22,13 @@ export default defineConfig({
     tailwindcss(),
     {
       // index.html is authored, not processed: it must reference a classic script, which Vite's
-      // HTML pipeline will not emit.
+      // HTML pipeline will not emit. `dist/` is the whole plugin folder; `familiar-apple`'s
+      // `scripts/build-visualizers.sh` vendors it into `App/Shared/Visualizers.bundle/` (ADR-0092).
       name: 'copy-plugin-files',
       closeBundle() {
-        mkdirSync(`../../web/public/visualizers/lyric-storm`, { recursive: true });
+        mkdirSync('dist', { recursive: true });
         for (const file of ['index.html', 'familiar-plugin.json']) {
-          copyFileSync(file, `../../web/public/visualizers/lyric-storm/${file}`);
+          copyFileSync(file, `dist/${file}`);
         }
       },
     },
@@ -37,7 +38,7 @@ export default defineConfig({
   // sandboxed frame where the error is invisible unless you go looking.
   define: { 'process.env.NODE_ENV': '"production"' },
   build: {
-    outDir: '../../web/public/visualizers/lyric-storm',
+    outDir: 'dist',
     emptyOutDir: true,
     lib: { entry: 'src/main.tsx', formats: ['iife'], name: 'LyricStorm', fileName: () => 'app.js', cssFileName: 'style' },
   },

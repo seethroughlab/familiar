@@ -48,8 +48,10 @@ const jobPhaseLabels: Record<string, string> = {
 function JobProgressBar({ job }: { job: BackgroundJob }) {
   const Icon = jobIcons[job.type];
   const progress = job.progress;
-  const percent = progress && progress.total > 0
-    ? Math.round((progress.current / progress.total) * 100)
+  const total = progress?.total ?? 0;
+  const current = progress?.current ?? 0;
+  const percent = progress && total > 0
+    ? Math.round((current / total) * 100)
     : null;
   const queueMatch = job.message?.match(/\((\d+) queued\)/);
   const queuedCount = queueMatch ? parseInt(queueMatch[1], 10) : null;
@@ -60,7 +62,7 @@ function JobProgressBar({ job }: { job: BackgroundJob }) {
         <Icon className="w-4 h-4 text-blue-400" />
         <span className="text-sm font-medium text-white">{jobNames[job.type]}</span>
         <span className="text-xs text-zinc-400 ml-auto">
-          {progress && progress.total > 0 && `${progress.current}/${progress.total}`}
+          {progress && total > 0 && `${current}/${total}`}
           {queuedCount !== null && queuedCount > 0 && ` (${queuedCount} queued)`}
         </span>
       </div>
@@ -71,7 +73,7 @@ function JobProgressBar({ job }: { job: BackgroundJob }) {
         <p className="text-xs text-zinc-400 mb-2 truncate">{job.current_item}</p>
       )}
       <div className="h-1.5 bg-zinc-700 rounded-full overflow-hidden">
-        {progress && progress.total > 0 ? (
+        {progress && total > 0 ? (
           <div className="h-full bg-blue-500 transition-all duration-300" style={{ width: `${percent}%` }} />
         ) : (
           <div className="h-full bg-blue-500 w-full animate-pulse" />

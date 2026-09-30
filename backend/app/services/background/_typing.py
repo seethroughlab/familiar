@@ -11,14 +11,17 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, Protocol
 
-from app.services.redis_client import ResilientRedisClient
+from app.container import Services
+from app.services.kv import KeyValueStore
 
 
 class _BackgroundManagerProtocol(Protocol):
     """Protocol describing the interface available to background mixins."""
 
+    services: Services
+
     @property
-    def redis(self) -> ResilientRedisClient: ...
+    def redis(self) -> KeyValueStore: ...
     _scheduler: Any
     _current_track_id: str | None
     _last_task_started_at: float | None

@@ -8,7 +8,7 @@ import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import ScrollingLyrics from './ScrollingLyrics';
-import { announceReady, usePlaybackState, useTrack } from './familiar';
+import { announceReady, usePlaybackState, useTrack } from '@familiar/visualizer-sdk';
 
 function App() {
   const track = useTrack();
@@ -28,7 +28,7 @@ function App() {
       track={track ? { id: track.id ?? '', title: track.title, artist: track.artist } : null}
       artworkUrl={track?.artworkUrl ?? null}
       features={track?.features ?? null}
-      lyrics={(track?.lyrics as never) ?? null}
+      lyrics={track?.lyrics ?? null}
       currentTime={currentTime}
       duration={track?.duration ?? 0}
       isPlaying={isPlaying}

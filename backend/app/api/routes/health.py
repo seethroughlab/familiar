@@ -1,5 +1,6 @@
 """Health check endpoints."""
 
+import asyncio
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -166,24 +167,37 @@ async def system_health_check(db: DbSession) -> SystemHealth:
             message="PostgreSQL connection failed",
         ))
 
-    # Check Redis
-    try:
-        import redis
+    # Check the key/value store: Redis when REDIS_URL is set, otherwise the Postgres tables that
+    # stand in for it (ADR-0133 point 5). Only Redis is a separate service that can be down on its
+    # own; the Postgres store fails exactly when the database check above does.
+    from app.config import settings
 
-        from app.config import settings
-        r = redis.from_url(settings.redis_url)
-        r.ping()
+    if settings.redis_url:
+        try:
+            import redis
+
+            r = redis.from_url(settings.redis_url)
+            r.ping()
+            services.append(ServiceStatus(
+                name="redis",
+                status="healthy",
+                message="Redis connected",
+            ))
+        except Exception as e:
+            logger.error(f"Redis health check failed: {e}")
+            services.append(ServiceStatus(
+                name="redis",
+                status="unhealthy",
+                message="Redis connection failed",
+            ))
+    else:
+        from app.services.redis_client import get_redis
+
+        ok = await asyncio.to_thread(get_redis().ping)
         services.append(ServiceStatus(
-            name="redis",
-            status="healthy",
-            message="Redis connected",
-        ))
-    except Exception as e:
-        logger.error(f"Redis health check failed: {e}")
-        services.append(ServiceStatus(
-            name="redis",
-            status="unhealthy",
-            message="Redis connection failed",
+            name="kv_store",
+            status="healthy" if ok else "degraded",
+            message="Key/value store in PostgreSQL (no REDIS_URL)" if ok else "Key/value store unreachable",
         ))
 
     # Check Background Processing (in-process BackgroundManager)

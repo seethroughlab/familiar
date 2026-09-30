@@ -4,7 +4,23 @@ These exceptions provide structured error handling with proper HTTP status codes
 and consistent error response formats.
 """
 
+from enum import StrEnum
 from typing import Any
+
+
+class ErrorCode(StrEnum):
+    """Stable, machine-readable names for the errors a client acts on (ADR-0129 point 6).
+
+    `message` and `detail` are for people and may be reworded at any time; a client that needs
+    to *do* something — prompt for a token, drop a dead profile — switches on `code`. Add a member
+    when a client needs to distinguish a case, not for every exception class: most errors are
+    shown, not handled. Documented in `docs/ERROR-CONTRACTS.md`.
+    """
+
+    SERVER_TOKEN_REQUIRED = "SERVER_TOKEN_REQUIRED"
+    INVALID_PROFILE = "INVALID_PROFILE"
+    SCAN_IN_PROGRESS = "SCAN_IN_PROGRESS"
+    ANALYSIS_IN_PROGRESS = "ANALYSIS_IN_PROGRESS"
 
 
 class FamiliarError(Exception):
@@ -12,6 +28,8 @@ class FamiliarError(Exception):
 
     status_code: int = 500
     message: str = "An unexpected error occurred"
+    #: Set on the subclasses a client switches on; `None` for the rest (the key is then omitted).
+    code: ErrorCode | None = None
 
     def __init__(
         self,
@@ -74,6 +92,18 @@ class AuthenticationError(FamiliarError):
     message = "Authentication required"
 
 
+class InvalidProfileError(AuthenticationError):
+    """The X-Profile-ID header names a profile that does not exist.
+
+    Was a bare `HTTPException(401, ...)` in `deps.py`. The web client's interceptor matched its
+    sentence — in the wrong envelope key, so it never fired — and clearing the dead profile is
+    the one thing a client must *do* with this error, which is what `code` is for.
+    """
+
+    message = "Invalid profile ID - please re-register"
+    code = ErrorCode.INVALID_PROFILE
+
+
 # 413 Payload Too Large
 class PayloadTooLargeError(FamiliarError):
     """Request payload exceeds size or count limits."""
@@ -102,12 +132,14 @@ class ScanInProgressError(ConflictError):
     """A library scan is already running."""
 
     message = "A library scan is already in progress"
+    code = ErrorCode.SCAN_IN_PROGRESS
 
 
 class AnalysisInProgressError(ConflictError):
     """Audio analysis is already running."""
 
     message = "Audio analysis is already in progress"
+    code = ErrorCode.ANALYSIS_IN_PROGRESS
 
 
 # 503 Service Unavailable errors

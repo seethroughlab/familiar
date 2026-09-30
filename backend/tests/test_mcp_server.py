@@ -23,6 +23,7 @@ from uuid import UUID
 import pytest
 
 from app.api.exceptions import NotFoundError
+from app.container import Services
 from app.main import NON_SPA_PREFIXES, spa_fallback
 from app.mcp.server import (
     EXCLUDED,
@@ -32,15 +33,21 @@ from app.mcp.server import (
     resolve_profile,
     withheld_tools,
 )
-from app.services.app_settings import AppSettingsService
 from app.services.llm.tools import MUSIC_TOOLS, SOULSEEK_TOOL_NAMES
+from tests.test_soulseek import services_for
+
+#: A server with slskd configured — the surface most of these tests describe (ADR-0130: the
+#: container is handed in, so "configured" is two strings rather than a patched singleton).
+CONFIGURED = services_for(None)
+UNCONFIGURED = Services.unconfigured()
 
 
-def _ctx(headers: dict[str, str] | None = None) -> SimpleNamespace:
-    """A stand-in for ServerRequestContext — only `.request.headers` is read."""
-    if headers is None:
-        return SimpleNamespace(request=None)
-    return SimpleNamespace(request=SimpleNamespace(headers=headers))
+def _ctx(
+    headers: dict[str, str] | None = None, services: Services = CONFIGURED
+) -> SimpleNamespace:
+    """A stand-in for ServerRequestContext — `.request.headers` and `.lifespan_context` are read."""
+    request = None if headers is None else SimpleNamespace(headers=headers)
+    return SimpleNamespace(request=request, lifespan_context=services)
 
 
 #: Tools this layer adds that have no MUSIC_TOOLS entry.
@@ -57,7 +64,7 @@ MCP_ONLY_TOOLS = {
 
 class TestToolSurface:
     def test_excluded_tools_never_leak(self):
-        names = {t.name for t in exposed_tools()}
+        names = {t.name for t in exposed_tools(CONFIGURED)}
         assert not (names & EXCLUDED), f"excluded tools leaked: {names & EXCLUDED}"
 
     def test_the_retired_chat_tools_are_gone_entirely(self):
@@ -79,7 +86,7 @@ class TestToolSurface:
         They are served by `app.mcp.playback` over the command channel, not by `ToolExecutor`'s
         in-memory fields — which is what made them useless over MCP in the first place.
         """
-        names = {t.name for t in exposed_tools()}
+        names = {t.name for t in exposed_tools(CONFIGURED)}
         assert {"queue_tracks", "control_playback"} <= names
 
     def test_mcp_only_tools_are_added(self):
@@ -90,7 +97,7 @@ class TestToolSurface:
         `get_now_playing` reads a fact ADR-0030 already gave the server, which the chat client
         also never needed, for the same reason.
         """
-        assert MCP_ONLY_TOOLS <= {t.name for t in exposed_tools()}
+        assert MCP_ONLY_TOOLS <= {t.name for t in exposed_tools(CONFIGURED)}
 
     def test_exposes_everything_else(self):
         """The surface is MUSIC_TOOLS minus exclusions and withholdings, plus the MCP-only tools.
@@ -98,8 +105,8 @@ class TestToolSurface:
         Never a list. `withheld_tools()` is the installation-dependent half (ADR-0116 point 2):
         subtracted here so the rule stays "everything with a handler that this server can answer".
         """
-        names = {t.name for t in exposed_tools()}
-        expected = ({t["name"] for t in MUSIC_TOOLS} - EXCLUDED - withheld_tools()) | MCP_ONLY_TOOLS
+        names = {t.name for t in exposed_tools(CONFIGURED)}
+        expected = ({t["name"] for t in MUSIC_TOOLS} - EXCLUDED - withheld_tools(CONFIGURED)) | MCP_ONLY_TOOLS
         assert names == expected
 
     def test_schemas_come_from_music_tools_unchanged(self):
@@ -107,7 +114,7 @@ class TestToolSurface:
         by_name = {t["name"]: t for t in MUSIC_TOOLS}
         # Each of these gains exactly one MCP-only property, covered by its own test below.
         widened = {"create_playlist_from_items", "queue_tracks", "control_playback"}
-        for tool in exposed_tools():
+        for tool in exposed_tools(CONFIGURED):
             if tool.name in widened or tool.name in MCP_ONLY_TOOLS:
                 continue
             assert tool.input_schema == by_name[tool.name]["input_schema"]
@@ -120,23 +127,23 @@ class TestToolSurface:
             ("queue_tracks", "player"),
             ("control_playback", "player"),
         ):
-            tool = next(t for t in exposed_tools() if t.name == name)
+            tool = next(t for t in exposed_tools(CONFIGURED) if t.name == name)
             original = set(by_name[name]["input_schema"].get("properties", {}))
             assert set(tool.input_schema["properties"]) == original | {added}
 
     def test_create_playlist_gains_generation_prompt(self):
-        tool = next(t for t in exposed_tools() if t.name == "create_playlist_from_items")
+        tool = next(t for t in exposed_tools(CONFIGURED) if t.name == "create_playlist_from_items")
         assert "generation_prompt" in tool.input_schema["properties"]
 
     def test_adding_the_argument_does_not_mutate_music_tools(self):
         """The schema is deep-copied; the chat path must not see the MCP-only property."""
-        exposed_tools()
+        exposed_tools(CONFIGURED)
         spec = next(t for t in MUSIC_TOOLS if t["name"] == "create_playlist_from_items")
         assert "generation_prompt" not in spec["input_schema"].get("properties", {})
 
     def test_calibration_guidance_reaches_the_filter_tool(self):
         """ADR-0043 point 3. Measured: without it a model filters energy>=0.6 and gets 92.5%."""
-        tool = next(t for t in exposed_tools() if t.name == "filter_tracks")
+        tool = next(t for t in exposed_tools(CONFIGURED) if t.name == "filter_tracks")
         assert "get_feature_distribution" in tool.description
 
 
@@ -147,29 +154,25 @@ class TestSoulseekIsWithheldUntilConfigured:
     configured" after the listener has asked is the "Listening Ideas" defect (#76) again.
     """
 
-    @pytest.fixture
-    def settings(self, tmp_path, monkeypatch):
-        svc = AppSettingsService(settings_path=tmp_path / "settings.json")
-        monkeypatch.setattr("app.mcp.server.get_app_settings_service", lambda: svc)
-        # The env fallback must not leak a developer's own slskd into the test.
-        monkeypatch.setattr("app.config.settings.soulseek_url", None)
-        return svc
-
-    def test_unconfigured_server_lists_none_of_them(self, settings):
-        names = {t.name for t in exposed_tools()}
+    def test_unconfigured_server_lists_none_of_them(self):
+        names = {t.name for t in exposed_tools(UNCONFIGURED)}
         assert not (names & SOULSEEK_TOOL_NAMES)
-        assert withheld_tools() == SOULSEEK_TOOL_NAMES
+        assert withheld_tools(UNCONFIGURED) == SOULSEEK_TOOL_NAMES
 
-    def test_configured_server_lists_all_of_them(self, settings):
-        settings.update(soulseek_url="http://slskd:5030")
-        names = {t.name for t in exposed_tools()}
+    def test_configured_server_lists_all_of_them(self):
+        names = {t.name for t in exposed_tools(CONFIGURED)}
         assert SOULSEEK_TOOL_NAMES <= names
-        assert withheld_tools() == frozenset()
+        assert withheld_tools(CONFIGURED) == frozenset()
 
-    def test_the_url_alone_is_enough(self, settings):
+    def test_the_url_alone_is_enough(self):
         """slskd can run with no API key at all; requiring one would hide a working setup."""
-        settings.update(soulseek_url="http://slskd:5030", soulseek_api_key=None)
-        assert withheld_tools() == frozenset()
+        from app.services.soulseek import SoulseekGateway
+        from tests.test_soulseek import FakeSoulseekConfiguration
+
+        keyless = Services(
+            soulseek=SoulseekGateway(FakeSoulseekConfiguration("http://slskd:5030", api_key=None))
+        )
+        assert withheld_tools(keyless) == frozenset()
 
     def test_every_soulseek_tool_has_a_handler(self):
         """Withheld is not the same as unimplemented — configure it and every one must dispatch."""
@@ -179,14 +182,15 @@ class TestSoulseekIsWithheldUntilConfigured:
             assert hasattr(ToolExecutor, f"_{name}"), name
 
     @pytest.mark.asyncio
-    async def test_a_stale_host_is_told_why(self, settings):
+    async def test_a_stale_host_is_told_why(self):
         """A listing from before slskd was unconfigured gets the reason, not 'unknown tool'."""
         import mcp.types as types
 
         from app.mcp.server import on_call_tool
 
         result = await on_call_tool(
-            _ctx({}), types.CallToolRequestParams(name="search_soulseek", arguments={"query": "x"})
+            _ctx({}, UNCONFIGURED),
+            types.CallToolRequestParams(name="search_soulseek", arguments={"query": "x"}),
         )
         assert result.is_error
         text = result.content[0].text
@@ -257,7 +261,7 @@ class TestMountedEndpoint:
 
         from app.mcp.server import MCPDispatch, build_asgi_app
 
-        mcp_app = build_asgi_app()
+        mcp_app = build_asgi_app(CONFIGURED)
         host = FastAPI()
         host.add_middleware(MCPDispatch, mcp_app=mcp_app)
 

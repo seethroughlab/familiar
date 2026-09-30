@@ -107,35 +107,41 @@ describe('server token', () => {
 
 describe('a token 401 is not a profile 401', () => {
   /**
-   * Note on what protects what. The "don't clear the profile" property holds *by construction* —
-   * the profile branch matches on `re-register` / `Invalid profile`, and the token 401's detail
-   * contains neither — not because of the early return in the interceptor. Removing that return
-   * leaves this suite green, which was checked. So the assertion below is about the behaviour the
-   * code actually adds: announcing that a token is needed. The profile case is asserted alongside
-   * it to pin the string coupling, since the two details are matched by substring and a reworded
-   * server message would silently reroute one into the other.
+   * The envelopes below are the ones the server sends, key for key (ADR-0129 point 6). The
+   * previous version of this suite faked `detail` sentences and matched on them — and the real
+   * profile 401 carries its sentence in `message` with no `detail` at all, so the suite was green
+   * while the profile branch had never once fired in a browser. `code` is the contract now; the
+   * prose is deliberately absent from these fixtures so a test cannot pass by matching it.
    */
+  type Rejected = { rejected?: (e: unknown) => Promise<unknown> };
+  const rejectedHandlers = () =>
+    (api.interceptors.response as unknown as { handlers: Rejected[] }).handlers;
+
+  const tokenError = {
+    response: {
+      status: 401,
+      data: { error: true, status_code: 401, message: '…', code: 'SERVER_TOKEN_REQUIRED' },
+    },
+  };
+  const profileError = {
+    response: {
+      status: 401,
+      data: { error: true, status_code: 401, message: '…', code: 'INVALID_PROFILE' },
+    },
+  };
+
+  async function reject(error: unknown) {
+    for (const h of rejectedHandlers()) {
+      if (h?.rejected) {
+        await h.rejected(error).catch(() => {});
+      }
+    }
+  }
+
   it('announces that a token is required', async () => {
     const onNeeded = vi.fn();
     window.addEventListener('server-token-required', onNeeded);
-
-    const handlers = (api.interceptors.response as unknown as {
-      handlers: { rejected: (e: unknown) => unknown }[];
-    }).handlers;
-
-    const tokenError = {
-      response: {
-        status: 401,
-        data: { detail: 'Send the server token in the X-Familiar-Token header.' },
-      },
-    };
-
-    for (const h of handlers) {
-      if (h?.rejected) {
-        await h.rejected(tokenError).catch(() => {});
-      }
-    }
-
+    await reject(tokenError);
     window.removeEventListener('server-token-required', onNeeded);
     expect(onNeeded).toHaveBeenCalled();
   });
@@ -147,52 +153,40 @@ describe('a token 401 is not a profile 401', () => {
       getSelectedProfileId: async () => 'profile-1',
       clearSelectedProfile,
     });
-
-    const handlers = (api.interceptors.response as unknown as {
-      handlers: { rejected: (e: unknown) => unknown }[];
-    }).handlers;
-
-    const tokenError = {
-      response: {
-        status: 401,
-        data: { detail: 'Send the server token in the X-Familiar-Token header.' },
-      },
-    };
-
-    for (const h of handlers) {
-      if (h?.rejected) {
-        await h.rejected(tokenError).catch(() => {});
-      }
-    }
-
+    await reject(tokenError);
     expect(clearSelectedProfile).not.toHaveBeenCalled();
   });
 
-  it('still clears the profile when the profile is what failed', async () => {
+  it('clears the profile when the profile is what failed', async () => {
     const clearSelectedProfile = vi.fn(async () => {});
     const { registerProfileProvider } = await import('../base');
     registerProfileProvider({
       getSelectedProfileId: async () => 'profile-1',
       clearSelectedProfile,
     });
+    await reject(profileError);
+    expect(clearSelectedProfile).toHaveBeenCalled();
+  });
 
-    const handlers = (api.interceptors.response as unknown as {
-      handlers: { rejected: (e: unknown) => unknown }[];
-    }).handlers;
-
-    const profileError = {
+  it('a 401 without a code does neither — prose is not a signal', async () => {
+    const clearSelectedProfile = vi.fn(async () => {});
+    const onNeeded = vi.fn();
+    const { registerProfileProvider } = await import('../base');
+    registerProfileProvider({ getSelectedProfileId: async () => 'p', clearSelectedProfile });
+    window.addEventListener('server-token-required', onNeeded);
+    await reject({
       response: {
         status: 401,
-        data: { detail: 'Invalid profile ID - please re-register' },
+        data: {
+          error: true,
+          status_code: 401,
+          message: 'Invalid profile ID - please re-register',
+          detail: 'Send the server token in the X-Familiar-Token header.',
+        },
       },
-    };
-
-    for (const h of handlers) {
-      if (h?.rejected) {
-        await h.rejected(profileError).catch(() => {});
-      }
-    }
-
-    expect(clearSelectedProfile).toHaveBeenCalled();
+    });
+    window.removeEventListener('server-token-required', onNeeded);
+    expect(clearSelectedProfile).not.toHaveBeenCalled();
+    expect(onNeeded).not.toHaveBeenCalled();
   });
 });

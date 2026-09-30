@@ -1,5 +1,8 @@
 packages:
   - 'packages/*'
+  # The four first-party visualizers and the SDK they share (ADR-0125 point 6). Nested one level,
+  # so `packages/*` alone never saw them: each had its own lockfile and a standalone install.
+  - 'packages/visualizers/*'
 
 onlyBuiltDependencies:
   - esbuild

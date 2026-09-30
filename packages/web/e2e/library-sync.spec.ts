@@ -16,10 +16,10 @@ test.describe('Library Sync', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await ensureProfile(page);
+    // The app opens on the Overview now (ADR-0126 point 3); the sync panel is Library → Sync.
+    await navigateToDestination(page, 'Library');
   });
 
-  // Scan and sync moved off Settings and onto the Library destination, which is where the app now
-  // opens (ADR-0058 point 2). `page.goto('/')` in beforeEach already lands there.
   test('Library sync is visible on the Library destination', async ({ page }) => {
     const syncSection = page.getByText('Library Sync');
     await expect(syncSection).toBeVisible({ timeout: 10000 });
@@ -76,7 +76,8 @@ test.describe('Library Sync', () => {
     //
     // The assertion below stays deliberately tolerant: it accepts a populated library or an
     // explicitly empty one, so a *sync* test does not fail over how content is counted.
-    await navigateToDestination(page, 'Library');
+    // The totals are the Overview's secondary half (ADR-0126 point 3); Library → Sync shows only the sync.
+    await navigateToDestination(page, 'Overview');
     await page.locator('text=/\\d+\\s*track/i').first().waitFor({ timeout: 10000 }).catch(() => {});
 
     // Verify the view rendered something rather than an error or a blank column

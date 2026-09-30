@@ -8,6 +8,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.container import Services
 from app.db.models import Track
 
 from .handlers import (
@@ -41,10 +42,14 @@ class ToolExecutor(
         db: AsyncSession,
         profile_id: UUID | None = None,
         user_message: str = "",
+        services: Services | None = None,
     ) -> None:
         self.db = db
         self.profile_id = profile_id
         self.user_message = user_message
+        # The MCP server passes the application's container (ADR-0130). Constructed without one,
+        # the executor behaves as a server with no integrations configured.
+        self.services = services if services is not None else Services.unconfigured()
         self._queued_tracks: list[dict[str, Any]] = []
         self._clear_queue: bool = True  # Default to clearing queue for new requests
         self._playback_action: str | None = None

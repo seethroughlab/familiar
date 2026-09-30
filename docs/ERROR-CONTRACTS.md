@@ -14,7 +14,8 @@ All REST error responses use a consistent envelope produced by `create_error_res
   "status_code": 400,
   "message": "Human-readable message",
   "detail": "Optional technical detail (validation errors, debug info)",
-  "request_id": "Optional request trace ID"
+  "request_id": "Optional request trace ID",
+  "code": "INVALID_PROFILE"
 }
 ```
 
@@ -25,6 +26,22 @@ All REST error responses use a consistent envelope produced by `create_error_res
 | `message` | `string` | Yes | User-friendly error message safe for display |
 | `detail` | `string` | No | Technical detail — validation errors, debug info. Omitted in production for 500s |
 | `request_id` | `string` | No | Request trace ID from `X-Request-ID` header |
+| `code` | `ErrorCode` | No | Stable machine-readable name, on the errors a client *acts on* (ADR-0129 point 6). Omitted otherwise |
+
+**A client switches on `code`, never on `message` or `detail`.** Those are for people and may be
+reworded without notice. The web client used to search the prose — and searched the wrong key: the
+profile 401 goes through the `HTTPException` handler, which puts its sentence in `message` and omits
+`detail`, so the branch that cleared a dead profile never ran. `code` is set on `FamiliarError`
+subclasses that need it (`app/api/exceptions.py`, `ErrorCode`) and by hand in `TokenAuthMiddleware`,
+which runs outside the router. Add a member when a client needs to *distinguish* a case, not per
+exception class.
+
+| Code | Status | Raised by | What a client does |
+|------|--------|-----------|--------------------|
+| `SERVER_TOKEN_REQUIRED` | 401 | `TokenAuthMiddleware` | Prompt for the server token; do **not** clear the profile |
+| `INVALID_PROFILE` | 401 | `InvalidProfileError` (`deps.py`) | Clear the selected profile and return to the selector |
+| `SCAN_IN_PROGRESS` | 409 | `ScanInProgressError` | Wait; do not start another |
+| `ANALYSIS_IN_PROGRESS` | 409 | `AnalysisInProgressError` | Wait; do not start another |
 
 ---
 

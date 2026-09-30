@@ -5,6 +5,7 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, Field, PlainSerializer, WithJsonSchema
 
+from app.api.exceptions import ErrorCode
 from app.utils.time import to_rfc3339
 
 # A timestamp that serialises as RFC 3339 UTC rather than a bare naive ISO string.
@@ -49,6 +50,13 @@ class ErrorEnvelope(BaseModel):
     request_id: str | None = Field(
         None,
         description="Correlates with the x-request-id response header and the server log.",
+    )
+    code: ErrorCode | None = Field(
+        None,
+        description=(
+            "Stable machine-readable name, present on the errors a client acts on (ADR-0129 "
+            "point 6). Switch on this, never on `message`."
+        ),
     )
 
     model_config = {

@@ -95,6 +95,21 @@ jobs:
             exit 1
           fi
 
+  # Familiar Server's decisions (ADR-0136): paths, launch specs, restart backoff, etiquette,
+  # debounce, pairing link. The assembled app needs signing identities and a payload build, so
+  # `desktop/macos/scripts/integration-check.sh` runs locally rather than here.
+  familiar-server-core:
+    name: Familiar Server (core)
+    runs-on: [self-hosted, macOS]
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: desktop/macos
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test
+        run: swift build && swift test
+
   macos-compose-integration:
     name: macOS Compose Integration
     # Pull requests only, for the same NAS-contention reason as docker-build.
@@ -297,6 +312,30 @@ jobs:
       - name: Lint profile contracts
         run: uv run python scripts/lint_profile_contracts.py
 
+      # ADR-0130 point 9: operations and the container are HTTP-free, services do not reach into
+      # routes, nothing imports the assembled app. Pure AST; needs no database.
+      - name: Lint import boundaries
+        run: uv run python scripts/lint_boundaries.py
+
+      # ADR-0132 point 2: server state derives from settings.data_dir, never the working
+      # directory, so a server started outside /app finds it. Pure AST; needs no database.
+      - name: Lint data paths
+        run: uv run python scripts/lint_data_paths.py
+
+      # ADR-0127 points 6 and 9: the current-state docs name only things that exist, and the ADR
+      # index is regenerated from the records. Pure Python over the tree; no database.
+      - name: Docs name only what exists
+        working-directory: .
+        run: |
+          python3 scripts/check_docs.py
+          python3 scripts/adr_index.py --check
+
+      # Both Dockerfiles copy workspace packages by name; a package missing from one fails that
+      # image's build only when that image is next built — for the demo, silently on every push.
+      - name: Dockerfiles copy every workspace package the web build reaches
+        working-directory: .
+        run: python3 scripts/check_dockerfiles.py
+
       # Imports app.main, so it needs `uv sync --extra dev` above — it cannot move to
       # the migration-lint job, which deliberately runs stdlib-only scripts. This job
       # also runs on a bare checkout with no backend/static/, which matters: a built
@@ -486,6 +525,58 @@ jobs:
             exit 1
           fi
 
+  # ADR-0133 point 6: the same core selection with no Redis at all, which is how a server outside
+  # Docker runs. Every store operation then goes to the Postgres tables. No coverage and no skip
+  # budget: the Redis half of tests/test_kv_store.py skips here by design, and core already
+  # measures coverage.
+  backend-test-no-redis:
+    name: Backend Test (Core, no Redis)
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
+    timeout-minutes: 10
+    env:
+      UV_HTTP_TIMEOUT: '120'
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: familiar
+          POSTGRES_PASSWORD: familiar
+          POSTGRES_DB: familiar_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+          enable-cache: false
+
+      - name: Set up Python
+        run: uv python install "$UV_PYTHON"
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Apply migrations
+        env:
+          DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar_test
+        run: uv run python -m alembic upgrade head
+
+      - name: Run tests without REDIS_URL
+        env:
+          TEST_DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar_test
+        run: uv run pytest --ignore=tests/test_contract_error_shapes.py --ignore=tests/test_contract_auth_matrix.py --ignore=tests/test_contract_envelope_parity.py --ignore=tests/test_contract_happy_path.py --ignore=tests/test_migrations.py -k "not integration" -q --tb=short --no-cov
+
   backend-test-integration:
     name: Backend Test (Integration)
     runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
@@ -624,6 +715,15 @@ jobs:
       - name: Dependency Boundary Checks
         run: pnpm --filter @familiar/frontend run check:boundaries
 
+      # ADR-0129 point 2: the web client is generated from backend/openapi.json and committed.
+      # Regenerate and fail on a diff, so a contract change, its lock and its generated clients
+      # are one reviewable change. Pure file transformation; needs no backend.
+      - name: Check generated API client is current
+        run: pnpm --filter @familiar/api-client run check
+
+      - name: Type-check generated API client
+        run: pnpm --filter @familiar/api-client run typecheck
+
   frontend-test:
     name: Frontend Test
     # **Linux, not bare `self-hosted`.** These three are Node jobs with no reason to want macOS, and
@@ -660,6 +760,15 @@ jobs:
 
       - name: Run unit tests
         run: pnpm --filter @familiar/frontend test
+
+      # ADR-0125 point 4: the bridge against the recorded protocol, and every visualizer type-checked.
+      # The visualizers had never been through `tsc` — Vite strips types without looking, which is
+      # how an import of a type nothing exported shipped for months.
+      - name: Visualizer SDK tests and type checks
+        run: |
+          pnpm --filter @familiar/visualizer-sdk test
+          pnpm --filter @familiar/visualizer-sdk typecheck
+          pnpm -r --filter './packages/visualizers/*' typecheck
 
   frontend-build:
     name: Frontend Build
@@ -698,6 +807,11 @@ jobs:
       - name: Build
         run: pnpm --filter @familiar/web run build
 
+      # ADR-0125: the four first-party visualizer documents build from the workspace, each into
+      # its own dist/. They are vendored into familiar-apple by hand; this proves they still build.
+      - name: Build visualizer documents
+        run: pnpm --filter @familiar/visualizers build
+
       - name: Bundle Budget Checks
         env:
           # Temporary bootstrap hard ceiling while Phase 6 split work reduces entry size.
@@ -735,7 +849,7 @@ jobs:
     # jobs above; macOS Compose Integration exercises the image as well.
     # A failed Docker Build surfaces in the run but does not mark CI red.
     continue-on-error: true
-    needs: [backend-lint, backend-test-contract, backend-test-core, backend-test-integration, frontend-lint, frontend-test]
+    needs: [backend-lint, backend-test-contract, backend-test-core, backend-test-no-redis, backend-test-integration, frontend-lint, frontend-test]
     steps:
       - uses: actions/checkout@v4
 
@@ -913,6 +1027,10 @@ jobs:
           DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar
           REDIS_URL: redis://localhost:6379/0
           MUSIC_LIBRARY_PATH: ${{ github.workspace }}/backend/tests/fixtures/audio
+          # The fixtures are a checkout, so writable, and the server refuses a writable library
+          # (ADR-0136). Not chmod: read-only directories on a self-hosted runner break the next
+          # checkout's cleanup.
+          FAMILIAR_ALLOW_WRITABLE_LIBRARY: "1"
         run: |
           uv run uvicorn app.main:app --host 0.0.0.0 --port 4401 &
           sleep 10
@@ -929,6 +1047,13 @@ jobs:
           LASTFM_API_SECRET: ${{ secrets.LASTFM_API_SECRET }}
         # Exclude screenshot specs - they're for README docs, not CI testing
         run: npx playwright test --grep-invert="screenshot"
+
+      # ADR-0125 point 4: each built visualizer document handshakes, survives the recorded events
+      # (malformed ones included) and keeps rendering — in a sandboxed frame, served from dist/.
+      - name: Visualizer document contract
+        run: |
+          pnpm --filter @familiar/visualizers build
+          pnpm --filter @familiar/visualizers test:documents
 
       - name: Check for flaky E2E tests (retry-only passes)
         if: always()

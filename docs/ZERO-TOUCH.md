@@ -47,7 +47,7 @@ This requires removing all library-mutating features, converting a few of them t
   - users place files into an external incoming folder themselves
   - that folder is configured as one of Familiar’s normal read-only library paths
   - scanner discovers those files like any other path
-- All newly discovered files enter `PENDING_REVIEW` status and must be approved before appearing in the main library.
+- All newly discovered files enter `PENDING_REVIEW` status and must be approved before appearing in the main library, **except during a library's first import**, when there is nothing to review them against and they arrive active (`initial_import_complete` in app settings; files under `Inbox/` are reviewed even then). Added 2026-09-30: without it, a first-time user saw an empty library.
 - The new review dialog keeps the helpful parts of today’s import preview:
   - metadata detection
   - per-track metadata edits

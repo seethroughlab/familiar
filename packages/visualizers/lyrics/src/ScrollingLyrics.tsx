@@ -15,9 +15,7 @@
  * Falls back to the track title/artist when a song has no synced lyrics.
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { type VisualizerProps } from './types';
-import { useAudioAnalyser, getAudioData } from './familiar';
-import { useArtworkPalette } from './useArtworkPalette';
+import { getAudioData, useArtworkPalette, useAudioAnalyser, type VisualizerProps } from '@familiar/visualizer-sdk';
 import { useLyricTiming } from './useLyricTiming';
 import { sampleVisualizerBinValue } from './analysisMetrics';
 import { LyricWordField } from './LyricWordField';

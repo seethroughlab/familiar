@@ -21,11 +21,17 @@ ENV NPM_CONFIG_FETCH_RETRIES=5 \
     NPM_CONFIG_FETCH_TIMEOUT=600000
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+# Every workspace package the web build reaches, by name, in both layers — this file copies
+# packages individually, so a new one is absent until it is named here *and* in
+# `docker/Dockerfile`. `api-client` (ADR-0129) was missing from this one for a day while the other
+# was fixed, and the demo served the previous build on every push.
+COPY packages/api-client/package.json packages/api-client/
 COPY packages/frontend/package.json packages/frontend/
 COPY packages/web/package.json packages/web/
 
 RUN pnpm install --frozen-lockfile --filter @familiar/web...
 
+COPY packages/api-client/ packages/api-client/
 COPY packages/frontend/ packages/frontend/
 COPY packages/web/ packages/web/
 RUN pnpm --filter @familiar/web run build

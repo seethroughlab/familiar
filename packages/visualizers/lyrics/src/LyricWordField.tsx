@@ -14,11 +14,7 @@ import { useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
 import * as THREE from 'three';
-import type { VisualizerProps } from './types';
-import { useAudioAnalyser, getAudioData } from './familiar';
-import { useArtworkPalette } from './useArtworkPalette';
-import { AudioReactiveEffects } from './AudioReactiveEffects';
-import { FrameScheduler } from './FrameScheduler';
+import { AudioReactiveEffects, FrameScheduler, getAudioData, useArtworkPalette, useAudioAnalyser, type VisualizerProps } from '@familiar/visualizer-sdk';
 const isMobile = () => window.matchMedia('(max-width: 768px)').matches;
 
 const mobile = isMobile();

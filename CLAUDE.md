@@ -285,33 +285,59 @@ flight), not `DownloadManager.states`. A drained queue ends it "Finished" for fi
 The stop button is a `LiveActivityIntent` reaching `DownloadManager.cancelAll()` through a hook
 `AppDelegate` installs on every launch — the first control that discards a whole queue.
 
-**`ADR-0122`–`ADR-0130` are `proposed` (2026-09-17), except `0128`, accepted and built the same day.** They are about
+**`ADR-0122`–`ADR-0130` are all accepted (2026-09-17), and every one has at least a first slice built (the table says which).** They are about
 structure rather than features: how the Apple client, the backend, the web client and the docs are put
-together. Two of them exist because a routine command is dangerous — `uv run pytest tests/ -x -q` under Running Tests below
-deletes every row from eighteen tables in whatever database `DATABASE_URL` names (`0128`), and CI's
-disposable database is itself called `familiar`, so the name proves nothing today. Execution order, which
+together. Two of them exist because a routine command was dangerous — until `0128` shipped, `uv run pytest`
+deleted every row from eighteen tables in whatever database `DATABASE_URL` named, and CI's
+disposable database was itself called `familiar`, so the name proved nothing. Execution order, which
 again differs from the numbering:
 
 | # | ADR | Why here |
 |---|---|---|
 | 1 | `0128` | **Built 2026-09-17.** `TEST_DATABASE_URL`, a `_test` suffix with no second marker, CI renamed to `familiar_test`. Its guard runs in the rootdir `conftest.py` until `0130` gives it a factory. |
-| 2 | `0130` | `create_app(settings, services)`; the first domain moved is **Soulseek**, chosen because it touches every boundary the record names and has the fewest callers. Library sync and analysis go last. |
-| 3 | `0129` | `@hey-api/openapi-ts`, pinned; the first slice is the one whose interceptor greps English (`base.ts:197`). Before `0126` so the new screens consume feature adapters, not `api/*.ts`. |
-| 4 | `0126` | Overview / Library / Settings. **Gated**: a mocked Overview is reviewed against the idle NAS and a failing server, desktop and 400px, before the record is accepted. Old router paths redirect — this is not an `0079` alias. |
-| 5 | `0125` | `@familiar/visualizer-sdk`, build-time only. Independent of everything above; the dependency-free path is already proven by `packages/visualizers/examples/`. |
-| 6 | `0127` | `docs/START-HERE.md`, `make doctor`, `make check`, and a CI check that cited paths exist. Last so the traced slice goes through the generated web client and the factory. Its follow-up reconciles this file with `AGENTS.md`. |
-| — | `0122` → `0123` → `0124` | The Apple track, in `familiar-apple`, in parallel with all of the above. `FamiliarAppCore` is the first boundary, because `0123`'s `FamiliarApplication` and `0124`'s repositories both live there. |
+| 2 | `0130` | **Soulseek slice built 2026-09-18.** `create_app(settings, services)` exists; `app/container.py` holds one gateway; the route, MCP executor and background poll are handed it. The pattern for the next domain is the ADR's Implementation block. Library sync and analysis go last; `scanner.py:126` still reads env at import. |
+| 3 | `0129` | **First slice built 2026-09-18.** `packages/api-client` is generated from `backend/openapi.json` by `@hey-api/openapi-ts` 0.99.0 and checked in CI; `base.ts` installs one transport on both the wrappers' and the generated client's instances; the interceptor switches on the envelope's `code` — the prose match it replaced had never fired for a dead profile, because the sentence was in `message`, not `detail`. Soulseek status is the first feature on the generated path. Remaining features migrate one at a time. |
+| 4 | `0126` | **Built 2026-09-19.** Overview / Library / Analysis / Server, section rails with routes, ancestor matching in one `isUnder`, `/tools/*` redirects. A provider is one card (`ProviderCards.tsx`); the pipeline is one destination; the Overview's rules are pure (`screens/overview/attention.ts`) and read the backlog from the worker phase queues. Its gate was a mock; the built page was then checked against the NAS and the demo. Not done: pending review (no screen), a persisted duplicates count. |
+| 5 | `0125` | **Built 2026-09-19.** `packages/visualizer-sdk`; the four visualizers are workspace members at last (they never were — `packages/*` does not recurse) building to their own `dist/`, vendored into `familiar-apple` by `scripts/build-visualizers.sh`. Bridge tests on recorded events; `packages/visualizers/e2e` runs every built document in a sandboxed frame. |
+| 6 | `0127` | **Built 2026-09-19.** `docs/START-HERE.md` (map, the Soulseek-status slice traced through eleven current files, five golden paths, the security posture), `make doctor`, `make check`, `docs/ADR-INDEX.md` (generated), `docs/HEALTH.md` (the debt register that replaced the archived backlog), and `scripts/check_docs.py` in CI — which found six wrong claims in START-HERE's own first draft. Follow-up: one shared source for this file and `AGENTS.md`. |
+| — | `0122` → `0123` → `0124` | **Built 2026-09-19** (`familiar-apple` #195, #196, #197). `FamiliarAppCore` is the one target that knows both `FamiliarKit` and `FamiliarAPI`; `FamiliarApplication` there is the process — `start()` and `bindConfiguration()`, both idempotent and measured; `RepositoryError` is the one vocabulary a server-backed capability fails with, mapped once in `GeneratedResponses.swift`, casting the first slice. Each ADR's Implementation block has what moved and what it found. After a `familiar` schema change, every `familiar-apple` branch fails CI until `scripts/vendor-schema.sh --fetch` is run there. |
 
 Two things the numbers in those records settle that the text would have let you assume otherwise: the
 four first-party visualizers really are byte-identical in six files (one md5 each, 613 lines per package),
 and the fifteen Apple tests that read Swift as text do so through two helpers, `AppSource.swift` and
 `EngineSource.swift`, so they are found by searching for those rather than for the file paths.
 
+**`ADR-0131`–`ADR-0138` make the server its own app** (`0131`–`0134`, `0136` and `0138` accepted and built — `0134` in #345 and familiar-apple #198, `0136`/`0138` in #346–#350 — `0135` and `0137` `proposed`, 2026-09-29). `0131` frames it:
+Familiar is a server and the clients that play from it, installed and paired separately. The server
+comes as **Familiar Server** (a Developer ID menu-bar Mac app, source at `desktop/macos/` in this repo)
+or as Docker on Linux/NAS, and both are first-class. The Mac player stays in the App Store and carries
+no server. **Windows is shelved until the Mac ecosystem is done** (0131 point 4 makes that checkable).
+Two earlier drafts, a server inside the player, were reversed; 0131's Context says why, so do not
+rebuild them. Execution order differs from the numbering:
+
+| # | ADR | Why here |
+|---|---|---|
+| 1 | `0131` | Framing only. |
+| 2 | `0132` → `0133` | One ordinary process (`FAMILIAR_DATA_DIR`, `python -m app.serve`) against one database: Postgres stays (SQLite was counted and rejected), and Redis gets a Postgres implementation behind `ResilientRedisClient`'s twelve operations. |
+| 3 | `0134` | Pairing: the Apple client finally sends `X-Familiar-Token`, `_familiar._tcp` over zeroconf, one `familiar://pair` link as a QR code or opened on the same Mac. Nothing listens beyond loopback until a phone is paired. Clears ADR-0045 point 5's larger blocker. |
+| 4 | `0136` spike | Does Postgres run inside Familiar Server's sandbox? The answer shapes 0136 point 4. |
+| 5 | `0135` | Familiar Server's notarized `.dmg` and Sparkle appcast, built by `release.yml` from the image's tag. |
+| 6 | `0136` with `0138` | The menu-bar login-item app (read-only folder via the sandbox, which also finally enforces zero-touch), and the etiquette it keeps: pause on battery/heat, background QoS, never hold the Mac awake. |
+| 7 | `0137` | The phone keeps a copy of its library: favourites kept by default, kept playlists, a storage budget, a defined "away" state. |
+
+**`0138` found that a library sync starts every two hours** (`CronTrigger(hour="*/2")`), so "nothing is
+scheduled" below and in `VERSIONING.md` is true of analysis only narrowly.
+
 ## Key Directories
 
 ```
 packages/
+├── api-client/            # Generated from backend/openapi.json (ADR-0129); never edited by hand.
+│   └── src/generated/     # Only packages/frontend/src/api/ may import it.
 ├── frontend/              # Shared React code (components, hooks, stores, types)
+├── visualizer-sdk/        # The bridge and helpers the first-party visualizers share (ADR-0125)
+├── visualizers/           # The four first-party visualizer sources, each building to its own dist/;
+│                          # vendored into familiar-apple's Visualizers.bundle by hand (ADR-0092)
 │   └── src/
 │       ├── components/    # React components
 │       ├── hooks/         # Custom hooks (useFavorites, useAutoDownload, etc.)
@@ -327,6 +353,11 @@ packages/
     └── vite.config.ts     # PWA plugin, dev proxy, manual chunks
                            # The Apple clients live in the familiar-apple repo (ADR-0001);
                            # packages/ios, the Capacitor app, was deleted 2026-08-11.
+desktop/
+└── macos/                 # Familiar Server, the Mac form of the server (ADR-0136): a Swift package
+                           # (menu-bar app, Postgres launch agent, FamiliarServerCore) assembled into
+                           # an .app by scripts/build-payload.sh + build-app.sh; integration-check.sh
+                           # runs the real bundle in the real sandbox.
 backend/
 ├── app/
 │   ├── api/routes/        # FastAPI endpoints (~29 route files)
@@ -369,6 +400,8 @@ docs/
 | Smart playlists UI | `packages/frontend/src/components/SmartPlaylists/` |
 | Settings | `packages/frontend/src/components/Settings/` |
 | Docker setup | `docker/Dockerfile`, `docker/docker-compose.prod.yml`, `docker/start.sh` |
+| Where to start, what is wrong, the decisions | `docs/START-HERE.md`, `docs/HEALTH.md`, `docs/ADR-INDEX.md` (generated — `make adr-index`) |
+| Is this machine set up? | `make doctor`; `make check` before a PR |
 | CLAP smoke test | `backend/scripts/smoke_test_clap.py` |
 
 ## Frontend Architecture
@@ -413,6 +446,14 @@ that the native clients live in `familiar-apple` and do not run this bundle.
 1. Create route in `backend/app/api/routes/`
 2. Register router in `main.py`
 3. Use dependency injection from `deps.py` for DB/auth
+4. `cd backend && make openapi && make contract-lock`, then `pnpm generate:api` from the root — the
+   web client is generated from `backend/openapi.json` (ADR-0129) and CI fails if either is stale.
+   Wrap the generated operation in a feature adapter under `packages/frontend/src/api/`; nothing
+   under `components/`, `panels/`, `screens/` or `app/` may import `@familiar/api-client`
+   (`check:boundaries` enforces it).
+5. If a client must *act* on a new error — not just show it — give the exception an `ErrorCode`
+   (`app/api/exceptions.py`) and document it in `docs/ERROR-CONTRACTS.md`. Clients switch on
+   `code`, never on `message`.
 
 ### Add a database migration
 1. Create file in `backend/migrations/versions/` named `YYYYMMDD_slug.py`
@@ -428,15 +469,18 @@ def upgrade():
 4. Add corresponding field to the SQLAlchemy model in the matching `backend/app/db/models/*.py`
 5. `deploy-dev.sh` auto-runs `alembic upgrade head` on deploy
 
-### Add a new settings section
-1. Add component in `packages/frontend/src/components/Settings/`
-2. Export from `Settings/index.tsx`
-3. Add to settings tabs in main Settings component
+### Add a section to a destination (ADR-0126)
+1. Decide the unit it belongs to: the collection → Library, the pipeline → Analysis, the
+   installation → Server. A provider is one card under Server → Providers, never a new section.
+2. Add the section to `SECTIONS` in `packages/frontend/src/app/routes.ts` — its path is its route.
+3. Mount it in `app/App.tsx` under that destination's `<SectionLayout>`, with an **absolute** path
+   (`navigationIntegrity.test.ts` reads `path="/…"` from that file and checks every rail link).
+4. The component uses `SectionPage` from `screens/AdminPage.tsx`; the layout owns the `<h2>`.
 
 ### Regenerate README screenshots
 
-**The web app's screenshots are of an administration tool** — the three destinations and Settings
-(ADR-0058 point 2). The listening screenshots are `mac-*.png`, taken from the Mac app by hand;
+**The web app's screenshots are of an administration tool** — the four destinations
+(ADR-0126 point 1). The listening screenshots are `mac-*.png`, taken from the Mac app by hand;
 there is no script for those, because the browser cannot render them.
 
 1. Backend with a library. Against the demo server: `familiar-demo.fly.dev` (~32 tracks).
@@ -453,7 +497,8 @@ device widths, linked from nowhere and used for spotting layout breakage).
 To add one:
 1. Add a test to `screenshots.spec.ts` whose title contains `screenshot` — the CI exclusion and the
    run command both match on that word.
-2. Navigate with `navigateToDestination()` (Library/Tools/Server) or `navigateToTab()`
+2. Navigate with `navigateToDestination()` (Overview/Library/Analysis/Server), then
+   `navigateToSection()` for a rail entry, or `navigateToTab()`
    (Library/Playlists/Settings). There is no `selectBrowser()`; the library browsers were unmounted
    by ADR-0050 and ADR-0057.
 3. Use the file's `takeScreenshot()`, which waits for spinners and "Loading…" to clear. **Do not use
@@ -477,10 +522,17 @@ Only infrastructure settings require environment variables:
 ```bash
 # Required (from docker-compose or shell)
 DATABASE_URL=postgresql+asyncpg://familiar:familiar@localhost:5432/familiar
+
+# Optional since ADR-0133: set, progress/locks/caches live in Redis (every compose file sets it);
+# unset, they live in Postgres's kv_store/kv_list tables. Same behaviour either way.
 REDIS_URL=redis://localhost:6379/0
 
 # Optional (for Docker volume mounting only - actual paths configured in UI)
 MUSIC_LIBRARY_PATH=/data/music
+
+# Optional: where the server keeps settings.json, caches and profiles (ADR-0132).
+# Default `data`, relative to the working directory: /app/data in the image.
+FAMILIAR_DATA_DIR=/path/to/state
 ```
 
 ## Running Locally
@@ -488,6 +540,9 @@ MUSIC_LIBRARY_PATH=/data/music
 ```bash
 # Backend (from backend/)
 DATABASE_URL="..." REDIS_URL="..." uv run uvicorn app.main:app --reload --port 4400
+
+# Or as a server outside Docker runs it (ADR-0132/0133): migrate, then serve on 127.0.0.1, no Redis
+DATABASE_URL="..." FAMILIAR_DATA_DIR=... uv run python -m app.serve [--host] [--port]
 
 # Frontend (from packages/web/)
 pnpm dev
@@ -529,6 +584,8 @@ make deploy-dev  # Build + rsync to NAS + restart (~16-30s)
 # Backend (from backend/)
 make test                    # creates + migrates familiar_test, then pytest (ADR-0128)
 make test-db                 # just the database; then `uv run pytest -x -q` works, TEST_DATABASE_URL exported
+make test-services test      # no compose stack? throwaway Postgres+Redis on 5434/6380 instead; ARGS="-x" passes through
+make test-services-down      # remove those containers
 # A bare `uv run pytest` without TEST_DATABASE_URL refuses to run — it would empty DATABASE_URL's database.
 
 # Frontend unit tests (from packages/frontend/)

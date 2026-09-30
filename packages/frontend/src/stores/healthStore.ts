@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { healthApi, type SystemHealth, type ServiceStatus } from '../api';
+import { systemApi, type SystemHealth, type ServiceStatus } from '../api';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('Health');
@@ -39,7 +39,7 @@ export const useHealthStore = create<HealthState>((set, get) => ({
 
   checkHealth: async () => {
     try {
-      const health: SystemHealth = await healthApi.getSystemHealth();
+      const health: SystemHealth = await systemApi.health();
       const prevWorkersHealthy = get().workersHealthy;
       const workerAlertDismissed = get().workerAlertDismissed;
 

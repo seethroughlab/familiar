@@ -160,13 +160,31 @@ class AppSettings(BaseModel):
     # before the clients can present one. See `app/api/auth.py` for why it is stored in the clear.
     access_token: str | None = None
 
+    # This server's identity (ADR-0134 point 4). A client remembers a server by `server_id`, not by
+    # its address, which changes with DHCP; minted on first use by `app/services/server_identity.py`
+    # and never changed after. `server_name` is what a phone shows in its list of servers; unset,
+    # the host name is used.
+    server_id: str | None = None
+    server_name: str | None = None
+
+    # Whether this library's first import has finished. Until it has, newly found files are
+    # active on arrival rather than pending review: review exists to vet *additions* to a library
+    # (duplicates, better copies, Soulseek downloads under ADR-0117), and a first import has
+    # nothing to compare them with. `None` until the first sync decides it: a library that already
+    # has tracks is treated as imported, so no existing installation changes behaviour.
+    initial_import_complete: bool | None = None
+
 
 
 class AppSettingsService:
     """Service for managing user-configurable app settings."""
 
     def __init__(self, settings_path: Path | None = None):
-        self.settings_path = settings_path or Path("data/settings.json")
+        if settings_path is None:
+            from app.config import settings as env_settings
+
+            settings_path = env_settings.settings_file
+        self.settings_path = settings_path
         self.settings_path.parent.mkdir(parents=True, exist_ok=True)
         self._settings: AppSettings | None = None
 

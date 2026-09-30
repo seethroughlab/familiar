@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ensureProfile, navigateToDestination } from './helpers';
+import { ensureProfile, navigateToDestination, navigateToSection } from './helpers';
 
 test.describe('Settings', () => {
   test.beforeEach(async ({ page }) => {
@@ -13,17 +13,18 @@ test.describe('Settings', () => {
     // point of the catch-all; asserting it here keeps that promise honest.
     await page.goto('/settings');
     await page.waitForLoadState('domcontentloaded');
-    await expect(page.getByRole('heading', { name: 'Library', exact: true }).first())
+    // The catch-all lands on the Overview (ADR-0126 point 3).
+    await expect(page.getByRole('heading', { name: 'Overview', exact: true }).first())
       .toBeVisible({ timeout: 10000 });
   });
 
-  test('API key status is visible on the Server destination', async ({ page }) => {
-    // Keys are infrastructural (ADR-0057 point 2) and moved to Server with ADR-0058 point 2.
+  test('API keys are on their provider cards under Server → Providers', async ({ page }) => {
+    // ADR-0126 point 2: a provider is one card — key, connection, health. The "API Keys" panel
+    // that listed keys apart from the providers they belonged to is gone.
     await navigateToDestination(page, 'Server');
+    await navigateToSection(page, 'Providers');
 
-    // Should see the API Keys section
-    const apiKeysHeading = page.getByText('API Keys', { exact: true });
-    await expect(apiKeysHeading).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('heading', { name: 'Providers' })).toBeVisible({ timeout: 5000 });
 
     // Should show the active API key services. **No Claude or OpenAI row**: ADR-0048 removed them
     // with the provider layer, and this assertion is what would catch one coming back — a key field
@@ -34,8 +35,10 @@ test.describe('Settings', () => {
     await expect(page.getByText('AcoustID', { exact: true })).toBeVisible({ timeout: 5000 });
   });
 
-  test('community cache is visible on the Tools destination', async ({ page }) => {
-    await navigateToDestination(page, 'Tools');
+  test('community cache is under Analysis → Configuration', async ({ page }) => {
+    // ADR-0126 point 5: the pipeline's configuration is one page.
+    await navigateToDestination(page, 'Analysis');
+    await navigateToSection(page, 'Configuration');
 
     // Should see the Community Cache section
     const cacheHeading = page.getByText('Community Cache', { exact: true });
@@ -76,15 +79,16 @@ test.describe('UI Elements', () => {
   });
 
   test('main navigation works', async ({ page }) => {
-    // The top bar lists destinations, not browsers (ADR-0058 point 2, ADR-0080 point 1). Of the
+    // The top bar lists destinations, not browsers (ADR-0058 point 2, ADR-0080 point 1, four under ADR-0126). Of the
     // browsers only
     // Cleanup is still reachable — the track list left with the player (ADR-0057 point 5) — which
     // the navigation helpers cover; what this asserts is that each destination is mounted and
     // renders its own heading, the failure `navigationIntegrity.test.ts` guards statically.
     const destinations = [
-      { link: 'Tools', heading: 'Tools' },
-      { link: 'Server', heading: 'Server' },
       { link: 'Library', heading: 'Library' },
+      { link: 'Analysis', heading: 'Analysis' },
+      { link: 'Server', heading: 'Server' },
+      { link: 'Overview', heading: 'Overview' },
     ] as const;
 
     for (const { link, heading } of destinations) {

@@ -26,6 +26,17 @@ Implementation:
   database-bound fixtures erroring for want of a Postgres, as before.
 - **Not yet deployed.** The number this record owes — how often the id finds a row the hash
   would have missed — exists only after the next re-analysis, and goes here then.
+- **Corrected 2026-09-30: Familiar does not run `fpcalc`.** Context says it does; the Docker image
+  has no `fpcalc` and does have `libchromaprint.so.1` (1.5.1, a dependency of Debian's ffmpeg), so
+  pyacoustid takes its library path — beets' path — decoding with the `ffmpeg` command. Checked in
+  the running container. The decision is unaffected (the recording id is still the key every path
+  shares), but the cost Context predicts from a beets contributor is smaller than it says: a beets
+  install on Linux decodes the same way. Decoding is what moves the key, measured over 21 NAS
+  files against the container's own output: a Mac taking the same library path agreed on **20**
+  when `ffmpeg` decoded and **11** when CoreAudio did (audioread's default on a Mac); `fpcalc` on
+  **10**; chromaprint 1.5.1 against 1.6.1, and kissfft against vDSP, changed nothing. So Familiar
+  Server ships libchromaprint rather than `fpcalc`, and `analysis._FINGERPRINT_CHILD` names its
+  decoders on every platform (`tests/test_fingerprint_decoder.py`).
 
 ## Context
 

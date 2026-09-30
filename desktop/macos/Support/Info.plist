@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>com.familiar.server</string>
+	<key>CFBundleName</key>
+	<string>Familiar Server</string>
+	<key>CFBundleDisplayName</key>
+	<string>Familiar Server</string>
+	<key>CFBundleExecutable</key>
+	<string>FamiliarServer</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>__VERSION__</string>
+	<key>CFBundleVersion</key>
+	<string>__BUILD__</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<!-- A menu-bar app: no Dock icon, no main window (ADR-0136 point 1). -->
+	<key>LSUIElement</key>
+	<true/>
+	<!-- The server advertises itself as _familiar._tcp so phones can find it (ADR-0134 point 4). -->
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_familiar._tcp</string>
+	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Familiar Server lets your phone find it on your network, so you can pair it and listen.</string>
+</dict>
+</plist>
