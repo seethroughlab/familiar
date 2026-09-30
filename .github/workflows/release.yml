@@ -16,7 +16,8 @@ env:
   IMAGE_NAME: ${{ github.repository }}
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
-# Philosophy: this workflow runs on GitHub-hosted runners end-to-end. The
+# Philosophy: this workflow runs on GitHub-hosted runners, except the Familiar Server job,
+# which needs the self-hosted Mac (ADR-0135 point 2). The
 # self-hosted NAS runner used for everyday CI has unreliable upstream
 # connectivity, which repeatedly broke the cold multi-stage Docker build
 # needed to cut releases. Public repos get unlimited GitHub-hosted minutes,
@@ -31,6 +32,8 @@ env:
 #                      CLAP encoders against the hashes pinned in the backend,
 #                      and (amd64) extract them as release assets
 #   5. create-release → GitHub release with generated notes and the encoders
+#   6. familiar-server → the notarized Familiar Server .dmg, on the self-hosted macOS runner,
+#                      attached to that release (ADR-0135)
 
 jobs:
   wait-for-ci:
@@ -290,3 +293,75 @@ jobs:
             ```
 
             See the [installation guide](https://github.com/${{ github.repository }}#installation) for detailed setup instructions.
+
+  # ADR-0135: Familiar Server, the macOS form of the server, from the same tag as the image. It runs
+  # after the release exists and attaches to it, so the runner — a laptop — can delay the .dmg but
+  # never the Docker release. The checkout's clean step removes desktop/macos/build, so Postgres,
+  # ffmpeg and Chromaprint are built fresh for every release rather than trusted from a cache.
+  familiar-server:
+    name: Familiar Server (macOS)
+    needs: create-release
+    runs-on: [self-hosted, macOS]
+    timeout-minutes: 150
+    permissions:
+      contents: write
+    env:
+      # The tag, `v` and all, as the image is given it: the backend reports it and fetches its CLAP
+      # encoders from the release of that name. The scripts drop the `v` where macOS wants a number.
+      TAG: ${{ github.event.inputs.version || github.ref_name }}
+      NOTARY_KEY_ID: ${{ secrets.FAMILIAR_ASC_KEY_ID }}
+      NOTARY_ISSUER_ID: ${{ secrets.FAMILIAR_ASC_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # A keychain of its own, for this job only: the runner's login keychain is a person's, and
+      # a release should not depend on what happens to be in it.
+      - name: Import the Developer ID identity and the notary key
+        env:
+          DEVELOPER_ID_P12: ${{ secrets.DEVELOPER_ID_P12 }}
+          DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+          FAMILIAR_ASC_PRIVATE_KEY: ${{ secrets.FAMILIAR_ASC_PRIVATE_KEY }}
+        run: |
+          for name in DEVELOPER_ID_P12 DEVELOPER_ID_P12_PASSWORD FAMILIAR_ASC_PRIVATE_KEY NOTARY_KEY_ID NOTARY_ISSUER_ID; do
+            [ -n "${!name}" ] || { echo "::error::secret for $name is not set"; exit 1; }
+          done
+          KEYCHAIN="$RUNNER_TEMP/familiar-server-signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          echo "$DEVELOPER_ID_P12" | base64 --decode > "$RUNNER_TEMP/developer-id.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 7200 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/developer-id.p12" -k "$KEYCHAIN" -P "$DEVELOPER_ID_P12_PASSWORD" \
+            -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          rm "$RUNNER_TEMP/developer-id.p12"
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" | awk '/Developer ID Application/ { print $2; exit }')
+          [ -n "$IDENTITY" ] || { echo "::error::no Developer ID Application identity in the p12"; exit 1; }
+          echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+          echo "SIGNING_KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
+          printf '%s' "$FAMILIAR_ASC_PRIVATE_KEY" > "$RUNNER_TEMP/notary.p8"
+          echo "NOTARY_KEY_PATH=$RUNNER_TEMP/notary.p8" >> "$GITHUB_ENV"
+
+      - name: Install web dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the payload
+        run: desktop/macos/scripts/build-payload.sh "$TAG"
+
+      - name: Build and sign the app
+        run: desktop/macos/scripts/build-app.sh "$TAG"
+
+      - name: Package and notarize
+        run: desktop/macos/scripts/package.sh "$TAG"
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$TAG" "desktop/macos/build/Familiar-Server-${TAG#v}.dmg" --clobber
+
+      - name: Remove the signing keychain and the notary key
+        if: always()
+        run: |
+          [ -n "${SIGNING_KEYCHAIN:-}" ] && security delete-keychain "$SIGNING_KEYCHAIN" || true
+          rm -f "$RUNNER_TEMP/notary.p8"
