@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-beta8] - 2026-09-30
+
+Everything since `v0.2.0-beta7`: the server stops needing Docker. **One migration**
+(`20260929_kv_store`, applied at startup); the API contract stays at v1, so every existing client
+keeps working.
+
+### The server is its own app (ADR-0131–0138)
+
+- **Familiar Server, a Mac menu-bar app** (`desktop/macos/`), runs the whole server — Postgres,
+  Python, analysis, ffmpeg — from one download, as a notarized `.dmg` attached to this release
+  (ADR-0135, ADR-0136). It starts at login, keeps its music folder read-only under the App
+  Sandbox, and yields to its owner: on battery, in Low Power Mode or when the Mac is hot, analysis
+  pauses and resumes (ADR-0138). Docker on a NAS remains first-class; the player carries no server.
+- **The server runs without Docker** (ADR-0132): `python -m app.serve` migrates and serves, state
+  lives under `FAMILIAR_DATA_DIR`, and the CLAP encoders are release assets pinned by hash — this
+  release is the first to carry them.
+- **Redis is optional** (ADR-0133): without `REDIS_URL` the server keeps its key/value state in
+  Postgres.
+- **Clients pair with a server** (ADR-0134): a server identity, `_familiar._tcp` over Bonjour, and
+  `familiar://pair` links carrying the token. Media routes are exempt from the token (ADR-0045's
+  exemption, decided in August and built now), so artwork and streams work with one set.
+- **Zero-touch is enforced**: a server refuses to start on a writable music library unless
+  `FAMILIAR_ALLOW_WRITABLE_LIBRARY` says the library is a disposable copy.
+
+### A first library arrives ready
+
+- **A library's first import is active on arrival**, not entirely in Pending Review, where
+  analysis skipped it and there was no screen to approve it. Review is kept for what arrives later
+  — the Soulseek inbox and duplicates. Existing libraries count as imported and are unchanged.
+
+### Fingerprints
+
+- **Every fingerprint is taken the way the Docker image takes it**: libchromaprint, decoding with
+  ffmpeg. Measured over 21 library files, a Mac decoding with CoreAudio agreed with the image on
+  11 and `fpcalc` on 10; this path agrees on 20. The community cache keys on the fingerprint, so
+  the difference was a split corpus. Identification now fingerprints the same way analysis does.
+  ADR-0119's statement that Familiar ran `fpcalc` is corrected: it never did.
+- The image names `libchromaprint1` rather than inheriting it from ffmpeg.
+
+### Developers
+
+- `make test-db` says in one sentence that nothing is listening, and how to start something.
+
 ## [0.2.0-beta7] - 2026-09-20
 
 Everything since `v0.2.0-beta6`. The first half of it, 2026-09-04 to 2026-09-14, was
