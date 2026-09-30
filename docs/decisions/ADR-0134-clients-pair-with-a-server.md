@@ -47,6 +47,25 @@ Implementation:
     - `/auth/pairing` answered 401 without the token and returned the full payload with it.
   - Tests: `tests/test_pairing.py`, the `app.serve` refusal and advertise tests in
     `tests/test_server_without_docker.py`, and `src/api/__tests__/pairing.test.ts`.
+- **2026-09-29, `familiar-apple` #198: the Apple half (points 1, 4, 5).**
+  - **Point 1.** `ServerTokenMiddleware` sits beside `ProfileHeaderMiddleware`, reading the token
+    per request. The command stream, screenshot upload and mixtape download send it by hand.
+    Embedded Discover receives it in the URL fragment (point 6's mechanism, reused). Tokens live
+    in the Keychain under `server_id`, readable after first unlock for background downloads.
+  - **Point 5.** `PairingLink` parses strictly. It **form-decodes**, because the web admin's
+    `URLSearchParams` writes a space as `+` and Foundation does not read it back. A test
+    comparing the two sides' exact encodings caught "Studio+MacBook". The app registers the
+    `familiar` scheme, so the Camera app is the phone's scanner. There is no in-app scanner.
+  - **Point 4.** `ServerBrowser` resolves `_familiar._tcp` over IPv4. `checkContract` follows a
+    paired server whose stored address stopped answering.
+  - **Checked on a throwaway simulator against a tokened server:** the prompt named the server
+    and address; accepting it listed a profile that the server returns only with the token.
+    **The setup screen's Bonjour list stayed empty there, so in-app discovery is unproven on a
+    device.**
+  - **Left:**
+    - the MCP helper still sends no token (it needs a shared keychain group)
+    - the visualizer bundle's lyrics fetch is gated
+    - library stores still word a token 401 as an unknown profile
 
 Extends [ADR-0045](ADR-0045-familiar-authenticates-inbound-requests.md),
 [ADR-0131](ADR-0131-the-server-is-its-own-app.md)
