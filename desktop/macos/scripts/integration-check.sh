@@ -45,6 +45,14 @@ t = np.arange(sr * 40) / sr
 tone = 0.3 * np.sin(2 * np.pi * 220 * t) * (1 + 0.5 * np.sin(2 * np.pi * 2 * t))
 sf.write(sys.argv[1], np.stack([tone, tone], axis=1), sr, format="FLAC")
 EOF
+# An AIFF with an attached cover: for AIFF and WAV the backend extracts covers with ffmpeg
+# (mutagen covers FLAC, MP3 and M4A), so this is what exercises the bundled ffmpeg from inside
+# the sandbox. Made with that same ffmpeg, outside it.
+FF=$HERE/build/payload/bin/ffmpeg
+"$FF" -hide_banner -loglevel error -f lavfi -i "color=c=0x6644aa:s=300x300" -frames:v 1 "$WORK/cover.jpg"
+"$FF" -hide_banner -loglevel error -i "$MUSIC/Test Artist/Test Album/01 Sine.flac" -i "$WORK/cover.jpg" \
+  -map 0:a -map 1 -c:a pcm_s16be -c:v copy -disposition:v attached_pic -write_id3v2 1 \
+  "$MUSIC/Test Artist/Test Album/02 Cover.aiff"
 BEFORE=$(find "$MUSIC" -type f -exec shasum {} + | sort | shasum)
 
 echo "==> build (debug, music granted read-only)"
@@ -88,10 +96,20 @@ for i in $(seq 1 90); do
   STATE="$STATE (sync: $SYNC)"
   case "$SYNC" in running*) ;; *) sync ;; esac
   echo "   $STATE"
-  case "$STATE" in *" 1 analysed"*) break ;; esac
+  case "$STATE" in *" 2 analysed"*) break ;; esac
   sleep 5
 done
-case "$STATE" in *" 1 analysed"*) echo "   analysis ran inside the sandbox, as a first import: status $(db "select status from tracks")" ;; *) echo "analysis did not complete"; grep -iE "error|semlock|permission" "$CONTAINER/Data/Library/Application Support/Familiar Server/server.log" | tail -20; exit 1 ;; esac
+case "$STATE" in *" 2 analysed"*) echo "   analysis ran inside the sandbox, as a first import: status $(db "select string_agg(distinct status::text, ',') from tracks")" ;; *) echo "analysis did not complete"; grep -iE "error|semlock|permission" "$CONTAINER/Data/Library/Application Support/Familiar Server/server.log" | tail -20; exit 1 ;; esac
+
+echo "==> ffmpeg, from inside the sandbox"
+FLAC_ID=$(db "select id from tracks where file_path like '%01 Sine.flac'")
+AIFF_ID=$(db "select id from tracks where file_path like '%02 Cover.aiff'")
+ART=$(curl -s "${H[@]}" -o "$WORK/art.out" -w '%{http_code} %{content_type}' "http://127.0.0.1:$PORT/api/v1/tracks/$AIFF_ID/artwork")
+echo "   AIFF cover (ffmpeg extraction): $ART, $(file -b "$WORK/art.out" | cut -c1-40)"
+case "$ART" in 200\ image/*) ;; *) echo "cover extraction failed"; exit 1 ;; esac
+AAC=$(curl -s "${H[@]}" -o "$WORK/aac.out" -w '%{http_code} %{content_type}' "http://127.0.0.1:$PORT/api/v1/tracks/$FLAC_ID/stream?format=aac")
+echo "   FLAC as AAC (ffmpeg encode, ADR-0118): $AAC, $(wc -c < "$WORK/aac.out" | tr -d ' ') bytes, $("$HERE/build/payload/bin/ffprobe" -v error -show_entries stream=codec_name -of csv=p=0 "$WORK/aac.out")"
+case "$AAC" in 200\ audio/*) ;; *) echo "AAC encode failed"; exit 1 ;; esac
 
 echo "==> zero-touch"
 AFTER=$(find "$MUSIC" -type f -exec shasum {} + | sort | shasum)

@@ -5,13 +5,17 @@
 #   python/     python-build-standalone CPython 3.11 with the backend's locked `analysis` deps
 #   backend/    the backend (app/, migrations/, alembic.ini) and the built web admin in static/
 #
+#   bin/, lib/  ffmpeg + ffprobe, LGPL, shared libraries, with LAME for mixtape MP3s
+#
 # Python is pinned to 3.11: on 3.12, basic-pitch resolves to tensorflow-macos, which has no 3.12
-# wheels (ADR-0136 point 9). Not yet here: ffmpeg (artwork extraction and transcodes need it).
+# wheels (ADR-0136 point 9).
 #
 # usage: scripts/build-payload.sh [version]      (version defaults to "dev")
 set -euo pipefail
 
 PG_VERSION=16.15
+FFMPEG_VERSION=8.1.3
+LAME_VERSION=3.100
 PGVECTOR_VERSION=0.8.6
 PBS_RELEASE=20260929
 PBS_PYTHON=3.11.16
@@ -50,6 +54,58 @@ if [ ! -x "$OUT/postgres/bin/postgres" ]; then
   rm -rf "$OUT/postgres/include" "$OUT/postgres/lib/pgxs"
 fi
 
+# --- ffmpeg (LGPL) ------------------------------------------------------------------------------
+# What the backend asks of it: decode any library's audio and embedded cover art, remux FLAC,
+# encode AAC (phone downloads, ADR-0118) and MP3 (mixtapes, via LAME), write JPEG covers, and
+# ffprobe. All of it is LGPL: no --enable-gpl, no nonfree, and LAME is LGPL too. Shared libraries
+# rather than a static binary, which is what lets the LGPL's relinking terms be met: the dylibs in
+# lib/ can be replaced. --disable-autodetect so nothing from Homebrew is linked by accident; zlib
+# (for PNG covers) and the audio frameworks are macOS's own.
+if [ ! -x "$OUT/bin/ffmpeg" ]; then
+  echo "==> LAME $LAME_VERSION"
+  (cd "$SRC" && curl -sfL "https://downloads.sourceforge.net/project/lame/lame/$LAME_VERSION/lame-$LAME_VERSION.tar.gz" | tar xz)
+  # LAME 3.100's export list names `lame_init_old`, which no longer exists, and Apple's linker
+  # refuses it. The same one-line fix Homebrew applies.
+  sed -i '' '/lame_init_old/d' "$SRC/lame-$LAME_VERSION/include/libmp3lame.sym"
+  (cd "$SRC/lame-$LAME_VERSION" \
+    && ./configure --prefix="$SRC/lame-install" --enable-shared --disable-static --disable-frontend >/dev/null \
+    && make -s -j"$JOBS" >/dev/null && make -s install >/dev/null)
+  echo "==> ffmpeg $FFMPEG_VERSION"
+  (cd "$SRC" && curl -sfL "https://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.xz" | tar xJ)
+  (cd "$SRC/ffmpeg-$FFMPEG_VERSION" \
+    && ./configure --prefix="$SRC/ffmpeg-install" \
+         --enable-shared --disable-static --disable-autodetect \
+         --disable-doc --disable-ffplay --disable-network --disable-debug \
+         --enable-zlib --enable-audiotoolbox \
+         --enable-libmp3lame \
+         --extra-cflags="-I$SRC/lame-install/include" --extra-ldflags="-L$SRC/lame-install/lib" \
+         --install-name-dir='@rpath' \
+         --extra-ldexeflags='-Wl,-rpath,@executable_path/../lib' >/dev/null \
+    && make -s -j"$JOBS" >/dev/null && make -s install >/dev/null)
+  mkdir -p "$OUT/bin" "$OUT/lib"
+  cp "$SRC/ffmpeg-install/bin/ffmpeg" "$SRC/ffmpeg-install/bin/ffprobe" "$OUT/bin/"
+  cp -P "$SRC"/ffmpeg-install/lib/*.dylib "$OUT/lib/"
+  cp -P "$SRC"/lame-install/lib/libmp3lame*.dylib "$OUT/lib/"
+  # LAME records its build path as its install name; point libavcodec at it by @rpath instead.
+  LAME_DYLIB=$(basename "$(readlink "$OUT/lib/libmp3lame.dylib" || echo libmp3lame.0.dylib)")
+  install_name_tool -id "@rpath/$LAME_DYLIB" "$OUT/lib/$LAME_DYLIB" 2>/dev/null
+  for f in "$OUT"/bin/ffmpeg "$OUT"/bin/ffprobe "$OUT"/lib/*.dylib; do
+    [ -L "$f" ] && continue
+    install_name_tool -change "$SRC/lame-install/lib/$LAME_DYLIB" "@rpath/$LAME_DYLIB" "$f" 2>/dev/null
+  done
+  # Nothing may point outside the bundle: a path under build/ exists only on this machine.
+  if otool -L "$OUT"/bin/ffmpeg "$OUT"/bin/ffprobe "$OUT"/lib/*.dylib | grep -q "$SRC"; then
+    echo "ffmpeg still links something under $SRC" >&2; exit 1
+  fi
+  # Written beside the binaries, for the LGPL's notice and so what shipped can be rebuilt.
+  cat > "$OUT/lib/FFMPEG-SOURCE.txt" <<NOTE
+ffmpeg $FFMPEG_VERSION (LGPL-2.1-or-later), https://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.xz
+LAME $LAME_VERSION (LGPL-2.0-or-later), https://downloads.sourceforge.net/project/lame/lame/$LAME_VERSION/lame-$LAME_VERSION.tar.gz
+Built by desktop/macos/scripts/build-payload.sh in https://github.com/seethroughlab/familiar
+as shared libraries in this directory; they may be replaced with compatible builds.
+NOTE
+fi
+
 # --- Python + the backend's dependencies ------------------------------------------------------
 if [ ! -x "$OUT/python/bin/python3" ]; then
   echo "==> CPython $PBS_PYTHON ($PBS_RELEASE)"
@@ -69,5 +125,4 @@ echo "==> web admin"
 (cd "$REPO" && pnpm -s --filter @familiar/web build >/dev/null)
 cp -R "$REPO/packages/web/dist" "$OUT/backend/static"
 
-mkdir -p "$OUT/bin"   # where ffmpeg will go; on the server's PATH first
 du -sh "$OUT"/* | sed "s#$OUT/##"
