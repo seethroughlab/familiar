@@ -230,9 +230,11 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin, So
 
             # The Postgres key/value store ignores expired keys on read but does not delete them;
             # Redis does that itself. Without this, a key nobody reads again stays forever (ADR-0133).
-            from app.services.kv.postgres import PostgresKeyValueStore
+            # Decided from configuration, as `build_store()` decides, so that startup does not build
+            # the store early: the manager's store stays lazy, as it always was.
+            from app.config import settings as app_settings
 
-            if isinstance(self.redis, PostgresKeyValueStore):
+            if not app_settings.redis_url:
                 self._scheduler.add_job(
                     self._sweep_kv_store,
                     IntervalTrigger(minutes=10),
