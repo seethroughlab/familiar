@@ -307,7 +307,7 @@ four first-party visualizers really are byte-identical in six files (one md5 eac
 and the fifteen Apple tests that read Swift as text do so through two helpers, `AppSource.swift` and
 `EngineSource.swift`, so they are found by searching for those rather than for the file paths.
 
-**`ADR-0131`–`ADR-0138` make the server its own app** (`0131` and `0132` accepted and `0132` built, the rest `proposed`, 2026-09-29). `0131` frames it:
+**`ADR-0131`–`ADR-0138` make the server its own app** (`0131`–`0133` accepted, `0132` and `0133` built, the rest `proposed`, 2026-09-29). `0131` frames it:
 Familiar is a server and the clients that play from it, installed and paired separately. The server
 comes as **Familiar Server** (a Developer ID menu-bar Mac app, source at `desktop/macos/` in this repo)
 or as Docker on Linux/NAS, and both are first-class. The Mac player stays in the App Store and carries
@@ -517,6 +517,9 @@ Only infrastructure settings require environment variables:
 ```bash
 # Required (from docker-compose or shell)
 DATABASE_URL=postgresql+asyncpg://familiar:familiar@localhost:5432/familiar
+
+# Optional since ADR-0133: set, progress/locks/caches live in Redis (every compose file sets it);
+# unset, they live in Postgres's kv_store/kv_list tables. Same behaviour either way.
 REDIS_URL=redis://localhost:6379/0
 
 # Optional (for Docker volume mounting only - actual paths configured in UI)
@@ -533,8 +536,8 @@ FAMILIAR_DATA_DIR=/path/to/state
 # Backend (from backend/)
 DATABASE_URL="..." REDIS_URL="..." uv run uvicorn app.main:app --reload --port 4400
 
-# Or as a server outside Docker runs it (ADR-0132): migrate to head, then serve on 127.0.0.1
-DATABASE_URL="..." REDIS_URL="..." FAMILIAR_DATA_DIR=... uv run python -m app.serve [--host] [--port]
+# Or as a server outside Docker runs it (ADR-0132/0133): migrate, then serve on 127.0.0.1, no Redis
+DATABASE_URL="..." FAMILIAR_DATA_DIR=... uv run python -m app.serve [--host] [--port]
 
 # Frontend (from packages/web/)
 pnpm dev

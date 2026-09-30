@@ -40,8 +40,9 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql+asyncpg://familiar:familiar@localhost:5432/familiar"
 
-    # Redis
-    redis_url: str = "redis://localhost:6379/0"
+    # Redis, when there is one. Unset, the server keeps the same state in Postgres instead
+    # (ADR-0133): every Docker install sets REDIS_URL, and a server outside Docker need not.
+    redis_url: str | None = None
 
     # The library. /music inside the container; the host path is a docker-compose volume mount,
     # and MUSIC_LIBRARY_PATH is the one way to point at something else. This used to be a module

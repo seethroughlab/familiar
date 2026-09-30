@@ -12,7 +12,7 @@ from collections.abc import Callable
 from typing import Any, Protocol
 
 from app.container import Services
-from app.services.redis_client import ResilientRedisClient
+from app.services.kv import KeyValueStore
 
 
 class _BackgroundManagerProtocol(Protocol):
@@ -21,7 +21,7 @@ class _BackgroundManagerProtocol(Protocol):
     services: Services
 
     @property
-    def redis(self) -> ResilientRedisClient: ...
+    def redis(self) -> KeyValueStore: ...
     _scheduler: Any
     _current_track_id: str | None
     _last_task_started_at: float | None

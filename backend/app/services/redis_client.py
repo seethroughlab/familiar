@@ -15,6 +15,7 @@ from typing import Any, TypeVar
 import redis
 
 from app.config import settings
+from app.services.kv import KeyValueStore
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +117,8 @@ class ResilientRedisClient:
             socket_timeout: Timeout for read/write operations
         """
         url = redis_url or settings.redis_url
+        if not url:
+            raise ValueError("ResilientRedisClient needs a URL; with REDIS_URL unset, use get_redis()")
         self._client = redis.from_url(
             url,
             socket_connect_timeout=socket_connect_timeout,
@@ -198,23 +201,31 @@ class ResilientRedisClient:
             return False
 
 
-# Global singleton instance
-_resilient_redis: ResilientRedisClient | None = None
+# One store per process. Decided from configuration rather than handed down from the app's
+# container (as ADR-0133 point 4 first said) because the scan and analysis pools are *spawned*
+# processes: they build their own store, and each must reach the same backend the API reads from.
+_store: KeyValueStore | None = None
 
 
-def get_resilient_redis() -> ResilientRedisClient:
-    """Get the global resilient Redis client instance."""
-    global _resilient_redis
-    if _resilient_redis is None:
-        _resilient_redis = ResilientRedisClient()
-    return _resilient_redis
+def build_store() -> KeyValueStore:
+    """Redis when `REDIS_URL` is set, otherwise the Postgres store (ADR-0133 point 4)."""
+    if settings.redis_url:
+        return ResilientRedisClient()
+    from app.services.kv.postgres import PostgresKeyValueStore
+
+    return PostgresKeyValueStore(settings.sync_database_url)
 
 
-# Convenience alias used throughout the codebase
-def get_redis() -> ResilientRedisClient:
-    """Get resilient Redis client for progress updates.
+def get_resilient_redis() -> KeyValueStore:
+    """The process's key/value store: Redis, or Postgres standing in for it."""
+    global _store
+    if _store is None:
+        _store = build_store()
+    return _store
 
-    The resilient client automatically retries on transient failures
-    and has configured socket timeouts.
-    """
+
+# Convenience alias used throughout the codebase. The name predates ADR-0133; it returns
+# whichever store is in use.
+def get_redis() -> KeyValueStore:
+    """The process's key/value store, for progress, locks, caches and capped logs."""
     return get_resilient_redis()

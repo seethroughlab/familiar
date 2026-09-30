@@ -601,12 +601,10 @@ class TestConcurrentSyncPrevention:
         """
         import json
 
-        import redis
-
-        from app.config import settings
         from app.services.background import get_background_manager
+        from app.services.redis_client import get_redis
 
-        r = redis.from_url(settings.redis_url)
+        r = get_redis()  # whichever store is in use (ADR-0133)
         bg = get_background_manager()
 
         # Clean up any stale state
@@ -641,11 +639,9 @@ class TestConcurrentSyncPrevention:
 
     async def test_sync_lock_is_released_after_completion(self, clean_db):
         """Sync lock should be released after sync completes (success or failure)."""
-        import redis
+        from app.services.redis_client import get_redis
 
-        from app.config import settings
-
-        r = redis.from_url(settings.redis_url)
+        r = get_redis()  # whichever store is in use (ADR-0133)
 
         # Clean up any stale lock
         r.delete("familiar:sync:lock")
@@ -669,12 +665,10 @@ class TestConcurrentSyncPrevention:
         import json
         from datetime import datetime, timedelta
 
-        import redis
-
-        from app.config import settings
         from app.services.background import get_background_manager
+        from app.services.redis_client import get_redis
 
-        r = redis.from_url(settings.redis_url)
+        r = get_redis()  # whichever store is in use (ADR-0133)
         bg = get_background_manager()
 
         # Clean up Redis and local task state

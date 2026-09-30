@@ -5,7 +5,8 @@ import json
 import logging
 
 from app.container import Services
-from app.services.redis_client import ResilientRedisClient, get_resilient_redis
+from app.services.kv import KeyValueStore
+from app.services.redis_client import get_resilient_redis
 
 from .analysis import AnalysisMixin
 from .backup import BackupMixin
@@ -52,7 +53,7 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin, So
 
     def __init__(self):
         self._scheduler = None
-        self._redis: ResilientRedisClient | None = None
+        self._redis: KeyValueStore | None = None
         # The application's container (ADR-0130), handed in by `startup()`. Until every domain
         # has moved, the manager itself is still reached through `get_background_manager()`,
         # so this is the one thing it is *given* rather than looks up.
@@ -63,8 +64,8 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin, So
         self._init_sync_state()
 
     @property
-    def redis(self) -> ResilientRedisClient:
-        """Lazy resilient Redis client with automatic retry."""
+    def redis(self) -> KeyValueStore:
+        """The key/value store: Redis, or Postgres when REDIS_URL is unset (ADR-0133)."""
         if self._redis is None:
             self._redis = get_resilient_redis()
         return self._redis
@@ -227,6 +228,20 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin, So
                 replace_existing=True,
             )
 
+            # The Postgres key/value store ignores expired keys on read but does not delete them;
+            # Redis does that itself. Without this, a key nobody reads again stays forever (ADR-0133).
+            # Decided from configuration, as `build_store()` decides, so that startup does not build
+            # the store early: the manager's store stays lazy, as it always was.
+            from app.config import settings as app_settings
+
+            if not app_settings.redis_url:
+                self._scheduler.add_job(
+                    self._sweep_kv_store,
+                    IntervalTrigger(minutes=10),
+                    id="kv_store_sweep",
+                    replace_existing=True,
+                )
+
             # Register S3 backup schedule if enabled
             self._register_s3_backup_schedule()
 
@@ -243,6 +258,18 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin, So
             logger.warning("APScheduler not installed - periodic tasks disabled")
         except Exception as e:
             logger.error(f"Failed to start scheduler: {e}")
+
+    async def _sweep_kv_store(self) -> None:
+        """Delete expired keys from the Postgres key/value store."""
+        import asyncio
+
+        try:
+            store = self.redis
+            removed = await asyncio.to_thread(store.sweep)  # type: ignore[attr-defined]
+            if removed:
+                logger.debug("kv_store sweep removed %d expired keys", removed)
+        except Exception as e:
+            logger.warning(f"kv_store sweep failed: {e}")
 
     async def _log_metrics_summary(self) -> None:
         """Log a one-line metrics summary for operational visibility."""
