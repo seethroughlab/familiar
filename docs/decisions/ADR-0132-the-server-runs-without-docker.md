@@ -54,6 +54,18 @@ Implementation:
   - Proved with the real bytes: the published beta7 encoders pass `verify`, and `download()` into
     an empty data directory, from a local server standing in for GitHub, fetched, verified and
     placed both. Tests: `tests/test_clap_artifacts.py`.
+- **2026-09-30: the export was deterministic only while its inputs held still.** The first release
+  after point 8, `v0.2.0-beta8`, failed its smoke test on both architectures: the two encoders had
+  new hashes, identical to each other across arches. The export installed the newest `torch`,
+  `onnx`, `onnxruntime` and `transformers<5`, fetched `export_models.py` from clapback's `main`,
+  and let the script take the Hugging Face model's `main`. **torch 2.14.1, released that day,
+  moved both files on its own** — rebuilt locally, 2.14.0 reproduces the pins and 2.14.1 with the
+  old onnx reproduces the release's hashes. The check worked as designed, but only after the
+  images were pushed, with `latest` already moved to them. Now every input is pinned in
+  `docker/Dockerfile` (torch 2.14.0, transformers 4.57.6, onnx 1.23.0, onnxruntime 1.30.0, numpy
+  2.4.6 and the tokenizer libraries; the script at clapback `11d884a`, the model at revision
+  `8fa0f1c`), the export stage verifies its own output against `clap_artifacts.py` so any build
+  on any machine fails on new bytes, and `release.yml` moves `latest` only after the smoke tests.
 
 Extends [ADR-0131](ADR-0131-the-server-is-its-own-app.md)
 
