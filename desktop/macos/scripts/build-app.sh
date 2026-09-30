@@ -10,10 +10,12 @@
 #     library validation passes for Python's extension modules and onnxruntime
 #
 # Needs scripts/build-payload.sh first. SIGN_IDENTITY defaults to the first valid Apple Development
-# identity; distribution needs a Developer ID Application identity, which the team does not have yet
-# (ADR-0135).
+# identity. A distributed build is signed with the team's Developer ID Application identity
+# (ADR-0135), and then every signature carries a secure timestamp, which notarization requires;
+# development builds skip it, since it is a network round trip for each of ~450 binaries.
+# scripts/package.sh turns a Developer ID build into a notarized .dmg.
 #
-# usage: scripts/build-app.sh [version]
+# usage: scripts/build-app.sh [tag]         the release tag; the bundle's version drops its `v`
 #        DEV_MUSIC=/path scripts/build-app.sh      debug build that also grants that folder read-only,
 #                                                  for scripts/integration-check.sh
 set -euo pipefail
@@ -27,6 +29,10 @@ APP="$HERE/build/Familiar Server.app"
 SUPPORT=$HERE/Support
 ID=${SIGN_IDENTITY:-$(security find-identity -v -p codesigning | grep "Apple Development" | grep -v REVOKED | head -1 | awk '{print $2}')}
 [ -n "$ID" ] || { echo "no signing identity" >&2; exit 1; }
+TIMESTAMP=--timestamp=none
+if security find-identity -v -p codesigning | grep -F "$ID" | grep -q "Developer ID Application"; then
+  TIMESTAMP=--timestamp
+fi
 [ -x "$PAYLOAD/python/bin/python3" ] || { echo "run scripts/build-payload.sh first" >&2; exit 1; }
 
 echo "==> swift build"
@@ -38,14 +44,21 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Library/LaunchAgents"
 cp "$BIN/FamiliarServer" "$BIN/familiar-postgres-agent" "$APP/Contents/MacOS/"
 cp "$SUPPORT/com.familiar.server.postgres.plist" "$APP/Contents/Library/LaunchAgents/"
-sed -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$(date +%Y%m%d%H%M)/" "$SUPPORT/Info.plist" > "$APP/Contents/Info.plist"
+sed -e "s/__VERSION__/${VERSION#v}/" -e "s/__BUILD__/$(date +%Y%m%d%H%M)/" "$SUPPORT/Info.plist" > "$APP/Contents/Info.plist"
 cp -R "$PAYLOAD/python" "$PAYLOAD/postgres" "$PAYLOAD/backend" "$PAYLOAD/bin" "$PAYLOAD/lib" "$APP/Contents/Resources/"
 
-echo "==> sign with $ID"
-sign() { codesign -f -s "$ID" -o runtime --timestamp=none "$@" >/dev/null 2>&1; }
+echo "==> sign with $ID ($TIMESTAMP)"
+sign() {
+  local out
+  out=$(codesign -f -s "$ID" -o runtime "$TIMESTAMP" "$@" 2>&1) || { echo "$out" >&2; return 1; }
+}
 is_macho() { file -b "$1" | grep -q "Mach-O"; }
 # 1. Libraries: no entitlements.
-find "$APP/Contents/Resources" -type f \( -name "*.dylib" -o -name "*.so" \) -print0 | xargs -0 -n 50 codesign -f -s "$ID" -o runtime --timestamp=none >/dev/null 2>&1
+find "$APP/Contents/Resources" -type f \( -name "*.dylib" -o -name "*.so" \) -print0 \
+  | xargs -0 -n 50 -P 4 codesign -f -s "$ID" -o runtime "$TIMESTAMP" 2>&1 | grep -v "replacing existing signature" >&2 || true
+# xargs hides a failure behind grep; ask each library instead.
+find "$APP/Contents/Resources" -type f \( -name "*.dylib" -o -name "*.so" \) -print0 \
+  | xargs -0 -n 200 codesign --verify --strict
 # 2. Postgres's executables: the agent's entitlements. Everything else executable: inherit the sandbox.
 find "$APP/Contents/Resources" -type f -perm +111 ! -name "*.dylib" ! -name "*.so" -print0 | while IFS= read -r -d '' f; do
   is_macho "$f" || continue

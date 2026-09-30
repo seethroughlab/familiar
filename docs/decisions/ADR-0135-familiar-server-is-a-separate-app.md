@@ -1,8 +1,33 @@
 # ADR-0135: Familiar Server Is a Separate App Distributed with Developer ID
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-29
+
+Implementation:
+- **Accepted 2026-09-30**, as written, with its certificate follow-up corrected (below).
+- **Point 1 built 2026-09-30.** `scripts/build-app.sh` gives every signature a secure timestamp when
+  the identity is a Developer ID; `scripts/package.sh` makes the `.dmg` (APFS, ULFO), signs it,
+  notarizes it with the App Store Connect API key familiar-apple's uploads already use, staples it,
+  and fails unless Gatekeeper assesses the app inside as `Notarized Developer ID`. Proved on
+  `v0.2.0-beta7`'s code: 922 MB app, 426 MB `.dmg`, **accepted on the first submission**; Apple's log
+  has ten warnings, all gzipped pickles in joblib's own test data that it cannot unpack as archives.
+  The integration check passes with the app signed by the Developer ID, not only Apple Development.
+- **Point 2 built 2026-09-30:** the `familiar-server` job in `.github/workflows/release.yml`, on the
+  self-hosted Mac, after `create-release`, attaching the `.dmg` to it — so a sleeping laptop delays
+  the download and never the image. It imports the certificate into a keychain of its own. Secrets:
+  `DEVELOPER_ID_P12` (base64), `DEVELOPER_ID_P12_PASSWORD`, and the notary key under
+  familiar-apple's names, `FAMILIAR_ASC_KEY_ID`, `FAMILIAR_ASC_ISSUER_ID`,
+  `FAMILIAR_ASC_PRIVATE_KEY`.
+- **Found building it: the payload's version must be the tag.** The backend fetches its CLAP
+  encoders from the release named by its version (ADR-0132 point 8), and the image is given the tag,
+  `v` and all. A first draft passed the version without the `v`, and the server asked for
+  `/releases/download/0.2.0-beta7/…`, which cannot exist. The scripts now take the tag and drop the
+  `v` only for `CFBundleShortVersionString` and the file name; `build-payload.sh` refuses anything
+  else. No release yet carries the encoders — #343 merged after `v0.2.0-beta7` — so the first Mac
+  server that can fetch them is the next release's.
+- **Not built:** point 3 (Sparkle), so an update is a new download until it is; point 5's first-run
+  links.
 
 Extends [ADR-0131](ADR-0131-the-server-is-its-own-app.md)
 
@@ -82,9 +107,11 @@ records why that was reversed: it tied the listening machine to the server machi
 - **Tradeoff:** `familiar` gains Swift, an Xcode project, notarization and a Sparkle signing key. A
   leaked Sparkle key is a route to every desktop server, so it is kept as a repository secret used
   only by the release job.
-- **Follow-up, and a prerequisite:** the team (`7JL9RZ9C8P`) has **no Developer ID Application
-  certificate**, found 2026-09-29 while running ADR-0136's spike: only Apple Development and Apple
-  Distribution. Only the account holder can create one, in the developer portal, and nothing in this
-  ADR can ship without it.
+- **Follow-up, and a prerequisite, found to be already met:** this said the team (`7JL9RZ9C8P`)
+  had no Developer ID Application certificate. It had one, issued 2026-03-06, in the login keychain
+  of the Mac that runs the macOS CI jobs; nobody had looked for it by name. It **expires 2027-02-01**
+  — issued under Apple's original Developer ID intermediate, which expires that day — so a
+  replacement is needed before the first release after it. What is already notarized keeps working;
+  only new signatures stop.
 - **Follow-up:** the macOS install panel (ADR-0095) leads with the Familiar Server download once a
   notarized build exists.

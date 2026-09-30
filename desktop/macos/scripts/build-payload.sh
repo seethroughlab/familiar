@@ -13,7 +13,10 @@
 # Python is pinned to 3.11: on 3.12, basic-pitch resolves to tensorflow-macos, which has no 3.12
 # wheels (ADR-0136 point 9).
 #
-# usage: scripts/build-payload.sh [version]      (version defaults to "dev")
+# usage: scripts/build-payload.sh [tag]      (defaults to "dev")
+#
+# The version is the release tag, `v` and all, exactly as the Docker image is given it: the backend
+# reports it, and downloads its CLAP encoders from the release of that name (ADR-0132 point 8).
 set -euo pipefail
 
 PG_VERSION=16.15
@@ -29,6 +32,11 @@ REPO=$(cd "$HERE/../.." && pwd)
 OUT=$HERE/build/payload
 SRC=$HERE/build/src
 VERSION=${1:-dev}
+case "$VERSION" in
+  dev|v[0-9]*) ;;
+  *) echo "version '$VERSION' is not a release tag (v…) or dev; the server would fetch its CLAP" \
+       "encoders from a release that does not exist" >&2; exit 1 ;;
+esac
 JOBS=$(sysctl -n hw.ncpu)
 
 mkdir -p "$OUT" "$SRC"
