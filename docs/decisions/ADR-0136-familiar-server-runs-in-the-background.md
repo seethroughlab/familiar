@@ -42,6 +42,14 @@ Implementation:
        The CLAP encoders (618 MB) are downloaded on first run and not bundled (ADR-0132 point 8).
        On 3.11 basic-pitch resolves to coremltools; on 3.12 it would need `tensorflow-macos`,
        which does not install.
+  - **Correction to result 5, 2026-09-29.** "No hardened-runtime exceptions" held only for
+    what the spike loaded: numpy and onnxruntime. The real backend imports librosa, whose numba
+    JIT (llvmlite) makes memory executable. The first integration run was killed with `SIGKILL
+    (Code Signature Invalid)` in `LLVMPY_TryAllocateExecutableMemory`. `cs.allow-jit` is not
+    enough, because llvmlite maps without `MAP_JIT`, which was measured still crashing. The
+    Python tree carries **`com.apple.security.cs.allow-unsigned-executable-memory`**. It applies
+    to the process that reads music, and it widens what code may run, not what files may be
+    written: the sandbox's read-only grant is unchanged.
   - **Not covered by the spike, and still to prove:**
     - `SMAppService` registration of the login item and the agent
     - a real `NSOpenPanel` grant and bookmark
