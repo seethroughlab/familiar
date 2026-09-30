@@ -204,3 +204,6 @@ for ADR-0005's weight tuning, which may want longer or a narrower first pass.
   having used the web app since, and cannot be told apart from the rows alone — which is the
   preceding follow-up restated as a live question. Settle it by playing one track in the web app and
   looking for a non-`library` context, not by reasoning about the data.
+  **No longer decisive once ADR-0139 point 5 ships (2026-09-30):** the Apple clients now send
+  `playlist`, `album`, `artist` and `other` as well, so a non-`library` context no longer means the
+  web client sent it. Settle it with the `client` column above, or match a web play by timestamp.
