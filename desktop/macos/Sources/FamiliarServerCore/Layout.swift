@@ -43,5 +43,7 @@ public struct Layout: Sendable, Equatable {
     public var python: URL { resources.appendingPathComponent("python/bin/python3") }
     public var backend: URL { resources.appendingPathComponent("backend") }
     public var bin: URL { resources.appendingPathComponent("bin") }
+    /// On no search path, so the server is told where it is (`FAMILIAR_CHROMAPRINT_LIBRARY`).
+    public var chromaprintLibrary: URL { resources.appendingPathComponent("lib/libchromaprint.1.dylib") }
     public var postgresBin: URL { resources.appendingPathComponent("postgres/bin") }
 }

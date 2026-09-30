@@ -36,6 +36,9 @@ public struct ServerLaunch: Equatable, Sendable {
         env["DATABASE_URL"] = PostgresSetup.databaseURL(password: databasePassword)
         env["FAMILIAR_DATA_DIR"] = layout.serverData.path
         env["MUSIC_LIBRARY_PATH"] = musicFolder.path
+        // AcoustID fingerprints through the same library the Docker image uses, not `fpcalc`: the
+        // community cache keys on the result (`analysis._FINGERPRINT_CHILD`).
+        env["FAMILIAR_CHROMAPRINT_LIBRARY"] = layout.chromaprintLibrary.path
         // ADR-0136 point 3: the sandbox refuses semaphores outside the app group.
         env["FAMILIAR_SEMAPHORE_PREFIX"] = Identity.semaphorePrefix
         // ADR-0138 point 4: one analysis worker on a machine someone is using.

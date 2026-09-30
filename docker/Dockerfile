@@ -159,9 +159,13 @@ RUN echo "${VERSION}" > /app/VERSION
 # Install runtime dependencies
 # libcurl4-openssl-dev is required for curl_cffi (TLS fingerprint impersonation)
 # curl + unzip needed for Deno install
+# libchromaprint1 is what AcoustID fingerprints with (pyacoustid's library path, decoding with
+# ffmpeg). ffmpeg happens to depend on it; it is named so it cannot leave with a change to ffmpeg's
+# packaging. The library, not fpcalc: see analysis._FINGERPRINT_CHILD.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     ffmpeg \
+    libchromaprint1 \
     gosu \
     libcurl4-openssl-dev \
     postgresql-client \

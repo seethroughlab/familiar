@@ -7,8 +7,9 @@
 #   4. the server comes up, mints its own token, scans the track and analyses it, with no approval
 #      (a first import arrives active): the analysis pool running inside the sandbox is ADR-0136
 #      point 3's whole question
-#   5. the music folder is exactly as it was
-#   6. everything stopped and removed: the app's container, the group container's Postgres
+#   5. ffmpeg (cover extraction, AAC) and libchromaprint (fingerprints) work from inside the sandbox
+#   6. the music folder is exactly as it was
+#   7. everything stopped and removed: the app's container, the group container's Postgres
 #
 # usage: scripts/integration-check.sh
 set -euo pipefail
@@ -110,6 +111,20 @@ case "$ART" in 200\ image/*) ;; *) echo "cover extraction failed"; exit 1 ;; esa
 AAC=$(curl -s "${H[@]}" -o "$WORK/aac.out" -w '%{http_code} %{content_type}' "http://127.0.0.1:$PORT/api/v1/tracks/$FLAC_ID/stream?format=aac")
 echo "   FLAC as AAC (ffmpeg encode, ADR-0118): $AAC, $(wc -c < "$WORK/aac.out" | tr -d ' ') bytes, $("$HERE/build/payload/bin/ffprobe" -v error -show_entries stream=codec_name -of csv=p=0 "$WORK/aac.out")"
 case "$AAC" in 200\ audio/*) ;; *) echo "AAC encode failed"; exit 1 ;; esac
+
+echo "==> AcoustID fingerprints, from inside the sandbox"
+# The bundled libchromaprint, loaded by path, decoding with the bundled ffmpeg: the Docker image's
+# path, not fpcalc's (analysis._FINGERPRINT_CHILD). The same child run outside the sandbox must
+# produce the same string, or the sandbox changed the decode.
+FPS=$(db "select count(*) from track_analysis where acoustid is not null")
+echo "   stored: $FPS of 2"
+[ "$FPS" = "2" ] || { grep -i "fingerprint" "$CONTAINER/Data/Library/Application Support/Familiar Server/server.log" | tail -5; exit 1; }
+STORED=$(db "select a.acoustid from track_analysis a join tracks t on t.id = a.track_id where t.file_path like '%01 Sine.flac'")
+OUTSIDE=$(cd "$HERE/build/payload/backend" && PATH="$HERE/build/payload/bin:/usr/bin:/bin" \
+  FAMILIAR_CHROMAPRINT_LIBRARY="$HERE/build/payload/lib/libchromaprint.1.dylib" "$PY" -c \
+  "import ast,sys; tree=ast.parse(open('app/services/analysis.py').read()); ns={}; exec(compile(ast.Module([n for n in tree.body if isinstance(n, ast.Assign) and getattr(n.targets[0], 'id', '') in ('_IMPORT_ACOUSTID', '_FINGERPRINT_CHILD')], []), 'analysis', 'exec'), ns); sys.argv=['-c', sys.argv[1]]; exec(ns['_FINGERPRINT_CHILD'])" \
+  "$MUSIC/Test Artist/Test Album/01 Sine.flac" | "$PY" -c "import sys,json;print(json.load(sys.stdin)[1])")
+[ "$STORED" = "$OUTSIDE" ] && echo "   identical to the same child run outside the sandbox" || { echo "fingerprints differ"; exit 1; }
 
 echo "==> zero-touch"
 AFTER=$(find "$MUSIC" -type f -exec shasum {} + | sort | shasum)

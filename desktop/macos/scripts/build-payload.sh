@@ -6,6 +6,9 @@
 #   backend/    the backend (app/, migrations/, alembic.ini) and the built web admin in static/
 #
 #   bin/, lib/  ffmpeg + ffprobe, LGPL, shared libraries, with LAME for mixtape MP3s
+#   lib/        libchromaprint, for AcoustID fingerprints, loaded by path (FAMILIAR_CHROMAPRINT_LIBRARY)
+#
+# Needs Xcode's command-line tools, curl and cmake (for Chromaprint).
 #
 # Python is pinned to 3.11: on 3.12, basic-pitch resolves to tensorflow-macos, which has no 3.12
 # wheels (ADR-0136 point 9).
@@ -16,6 +19,7 @@ set -euo pipefail
 PG_VERSION=16.15
 FFMPEG_VERSION=8.1.3
 LAME_VERSION=3.100
+CHROMAPRINT_VERSION=1.6.1
 PGVECTOR_VERSION=0.8.6
 PBS_RELEASE=20260929
 PBS_PYTHON=3.11.16
@@ -103,6 +107,32 @@ ffmpeg $FFMPEG_VERSION (LGPL-2.1-or-later), https://ffmpeg.org/releases/ffmpeg-$
 LAME $LAME_VERSION (LGPL-2.0-or-later), https://downloads.sourceforge.net/project/lame/lame/$LAME_VERSION/lame-$LAME_VERSION.tar.gz
 Built by desktop/macos/scripts/build-payload.sh in https://github.com/seethroughlab/familiar
 as shared libraries in this directory; they may be replaced with compatible builds.
+NOTE
+fi
+
+# --- Chromaprint (LGPL) -------------------------------------------------------------------------
+# The library, not `fpcalc`: the Docker image fingerprints through pyacoustid's library path, and the
+# community cache keys on the result, so the Mac must take the same path (measured in
+# `analysis._FINGERPRINT_CHILD`, which also decodes with the ffmpeg above, as the image does).
+# kissfft is the image's FFT; vDSP measured identical, and this keeps the two builds alike.
+if [ ! -f "$OUT/lib/libchromaprint.1.dylib" ]; then
+  echo "==> Chromaprint $CHROMAPRINT_VERSION"
+  (cd "$SRC" && curl -sfL "https://github.com/acoustid/chromaprint/releases/download/v$CHROMAPRINT_VERSION/chromaprint-$CHROMAPRINT_VERSION.tar.gz" | tar xz)
+  cmake -S "$SRC/chromaprint-$CHROMAPRINT_VERSION" -B "$SRC/chromaprint-build" -DCMAKE_BUILD_TYPE=Release \
+    -DBUILD_SHARED_LIBS=ON -DBUILD_TOOLS=OFF -DBUILD_TESTS=OFF -DFFT_LIB=kissfft \
+    -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 >/dev/null
+  cmake --build "$SRC/chromaprint-build" -j"$JOBS" >"$SRC/chromaprint-build.log" 2>&1 \
+    || { tail -30 "$SRC/chromaprint-build.log"; exit 1; }
+  mkdir -p "$OUT/lib"
+  cp "$SRC/chromaprint-build/src/libchromaprint.$CHROMAPRINT_VERSION.dylib" "$OUT/lib/libchromaprint.1.dylib"
+  install_name_tool -id @rpath/libchromaprint.1.dylib "$OUT/lib/libchromaprint.1.dylib" 2>/dev/null
+  if otool -L "$OUT/lib/libchromaprint.1.dylib" | tail -n +2 | grep -v -e '@rpath/' -e '^\s*/usr/lib/' -e '^\s*/System/' | grep -q .; then
+    echo "libchromaprint links something outside the system" >&2; exit 1
+  fi
+  cat > "$OUT/lib/CHROMAPRINT-SOURCE.txt" <<NOTE
+Chromaprint $CHROMAPRINT_VERSION (LGPL-2.1-or-later), https://github.com/acoustid/chromaprint/releases/download/v$CHROMAPRINT_VERSION/chromaprint-$CHROMAPRINT_VERSION.tar.gz
+Built by desktop/macos/scripts/build-payload.sh in https://github.com/seethroughlab/familiar
+as a shared library in this directory; it may be replaced with a compatible build.
 NOTE
 fi
 

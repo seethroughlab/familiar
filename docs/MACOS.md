@@ -165,6 +165,11 @@ For contributors working on Familiar's codebase on macOS:
    brew install ffmpeg chromaprint uv node
    corepack enable && corepack prepare pnpm@latest --activate
    ```
+   Homebrew's libchromaprint is on no library search path, so without this the backend falls back
+   to `fpcalc`, whose fingerprints differ from the Docker image's for about half of all files:
+   ```bash
+   export FAMILIAR_CHROMAPRINT_LIBRARY=$(brew --prefix)/lib/libchromaprint.1.dylib
+   ```
 
 2. **Start infrastructure (Postgres + Redis):**
    ```bash
