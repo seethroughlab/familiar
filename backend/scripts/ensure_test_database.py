@@ -54,6 +54,7 @@ async def ensure_database(url: str) -> bool:
             raise SystemExit(
                 f"nothing is listening at {parts.host}:{parts.port or 5432} ({error.__class__.__name__}).\n"
                 "Start the database — from the repo root, `docker compose -f docker/docker-compose.yml up -d` —\n"
+                "or, from backend/, `make test-services test` for a throwaway one on port 5434,\n"
                 "or set TEST_DATABASE_URL to a PostgreSQL that is running (the name must still end in _test)."
             ) from None
         try:
