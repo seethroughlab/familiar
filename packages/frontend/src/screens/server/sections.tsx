@@ -17,6 +17,7 @@ import { ProfileSettings } from '../../panels/server/ProfileSettings';
 import { ProviderCards } from '../../panels/server/ProviderCards';
 import { RemoteLogsPanel } from '../../panels/server/RemoteLogsPanel';
 import { ServerTokenSettings } from '../../panels/server/ServerTokenSettings';
+import { PairDevicePanel } from '../../panels/server/PairDevicePanel';
 import { SystemStatus } from '../../panels/server/SystemStatus';
 import { DataManagement } from '../../panels/tools/DataManagement';
 import { useBackgroundJobsStore } from '../../stores/backgroundJobsStore';
@@ -106,6 +107,7 @@ export function AccessSection() {
           here because a wrong token and a wrong URL fail the same way — "nothing loads" — which is
           the argument `ServerTokenSettings` makes for its own placement. */}
       <ServerTokenSettings />
+      <PairDevicePanel />
     </SectionPage>
   );
 }

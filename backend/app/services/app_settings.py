@@ -160,6 +160,13 @@ class AppSettings(BaseModel):
     # before the clients can present one. See `app/api/auth.py` for why it is stored in the clear.
     access_token: str | None = None
 
+    # This server's identity (ADR-0134 point 4). A client remembers a server by `server_id`, not by
+    # its address, which changes with DHCP; minted on first use by `app/services/server_identity.py`
+    # and never changed after. `server_name` is what a phone shows in its list of servers; unset,
+    # the host name is used.
+    server_id: str | None = None
+    server_name: str | None = None
+
 
 
 class AppSettingsService:

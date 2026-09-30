@@ -4,6 +4,69 @@ Status: accepted
 
 Date: 2026-09-29
 
+Implementation:
+- **2026-09-29, `familiar`: the server and web half (points 2, 4, 5, 6).** The Apple half (point 1
+  and the phone's side of 4 and 5) is a `familiar-apple` change of its own.
+  - **Point 2.** `python -m app.serve` refuses any non-loopback `--host` when no token is configured,
+    before it migrates or binds anything, and names both ways to create one. Binding beyond loopback
+    sets `advertise_port`. *Minting* the token on first run, and opening the listener on the first
+    pairing, belong to Familiar Server (ADR-0136), which does not exist yet. What the server itself
+    guarantees is the refusal.
+  - **Point 4.** `server_id` and `server_name` live in `settings.json` (`app/services/server_identity.py`).
+    The id is minted once, under a lock; the name defaults to the host name without `.local`.
+    `GET /api/v1/contract` now reports both (additive; contract still v1), so a client that
+    connected by address learns what to remember. `app/services/advertise.py` registers
+    `_familiar._tcp` through `zeroconf`, now declared directly rather than inherited from
+    `pyatv`/`pychromecast`. It runs only when `advertise_port` is set (`FAMILIAR_ADVERTISE_PORT`,
+    or `app.serve` on a LAN bind). In Docker's bridge network, mDNS does not reach the LAN and the
+    container's port is not the host's. Its TXT record is `id`, `name`, `contract`, and a test pins
+    that the token is never among them.
+  - **Point 5.** `GET /api/v1/auth/pairing` returns the id, name, token, advertised port and LAN
+    addresses. It is 409 on a server with no token, and behind the gate otherwise. The server does
+    **not** build the link, because it cannot know how a phone reaches it (behind Docker its
+    addresses are the container's; behind Tailscale the useful host is a name). The web admin
+    builds it from the host the page was loaded from, and falls back to a LAN address only when
+    that host is loopback. The link also carries `name`, beyond the point's `id/host/port/token`,
+    because the confirmation step has to name the server. Server → Access gains a Pair a Device
+    panel: a QR code (`qrcode`, rendered as an image rather than injected SVG), the address, and
+    the link on request. It offers to create a token when there is none, and stores it in this
+    browser at once, because the gate turns on the moment one exists.
+  - **Point 6.** `initServerToken` takes `#token=…` from the fragment, stores it, and removes it
+    from the address bar with `replaceState`, keeping any other fragment parameters.
+  - **Point 3's premise was false, and is now true.** "Media stays exempt" assumed ADR-0045's
+    exemption existed. It did not: every `/api/` path was gated. The Pair a Device panel's "Create
+    server token" would therefore have broken web artwork, network-output playback and every Apple
+    client stream in one click. `MEDIA_ROUTES` in `app/api/auth.py` now exempts `GET`/`HEAD` on
+    the seven media shapes. Checked on a real tokened server: media returned 404 for an unknown id
+    with or without the token; `/tracks`, lyrics and an artwork `POST` returned 401 without it.
+  - **Checked on a real server (2026-09-29):**
+    - A LAN bind without a token was refused.
+    - A token was minted over loopback.
+    - A LAN bind then advertised `jeffbook._familiar._tcp` on the Mac's LAN and Tailscale
+      addresses. macOS's own `dns-sd -L` resolved it and read the TXT `id`, `name`, `contract`.
+    - `/auth/pairing` answered 401 without the token and returned the full payload with it.
+  - Tests: `tests/test_pairing.py`, the `app.serve` refusal and advertise tests in
+    `tests/test_server_without_docker.py`, and `src/api/__tests__/pairing.test.ts`.
+- **2026-09-29, `familiar-apple` #198: the Apple half (points 1, 4, 5).**
+  - **Point 1.** `ServerTokenMiddleware` sits beside `ProfileHeaderMiddleware`, reading the token
+    per request. The command stream, screenshot upload and mixtape download send it by hand.
+    Embedded Discover receives it in the URL fragment (point 6's mechanism, reused). Tokens live
+    in the Keychain under `server_id`, readable after first unlock for background downloads.
+  - **Point 5.** `PairingLink` parses strictly. It **form-decodes**, because the web admin's
+    `URLSearchParams` writes a space as `+` and Foundation does not read it back. A test
+    comparing the two sides' exact encodings caught "Studio+MacBook". The app registers the
+    `familiar` scheme, so the Camera app is the phone's scanner. There is no in-app scanner.
+  - **Point 4.** `ServerBrowser` resolves `_familiar._tcp` over IPv4. `checkContract` follows a
+    paired server whose stored address stopped answering.
+  - **Checked on a throwaway simulator against a tokened server:** the prompt named the server
+    and address; accepting it listed a profile that the server returns only with the token.
+    **The setup screen's Bonjour list stayed empty there, so in-app discovery is unproven on a
+    device.**
+  - **Left:**
+    - the MCP helper still sends no token (it needs a shared keychain group)
+    - the visualizer bundle's lyrics fetch is gated
+    - library stores still word a token 401 as an unknown profile
+
 Extends [ADR-0045](ADR-0045-familiar-authenticates-inbound-requests.md),
 [ADR-0131](ADR-0131-the-server-is-its-own-app.md)
 

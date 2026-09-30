@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql+asyncpg://familiar:familiar@localhost:5432/familiar"
 
+    # Advertise this server on the local network as `_familiar._tcp` on this port (ADR-0134 point
+    # 4). Unset, nothing is advertised: in Docker's default bridge network mDNS does not reach the
+    # LAN and the container's port is not the host's, so advertising there would announce the wrong
+    # address. `python -m app.serve` sets it when it binds beyond loopback.
+    advertise_port: int | None = Field(default=None, validation_alias=AliasChoices("FAMILIAR_ADVERTISE_PORT"))
+
     # Redis, when there is one. Unset, the server keeps the same state in Postgres instead
     # (ADR-0133): every Docker install sets REDIS_URL, and a server outside Docker need not.
     redis_url: str | None = None

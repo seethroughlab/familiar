@@ -91,6 +91,28 @@ let _serverToken = '';
  */
 export async function initServerToken(): Promise<void> {
   _serverToken = localStorage.getItem(SERVER_TOKEN_KEY) ?? '';
+  const handedOver = takeTokenFromFragment();
+  if (handedOver) await setServerToken(handedOver);
+}
+
+/**
+ * A token handed over in the URL fragment: `http://127.0.0.1:4400/#token=…` (ADR-0134 point 6).
+ *
+ * Familiar Server's "Open Admin" opens the admin this way, so the owner is not asked to paste a
+ * token the app already holds. A fragment is never sent to the server, so it is in no access log.
+ * It is removed from the address bar at once, so it is not left in history or copied along with
+ * the page's address. Other fragment parameters, if any, are kept.
+ */
+export function takeTokenFromFragment(): string | null {
+  if (typeof window === 'undefined' || !window.location.hash) return null;
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  const token = params.get('token')?.trim();
+  if (!token) return null;
+  params.delete('token');
+  const rest = params.toString();
+  const { pathname, search } = window.location;
+  window.history.replaceState(window.history.state, '', `${pathname}${search}${rest ? `#${rest}` : ''}`);
+  return token;
 }
 
 /** Persist a server token. Empty string clears it. */

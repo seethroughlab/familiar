@@ -30,6 +30,7 @@ attacker who can read `settings.json` — who already has every outbound API key
 from __future__ import annotations
 
 import hmac
+import re
 import secrets
 
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -82,10 +83,39 @@ def token_matches(presented: str | None, configured: str | None) -> bool:
     return hmac.compare_digest(presented, configured)
 
 
-def path_requires_token(path: str) -> bool:
-    """Whether a request path is behind the token gate."""
+#: Media, readable without a token (ADR-0045, "Media is exempt from the gate, decided 2026-08-09").
+#:
+#: **Recorded as decided for six weeks before it existed.** Until 2026-09-29 every `/api/` path was
+#: gated, so configuring a token broke `<img>` artwork in the web admin, every stream a WiiM or
+#: Sonos fetched for itself, and the Apple app's audio and artwork, none of which can present a
+#: header. Found while building ADR-0134, whose point 3 relies on it.
+#:
+#: `GET`/`HEAD` only, and only these shapes: uploading or deleting artwork stays gated. Stream and
+#: video URLs are keyed by a v4 UUID, so with the rest of the API closed they cannot be enumerated.
+#: Album-hash artwork can: `sha256(artist|album)` is derivable, so it is an oracle over the
+#: collection. ADR-0045 records that as the exemption's one real leak, and ADR-0134 point 3 as a
+#: follow-up now that servers sit on shared Wi-Fi.
+MEDIA_ROUTES = tuple(
+    re.compile(pattern)
+    for pattern in (
+        r"^/api/v1/tracks/[^/]+/stream$",
+        r"^/api/v1/tracks/[^/]+/artwork$",
+        r"^/api/v1/artwork/[^/]+/[^/]+$",
+        r"^/api/v1/library/artists/[^/]+/image$",
+        r"^/api/v1/videos/[^/]+/stream$",
+        r"^/api/v1/videos/[^/]+/poster$",
+        r"^/api/v1/profiles/[^/]+/avatar$",
+    )
+)
+MEDIA_METHODS = frozenset({"GET", "HEAD"})
+
+
+def path_requires_token(path: str, method: str = "GET") -> bool:
+    """Whether a request is behind the token gate."""
     normalised = path.rstrip("/") or "/"
     if normalised in PUBLIC_PATHS:
+        return False
+    if method.upper() in MEDIA_METHODS and any(r.match(normalised) for r in MEDIA_ROUTES):
         return False
     return normalised == "/mcp" or normalised.startswith(PROTECTED_PREFIXES)
 
@@ -132,7 +162,7 @@ class TokenAuthMiddleware:
             await self.app(scope, receive, send)
             return
 
-        if not path_requires_token(scope.get("path", "")):
+        if not path_requires_token(scope.get("path", ""), scope.get("method", "GET")):
             await self.app(scope, receive, send)
             return
 

@@ -103,3 +103,53 @@ async def revoke_token(request: Request) -> TokenStatus:
 
     get_app_settings_service().update(access_token=None)
     return TokenStatus(configured=False)
+
+
+class PairingInfo(BaseModel):
+    """What a pairing link carries (ADR-0134 point 5), for the web admin to render as a QR code.
+
+    The server does not build the link itself, because it does not know how the phone reaches it:
+    behind Docker its own addresses are the container's, and behind Tailscale the useful host is a
+    name only the operator knows. The web admin knows the host it was loaded from and builds the link
+    from that, falling back to `addresses` when that host is loopback.
+    """
+
+    server_id: str
+    server_name: str
+    token: str
+    #: The port this server advertises, when it advertises one; otherwise the client uses the port it
+    #: already reached the server on.
+    port: int | None = None
+    #: This machine's LAN addresses, private ranges first.
+    addresses: list[str]
+    header: str = TOKEN_HEADER
+
+
+@router.get("/pairing", response_model=PairingInfo)
+async def get_pairing(request: Request) -> PairingInfo:
+    """Everything a `familiar://pair` link needs. Requires a token, and holding it.
+
+    Pairing hands a client the token, so a server without one has nothing to pair with. That is a
+    conflict to resolve (create a token), not an authentication failure.
+    """
+    from app.api.exceptions import AuthenticationError, ConflictError
+    from app.config import settings as env_settings
+    from app.services.server_identity import get_server_identity, lan_addresses
+
+    token = get_app_settings_service().get().access_token
+    if not token:
+        raise ConflictError(
+            "This server has no token to pair with",
+            detail="Create a server token first: pairing gives a device that token.",
+        )
+    if not _authorised(request):
+        raise AuthenticationError()
+
+    identity = get_server_identity()
+    return PairingInfo(
+        server_id=identity.server_id,
+        server_name=identity.server_name,
+        token=token,
+        port=env_settings.advertise_port,
+        addresses=lan_addresses(),
+    )

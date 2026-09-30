@@ -261,3 +261,65 @@ class TestTheTokenIsNotLeaked:
         assert token not in str(masked)
         # Not even a prefix: unlike the outbound keys, no part of this one aids an operator.
         assert token[:4] not in str(masked["access_token"])
+
+
+class TestMediaIsExempt:
+    """ADR-0045's media exemption, which was recorded as decided on 2026-08-09 and did not exist
+    until 2026-09-29. Without it, configuring a token broke `<img>` artwork in the web admin, every
+    stream a WiiM or Sonos fetches for itself, and the Apple app's audio and artwork."""
+
+    MEDIA = [
+        "/api/v1/tracks/3fa85f64-5717-4562-b3fc-2c963f66afa6/stream",
+        "/api/v1/tracks/3fa85f64-5717-4562-b3fc-2c963f66afa6/artwork",
+        "/api/v1/artwork/0123456789abcdef/thumb",
+        "/api/v1/library/artists/Aphex%20Twin/image",
+        "/api/v1/videos/3fa85f64-5717-4562-b3fc-2c963f66afa6/stream",
+        "/api/v1/videos/3fa85f64-5717-4562-b3fc-2c963f66afa6/poster",
+        "/api/v1/profiles/3fa85f64-5717-4562-b3fc-2c963f66afa6/avatar",
+    ]
+
+    @pytest.mark.parametrize("path", MEDIA)
+    def test_reading_media_needs_no_token(self, path):
+        assert not path_requires_token(path, "GET")
+        assert not path_requires_token(path, "HEAD")
+
+    @pytest.mark.parametrize(
+        ("path", "method"),
+        [
+            # Changing media is not reading it.
+            ("/api/v1/tracks/x/artwork", "POST"),
+            ("/api/v1/tracks/x/artwork", "DELETE"),
+            ("/api/v1/profiles/x/avatar", "PUT"),
+            # Neighbours of media routes are not media.
+            ("/api/v1/tracks/x/lyrics", "GET"),
+            ("/api/v1/tracks/x/analysis/midi", "GET"),
+            ("/api/v1/tracks/x", "GET"),
+            # A suffix after a media shape is a different path.
+            ("/api/v1/tracks/x/stream/extra", "GET"),
+            ("/api/v1/tracks/x/y/stream", "GET"),
+        ],
+    )
+    def test_everything_else_stays_gated(self, path, method):
+        assert path_requires_token(path, method)
+
+    def test_every_exempt_shape_is_a_real_route(self):
+        """A renamed media endpoint must not silently fall back behind the gate."""
+        import re
+
+        from app.api.auth import MEDIA_ROUTES
+        from app.main import app
+
+        get_paths = [
+            re.sub(r"\{[^}]+\}", "x", r.path)
+            for r in app.routes
+            if "GET" in (getattr(r, "methods", None) or set())
+        ]
+        for pattern in MEDIA_ROUTES:
+            assert any(pattern.match(p) for p in get_paths), f"no GET route matches {pattern.pattern}"
+
+    @pytest.mark.asyncio
+    async def test_the_middleware_serves_media_to_a_client_with_no_token(self, monkeypatch):
+        passed, status = await TestTheMiddlewareGate._call(
+            monkeypatch, "secret", {}, "/api/v1/tracks/3fa85f64-5717-4562-b3fc-2c963f66afa6/stream"
+        )
+        assert passed and status is None

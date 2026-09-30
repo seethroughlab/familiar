@@ -74,9 +74,22 @@ class TestVersion:
 
 
 class TestServe:
-    def _run(self, argv):
+    @pytest.fixture(autouse=True)
+    def _no_advertising_leaks(self, monkeypatch):
+        # `main` sets `settings.advertise_port` when it binds beyond loopback. Left set, every later
+        # test's app startup would announce itself on the developer's real network.
+        from app.config import settings
+
+        monkeypatch.setattr(settings, "advertise_port", None)
+
+    def _run(self, argv, token="configured"):
         calls: list[object] = []
-        main(argv, migrate=lambda: calls.append("migrate"), run=lambda h, p: calls.append((h, p)))
+        main(
+            argv,
+            migrate=lambda: calls.append("migrate"),
+            run=lambda h, p: calls.append((h, p)),
+            token=lambda: token,
+        )
         return calls
 
     def test_migrates_before_it_serves(self):
@@ -88,11 +101,33 @@ class TestServe:
     def test_host_and_port_come_from_arguments(self):
         assert self._run(["--host", "0.0.0.0", "--port", "8000"])[-1] == ("0.0.0.0", 8000)
 
+    def test_beyond_loopback_without_a_token_it_refuses_before_touching_anything(self):
+        """ADR-0134 point 2: a laptop on café Wi-Fi must not become an open server."""
+        calls: list[object] = []
+        with pytest.raises(SystemExit, match="no token"):
+            main(
+                ["--host", "0.0.0.0"],
+                migrate=lambda: calls.append("migrate"),
+                run=lambda h, p: calls.append((h, p)),
+                token=lambda: None,
+            )
+        assert calls == []
+
+    def test_loopback_needs_no_token(self):
+        assert self._run([], token=None)[-1] == (DEFAULT_HOST, DEFAULT_PORT)
+        assert self._run(["--host", "localhost"], token=None)[-1] == ("localhost", DEFAULT_PORT)
+
+    def test_listening_beyond_loopback_advertises_that_port(self):
+        from app.config import settings
+
+        self._run(["--host", "0.0.0.0", "--port", "4455"])
+        assert settings.advertise_port == 4455
+
     def test_a_failed_migration_does_not_start_the_server(self):
         def fail():
             raise RuntimeError("migration failed")
 
         started = []
         with pytest.raises(RuntimeError):
-            main([], migrate=fail, run=lambda h, p: started.append(1))
+            main([], migrate=fail, run=lambda h, p: started.append(1), token=lambda: None)
         assert started == []

@@ -6,6 +6,7 @@ export * from './playlists';
 export * from './integrations';
 export * from './settings';
 export * from './soulseek';
+export * from './pairing';
 export * from './profiles';
 export * from './admin';
 export * from './system';
