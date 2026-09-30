@@ -77,12 +77,14 @@ async def queue_tracks_for_embeddings(limit: int | None = None) -> int:
 
     from app.db.models import Track, TrackAnalysis, TrackStatus
     from app.db.session import async_session_maker
+    from app.services.analysis import _models_missing
     from app.services.app_settings import get_app_settings_service
     from app.services.background import get_background_manager
 
-    # Skip if CLAP is disabled via settings or env var
+    # Skip if CLAP is disabled via settings or env var, or its encoders are not on disk yet
+    # (ADR-0132 point 8): queueing now would fail every track until they arrive.
     clap_enabled, _ = get_app_settings_service().is_clap_embeddings_enabled()
-    if not clap_enabled:
+    if not clap_enabled or _models_missing():
         return 0
 
     queued = 0

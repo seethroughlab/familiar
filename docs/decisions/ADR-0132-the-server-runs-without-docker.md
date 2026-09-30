@@ -5,9 +5,8 @@ Status: accepted
 Date: 2026-09-29
 
 Implementation:
-- **2026-09-29, `familiar`: points 2–6.** Point 8 (the CLAP artifacts as release assets) is the
-  remaining slice, because it changes `release.yml` and adds a download path of its own. Point 7
-  needed no code.
+- **2026-09-29, `familiar`: points 2–6.** Point 8 shipped separately (below), because it changes
+  `release.yml` and adds a download path of its own. Point 7 needed no code.
   - **Point 2.** `Settings.data_dir` is read from `FAMILIAR_DATA_DIR` only. `populate_by_name` stays
     off, because with it on pydantic-settings also reads a bare `DATA_DIR`, and a test pins that.
     `art_path`, `videos_path`, `profiles_path` and `mixtapes_path` default under it through
@@ -31,6 +30,30 @@ Implementation:
     a scratch directory with `FAMILIAR_DATA_DIR` set: `/api/v1/health` answered `healthy`, the
     socket was bound to 127.0.0.1 only, and a settings write landed in the data directory.
   - Tests: `tests/test_server_without_docker.py` and `tests/test_lint_data_paths.py`.
+- **2026-09-29, `familiar`: point 8.**
+  - **The export is deterministic, which is what lets the hashes live in source.** Hashed straight
+    from the registry, without pulling the images: `clap_audio.onnx` (117,275,257 bytes) and
+    `clap_text.onnx` (501,448,656) are byte-identical in v0.2.0-beta6 amd64, v0.2.0-beta7 amd64 and
+    v0.2.0-beta7 arm64. `app/services/clap_artifacts.py` pins both. `clap_audio_fp16.onnx` is *not*
+    reproducible (beta6 and beta7 differ) and nothing loads it, so it is not published.
+  - **Context overstated the files.** There is no `clap_text.onnx.data`: at 501 MB the text
+    encoder is one file. `tokenizer.json` is not an export artifact either. `clapback_embed`
+    fetches it from Hugging Face at first use, in the image as well, so it was left alone.
+  - **Release.** The smoke test runs `python -m app.services.clap_artifacts verify` inside the
+    built image on both architectures. The amd64 job copies the two files out with `SHA256SUMS`,
+    and `create-release` attaches all three. The Dockerfile fetches `export_models.py` from
+    clapback's `main` unpinned, so this check is also what catches an upstream change that moves
+    the output: the release fails instead of every vector moving.
+  - **Server.** `configure_model_dir()` sets `CLAPBACK_MODEL_DIR` to `data_dir/models/clapback`
+    unless the image already has, before any pool spawns. `ensure_present()` runs as a startup
+    task: in Docker it is two `stat` calls. A `dev` server only logs, having no release to fetch
+    from. A released server downloads from its own tag to `.part` and renames only on a hash
+    match. Until the files land, `_models_missing()` keeps embedding off, in capabilities, both
+    extractors and the embedding queue, the same as `DISABLE_CLAP_EMBEDDINGS` rather than failing
+    each track.
+  - Proved with the real bytes: the published beta7 encoders pass `verify`, and `download()` into
+    an empty data directory, from a local server standing in for GitHub, fetched, verified and
+    placed both. Tests: `tests/test_clap_artifacts.py`.
 
 Extends [ADR-0131](ADR-0131-the-server-is-its-own-app.md)
 

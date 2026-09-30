@@ -264,6 +264,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 raise RuntimeError(message)
             logger.warning(message)
 
+    # CLAP encoders (ADR-0132 point 8). Point the embedder at the data directory before any pool
+    # is spawned, so the children inherit it, and fetch the files in the background if this server
+    # has none. The image carries them, so in Docker this is two `stat` calls.
+    from app.services.clap_artifacts import configure_model_dir, ensure_present
+    configure_model_dir()
+    clap_fetch = asyncio.create_task(ensure_present())
+
     # Check analysis capabilities (warns if embeddings disabled)
     from app.services.analysis import check_analysis_capabilities
     check_analysis_capabilities()
@@ -282,6 +289,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Shutdown
     logger.info("Shutting down Familiar API")
+    clap_fetch.cancel()  # a partial download is a `.part` file, never loaded
     await bg.shutdown()
     logger.info("Background task manager stopped")
     await app.state.services.aclose()
