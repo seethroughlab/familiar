@@ -80,6 +80,7 @@ final class ServerLaunchTests: XCTestCase {
         XCTAssertEqual(env["FAMILIAR_SEMAPHORE_PREFIX"], "7JL9RZ9C8P.fs/mp")
         XCTAssertEqual(env["MAX_ANALYSIS_WORKERS"], "1")
         XCTAssertTrue(env["PATH"]!.hasPrefix("/R/bin:"), "the bundled ffmpeg is found first")
+        XCTAssertEqual(env["FAMILIAR_CHROMAPRINT_LIBRARY"], "/R/lib/libchromaprint.1.dylib")
         XCTAssertEqual(env["DATABASE_URL"], "postgresql+asyncpg://familiar:pw@127.0.0.1:54329/familiar")
     }
 
