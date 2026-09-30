@@ -271,9 +271,20 @@ def _extract_metadata_sync(file_path: Path) -> dict[str, Any]:
 class LibraryScanner:
     """Scans music library directories for audio files."""
 
-    def __init__(self, db: AsyncSession, scan_state=None):
+    #: Where Soulseek downloads land inside the library (ADR-0117). Always reviewed, even during
+    #: a first import: a download is exactly what review is for.
+    INBOX_DIRNAME = "Inbox"
+
+    def __init__(self, db: AsyncSession, scan_state=None, initial_import: bool = False):
         self.db = db
         self.scan_state = scan_state  # Optional ScanState for progress updates
+        # A library's first import: new files are active on arrival, not pending review. Decided by
+        # the sync in the API process (`initial_import_complete` in app settings), not here.
+        self.initial_import = initial_import
+        self._inbox: Path | None = None
+
+    def _in_inbox(self, file_path: Path) -> bool:
+        return _in_inbox_path(file_path, self._inbox)
 
     async def scan(
         self,
@@ -297,6 +308,7 @@ class LibraryScanner:
         # Handle legacy parameter
         if full_scan is not None:
             reread_unchanged = full_scan
+        self._inbox = library_path / self.INBOX_DIRNAME
         # Validate library path before scanning
         validation = validate_library_path(library_path)
         if not validation.exists:
@@ -466,6 +478,13 @@ class LibraryScanner:
                         existing_paths[path_str] = existing
                         if old_path in existing_paths:
                             del existing_paths[old_path]
+                elif self.initial_import and not self._in_inbox(file_path):
+                    # A first import: nothing to review it against, so it joins the library now.
+                    logger.info(f"NEW (initial import): {file_path.name}")
+                    track = await self._create_track(file_path, file_hash, file_mtime, file_size)
+                    track.status = TrackStatus.ACTIVE
+                    results["new"] += 1
+                    existing_hashes[file_hash] = track
                 else:
                     # Truly new file — pending review
                     logger.info(f"NEW (pending review): {file_path.name}")
@@ -970,3 +989,12 @@ class LibraryScanner:
 
         # Note: Analysis is queued by the caller after commit
         return track
+
+
+def _in_inbox_path(file_path: Path, inbox: Path | None) -> bool:
+    if inbox is None:
+        return False
+    try:
+        return file_path.is_relative_to(inbox)
+    except ValueError:
+        return False
