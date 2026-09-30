@@ -95,6 +95,21 @@ jobs:
             exit 1
           fi
 
+  # Familiar Server's decisions (ADR-0136): paths, launch specs, restart backoff, etiquette,
+  # debounce, pairing link. The assembled app needs signing identities and a payload build, so
+  # `desktop/macos/scripts/integration-check.sh` runs locally rather than here.
+  familiar-server-core:
+    name: Familiar Server (core)
+    runs-on: [self-hosted, macOS]
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: desktop/macos
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test
+        run: swift build && swift test
+
   macos-compose-integration:
     name: macOS Compose Integration
     # Pull requests only, for the same NAS-contention reason as docker-build.

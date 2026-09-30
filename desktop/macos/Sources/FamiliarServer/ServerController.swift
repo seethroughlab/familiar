@@ -1,0 +1,329 @@
+import AppKit
+import FamiliarServerCore
+import Foundation
+import ServiceManagement
+
+/// Runs the server on this Mac: Postgres through its launch agent, the Python server as a sandboxed
+/// child, restarted when it exits, and paused when the machine needs it to be (ADR-0136, ADR-0138).
+@MainActor
+final class ServerController: ObservableObject {
+    enum Status: Equatable {
+        case needsFolder
+        case needsApproval  // the Postgres agent is waiting in System Settings → Login Items
+        case starting(String)
+        case running
+        case restarting(after: TimeInterval)
+        case failed(String)
+    }
+
+    @Published private(set) var status: Status = .starting("Starting…")
+    @Published private(set) var pauseReason: String?
+    @Published private(set) var musicFolder: URL?
+    @Published var lanEnabled: Bool = UserDefaults.standard.bool(forKey: "lanEnabled") {
+        didSet {
+            UserDefaults.standard.set(lanEnabled, forKey: "lanEnabled")
+            restartServer()
+        }
+    }
+
+    let layout: Layout
+    private var process: Process?
+    private var startedAt = Date()
+    private var restartPolicy = RestartPolicy()
+    private var stopping = false
+    private var monitor: MachineMonitor?
+    private var watch: FolderWatch?
+    private var debouncer = SyncDebouncer()
+    private var syncTimer: Timer?
+    private var lastDecision: Etiquette.Decision = .run
+    private(set) var token: String? = TokenStore.load()
+
+    private static let agent = SMAppService.agent(plistName: Identity.postgresAgentPlist)
+
+    // Debug builds only: run the whole bring-up without the folder picker or a Login Items approval,
+    // for the integration check (`scripts/integration-check.sh`). Compiled out of release builds.
+    #if DEBUG
+    private let devMusicFolder = ProcessInfo.processInfo.environment["FAMILIAR_SERVER_DEV_MUSIC"]
+        .map { URL(fileURLWithPath: $0) }
+    private let devExternalPostgres = ProcessInfo.processInfo.environment["FAMILIAR_SERVER_DEV_EXTERNAL_POSTGRES"] == "1"
+    #else
+    private let devMusicFolder: URL? = nil
+    private let devExternalPostgres = false
+    #endif
+
+    init() {
+        let fm = FileManager.default
+        let group = fm.containerURL(forSecurityApplicationGroupIdentifier: Identity.appGroup)
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Group Containers/\(Identity.appGroup)")
+        let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Familiar Server")
+        layout = Layout(groupContainer: group, appSupport: support, resources: Bundle.main.resourceURL!)
+        monitor = MachineMonitor { [weak self] state in self?.apply(Etiquette.decide(state)) }
+        // At launch, not when the menu is first opened: a menu-style MenuBarExtra builds its
+        // contents only on click, so a start hung on the menu would wait for someone to open it,
+        // which at login is no one. Found by scripts/integration-check.sh.
+        Task { @MainActor in self.start() }
+    }
+
+    // MARK: - Lifecycle
+
+    func start() {
+        guard let folder = devMusicFolder ?? musicFolder ?? MusicFolder.resolve() else {
+            status = .needsFolder
+            return
+        }
+        musicFolder = folder
+        stopping = false
+        Task { await bringUp(folder: folder) }
+    }
+
+    func chooseFolder() {
+        guard let folder = MusicFolder.choose() else { return }
+        musicFolder = nil
+        stopServer()
+        musicFolder = folder
+        start()
+    }
+
+    private func bringUp(folder: URL) async {
+        do {
+            try FileManager.default.createDirectory(at: layout.serverData, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(
+                at: layout.postgresPasswordFile.deletingLastPathComponent(), withIntermediateDirectories: true
+            )
+            if !FileManager.default.fileExists(atPath: layout.postgresPasswordFile.path) {
+                FileManager.default.createFile(
+                    atPath: layout.postgresPasswordFile.path,
+                    contents: Data(PostgresSetup.generatePassword().utf8),
+                    attributes: [.posixPermissions: 0o600]
+                )
+            }
+        } catch {
+            status = .failed("Could not prepare its folders: \(error.localizedDescription)")
+            return
+        }
+
+        status = .starting("Starting the database…")
+        if !devExternalPostgres {
+            do {
+                if Self.agent.status != .enabled { try Self.agent.register() }
+            } catch {
+                status = .failed("Could not start the database: \(error.localizedDescription)")
+                return
+            }
+            if Self.agent.status == .requiresApproval {
+                status = .needsApproval
+                return
+            }
+        }
+        guard await waitForPort(PostgresSetup.port, seconds: 60) else {
+            status = .failed("The database did not start. Its log is in the app group container.")
+            return
+        }
+
+        watch = FolderWatch(folder: folder) { [weak self] in
+            Task { @MainActor in self?.debouncer.noteChange(at: Date()) }
+        }
+        syncTimer?.invalidate()
+        syncTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.syncIfDue() }
+        }
+        launchServer()
+    }
+
+    private func launchServer() {
+        guard let folder = musicFolder,
+              let password = try? String(contentsOf: layout.postgresPasswordFile, encoding: .utf8)
+        else { return }
+        // A LAN bind needs a token (ADR-0134 point 2); without one, loopback only.
+        let launch = ServerLaunch(
+            layout: layout, musicFolder: folder,
+            databasePassword: password.trimmingCharacters(in: .whitespacesAndNewlines),
+            lan: lanEnabled && token != nil,
+            inherited: ProcessInfo.processInfo.environment
+        )
+        let p = Process()
+        p.executableURL = launch.executable
+        p.arguments = launch.arguments
+        p.currentDirectoryURL = launch.workingDirectory
+        p.environment = launch.environment
+        FileManager.default.createFile(atPath: layout.serverLog.path, contents: nil)
+        if let log = try? FileHandle(forWritingTo: layout.serverLog) {
+            p.standardOutput = log
+            p.standardError = log
+        }
+        p.terminationHandler = { [weak self] _ in
+            Task { @MainActor in self?.serverExited() }
+        }
+        do {
+            try p.run()
+        } catch {
+            status = .failed("Could not start the server: \(error.localizedDescription)")
+            return
+        }
+        process = p
+        startedAt = Date()
+        status = .starting("Starting the server…")
+        Task { await afterLaunch() }
+    }
+
+    private func afterLaunch() async {
+        var client = ServerClient()
+        for _ in 0..<120 {
+            if await client.isHealthy() { break }
+            try? await Task.sleep(for: .seconds(1))
+        }
+        guard await client.isHealthy() else { return }  // the termination handler reports failures
+        // Mint the token over loopback, before anything could listen on the network, whenever the
+        // *server* has none, whatever this app remembers. A Keychain item outlives the server's
+        // settings (a reset, a deleted container), and trusting it would leave a server with no token
+        // and an app presenting one it never had. Found by scripts/integration-check.sh.
+        client.token = token
+        switch try? await client.tokenConfigured() {
+        case false?:
+            if let minted = try? await client.mintToken() {
+                TokenStore.save(minted)
+                token = minted
+            }
+        case true?:
+            break  // configured, and our stored token was accepted to learn it
+        case nil:
+            // Configured, and our token refused (or none stored). Nothing here can recover it:
+            // the web admin can rotate it, with the old one, or the server's settings be reset.
+            status = .failed("The server has a token this app does not hold. Rotate it in Server → Access.")
+            return
+        }
+        client.token = token
+        status = .running
+        restartPolicy = RestartPolicy()
+        // Re-apply the current etiquette to a freshly started server.
+        if let reason = pauseReason { try? await client.pause(reason: reason) }
+    }
+
+    private func serverExited() {
+        process = nil
+        guard !stopping else { return }
+        let delay = restartPolicy.delay(afterExitWithUptime: Date().timeIntervalSince(startedAt))
+        status = .restarting(after: delay)
+        Task {
+            try? await Task.sleep(for: .seconds(delay))
+            if !stopping { launchServer() }
+        }
+    }
+
+    func stopServer() {
+        stopping = true
+        watch = nil
+        syncTimer?.invalidate()
+        guard let p = process, p.isRunning else { return }
+        p.terminate()  // SIGTERM; uvicorn shuts down and cancels in-flight fetches
+        let deadline = Date().addingTimeInterval(15)
+        while p.isRunning && Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(0.1)) }
+        if p.isRunning { kill(p.processIdentifier, SIGKILL) }
+    }
+
+    private func restartServer() {
+        guard process != nil else { return }
+        stopServer()
+        stopping = false
+        launchServer()
+    }
+
+    func quit() {
+        stopServer()
+        // Stop Postgres too: quitting Familiar Server stops the server until the next login.
+        try? Self.agent.unregister()
+        NSApp.terminate(nil)
+    }
+
+    // MARK: - Etiquette (ADR-0138)
+
+    private func apply(_ decision: Etiquette.Decision) {
+        guard decision != lastDecision else { return }
+        lastDecision = decision
+        pauseReason = decision.reason
+        let client = ServerClient(token: token)
+        Task {
+            if let reason = decision.reason { try? await client.pause(reason: reason) }
+            else { try? await client.resume() }
+        }
+    }
+
+    func setPausedByOwner(_ paused: Bool) {
+        monitor?.update { $0.pausedByOwner = paused }
+    }
+
+    var pausedByOwner: Bool { monitor?.state.pausedByOwner ?? false }
+
+    func analyseAnywayForAnHour() {
+        monitor?.update { $0.overrideUntil = Date().addingTimeInterval(3600) }
+        // Nothing announces the override's end, so check again once it has passed.
+        Timer.scheduledTimer(withTimeInterval: 3601, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.monitor?.refresh() }
+        }
+    }
+
+    // MARK: - New music (ADR-0136 point 10)
+
+    private func syncIfDue() {
+        guard debouncer.takeDue(at: Date()), status == .running else { return }
+        let client = ServerClient(token: token)
+        Task { try? await client.startSync() }
+    }
+
+    // MARK: - The menu's links
+
+    /// The player on this Mac, paired through the same link a phone scans (ADR-0134 point 5).
+    func openInFamiliar() {
+        guard let token else { return }
+        Task {
+            let contract = try? await ServerClient(token: token).contract()
+            guard let id = contract?.serverID else { return }
+            let url = PairingLinkBuilder.link(
+                serverID: id, name: contract?.serverName ?? Host.current().localizedName ?? "This Mac",
+                host: "127.0.0.1", port: ServerLaunch.defaultPort, token: token
+            )
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    /// The web admin, handed the token in the fragment (ADR-0134 point 6).
+    func openAdmin(path: String = "") {
+        var components = URLComponents(string: "http://127.0.0.1:\(ServerLaunch.defaultPort)/\(path)")!
+        if let token {
+            var fragment = URLComponents()
+            fragment.queryItems = [URLQueryItem(name: "token", value: token)]
+            components.percentEncodedFragment = fragment.percentEncodedQuery
+        }
+        if let url = components.url { NSWorkspace.shared.open(url) }
+    }
+
+    func openLoginItemsSettings() {
+        SMAppService.openSystemSettingsLoginItems()
+    }
+
+    // MARK: -
+
+    private func waitForPort(_ port: Int, seconds: Int) async -> Bool {
+        for _ in 0..<(seconds * 2) {
+            if Self.portOpen(port) { return true }
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+        return false
+    }
+
+    private nonisolated static func portOpen(_ port: Int) -> Bool {
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = in_port_t(UInt16(port).bigEndian)
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+        return withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) == 0
+            }
+        }
+    }
+}
