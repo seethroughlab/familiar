@@ -30,13 +30,27 @@ class ContractInfo(BaseModel):
     min_client_contract: int
     #: Informational only — never compare against this. See the module docstring.
     server_version: str
+    #: Which server this is (ADR-0134 point 4). A client that reached the server by typing an
+    #: address learns here what to remember it by. `None` only if the settings file is unreadable:
+    #: this endpoint must answer whatever else is wrong.
+    server_id: str | None = None
+    server_name: str | None = None
 
 
 @router.get("", response_model=ContractInfo)
 async def get_api_contract() -> ContractInfo:
-    """Report the API contract this server implements, and the oldest client it serves."""
+    """Report the API contract this server implements, the oldest client it serves, and its identity."""
+    from app.services.server_identity import get_server_identity
+
+    try:
+        identity = get_server_identity()
+        server_id, server_name = identity.server_id, identity.server_name
+    except Exception:  # noqa: BLE001 - the handshake answers even with a broken settings file
+        server_id = server_name = None
     return ContractInfo(
         contract_version=API_CONTRACT_VERSION,
         min_client_contract=MIN_CLIENT_CONTRACT,
         server_version=get_app_version(),
+        server_id=server_id,
+        server_name=server_name,
     )

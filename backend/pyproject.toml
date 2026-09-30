@@ -55,6 +55,9 @@ dependencies = [
     "async-upnp-client>=0.47.0",
     "pyatv>=0.15.1",
     "pychromecast>=14.0.10",
+    # Advertises the server as _familiar._tcp (ADR-0134). Was already installed via pyatv and
+    # pychromecast; declared because the server now imports it itself.
+    "zeroconf>=0.149.16",
 ]
 
 [project.optional-dependencies]

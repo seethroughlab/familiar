@@ -2463,6 +2463,20 @@
             "title": "Min Client Contract",
             "type": "integer"
           },
+          "server_id": {
+            "title": "Server Id",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "server_name": {
+            "title": "Server Name",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "server_version": {
             "title": "Server Version",
             "type": "string"
@@ -6408,6 +6422,50 @@
         ],
         "title": "OutputType",
         "type": "string"
+      },
+      "PairingInfo": {
+        "description": "What a pairing link carries (ADR-0134 point 5), for the web admin to render as a QR code.\n\nThe server does not build the link itself, because it does not know how the phone reaches it:\nbehind Docker its own addresses are the container's, and behind Tailscale the useful host is a\nname only the operator knows. The web admin knows the host it was loaded from and builds the link\nfrom that, falling back to `addresses` when that host is loopback.",
+        "properties": {
+          "addresses": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Addresses",
+            "type": "array"
+          },
+          "header": {
+            "default": "X-Familiar-Token",
+            "title": "Header",
+            "type": "string"
+          },
+          "port": {
+            "title": "Port",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "server_id": {
+            "title": "Server Id",
+            "type": "string"
+          },
+          "server_name": {
+            "title": "Server Name",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "server_id",
+          "server_name",
+          "token",
+          "addresses"
+        ],
+        "title": "PairingInfo",
+        "type": "object"
       },
       "PendingGroupResponse": {
         "description": "A group of pending tracks from the same folder.",
@@ -12823,6 +12881,78 @@
         ]
       }
     },
+    "/api/v1/auth/pairing": {
+      "get": {
+        "description": "Everything a `familiar://pair` link needs. Requires a token, and holding it.\n\nPairing hands a client the token, so a server without one has nothing to pair with. That is a\nconflict to resolve (create a token), not an authentication failure.",
+        "operationId": "auth_get_pairing",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get Pairing",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/api/v1/auth/token": {
       "delete": {
         "description": "Clear the token, returning the server to unauthenticated.\n\nKept because a token that cannot be removed is one an operator will work around by editing JSON\non the NAS \u2014 the thing rotation exists to prevent. It reopens the server, which is why it needs\nthe current token.",
@@ -13311,7 +13441,7 @@
     },
     "/api/v1/contract": {
       "get": {
-        "description": "Report the API contract this server implements, and the oldest client it serves.",
+        "description": "Report the API contract this server implements, the oldest client it serves, and its identity.",
         "operationId": "system_get_api_contract",
         "responses": {
           "200": {

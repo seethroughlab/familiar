@@ -1761,6 +1761,14 @@ export type ContractInfo = {
      */
     min_client_contract: number;
     /**
+     * Server Id
+     */
+    server_id?: string | null;
+    /**
+     * Server Name
+     */
+    server_name?: string | null;
+    /**
      * Server Version
      */
     server_version: string;
@@ -4604,6 +4612,43 @@ export type OutputResponse = {
  * Types of audio outputs.
  */
 export type OutputType = 'browser' | 'sonos' | 'airplay' | 'chromecast' | 'upnp';
+
+/**
+ * PairingInfo
+ *
+ * What a pairing link carries (ADR-0134 point 5), for the web admin to render as a QR code.
+ *
+ * The server does not build the link itself, because it does not know how the phone reaches it:
+ * behind Docker its own addresses are the container's, and behind Tailscale the useful host is a
+ * name only the operator knows. The web admin knows the host it was loaded from and builds the link
+ * from that, falling back to `addresses` when that host is loopback.
+ */
+export type PairingInfo = {
+    /**
+     * Addresses
+     */
+    addresses: Array<string>;
+    /**
+     * Header
+     */
+    header?: string;
+    /**
+     * Port
+     */
+    port?: number | null;
+    /**
+     * Server Id
+     */
+    server_id: string;
+    /**
+     * Server Name
+     */
+    server_name: string;
+    /**
+     * Token
+     */
+    token: string;
+};
 
 /**
  * PendingGroupResponse
@@ -8796,6 +8841,47 @@ export type ArtworkGetArtworkByHashResponses = {
      */
     200: unknown;
 };
+
+export type AuthGetPairingData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/auth/pairing';
+};
+
+export type AuthGetPairingErrors = {
+    /**
+     * Bad Request
+     */
+    400: ErrorEnvelope;
+    /**
+     * Unauthorized
+     */
+    401: ErrorEnvelope;
+    /**
+     * Not Found
+     */
+    404: ErrorEnvelope;
+    /**
+     * Unprocessable Entity
+     */
+    422: ErrorEnvelope;
+    /**
+     * Internal Server Error
+     */
+    500: ErrorEnvelope;
+};
+
+export type AuthGetPairingError = AuthGetPairingErrors[keyof AuthGetPairingErrors];
+
+export type AuthGetPairingResponses = {
+    /**
+     * Successful Response
+     */
+    200: PairingInfo;
+};
+
+export type AuthGetPairingResponse = AuthGetPairingResponses[keyof AuthGetPairingResponses];
 
 export type AuthRevokeTokenData = {
     body?: never;

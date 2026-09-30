@@ -9,13 +9,16 @@ It does not install, find or start Postgres; that belongs to whatever packaged t
 not stamp an old, pre-Alembic database as the entrypoint does either: that path exists for Docker
 installs that predate migrations, and a server started this way has never had one.
 
-The default host is loopback. Listening on anything else is a decision the caller makes with
-`--host`; ADR-0134 decides what that requires.
+The default host is loopback. Listening on anything else requires a server token, and refuses to
+start without one (ADR-0134 point 2): a laptop on café Wi-Fi must not become a server anyone there
+can reach. Binding beyond loopback also turns on the `_familiar._tcp` advertisement, on that port,
+so a phone on the same network can find it.
 """
 
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import sys
 from collections.abc import Callable, Sequence
 
@@ -55,13 +58,44 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def is_loopback(host: str) -> bool:
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False  # a host name other than localhost: assume it is reachable
+
+
+def configured_token() -> str | None:
+    from app.services.app_settings import get_app_settings_service
+
+    return get_app_settings_service().get().access_token
+
+
+REFUSAL = (
+    "Refusing to listen on {host}: this server has no token, so anyone on the network could use "
+    "it (ADR-0134 point 2). Create one first — in the web admin under Server → Access, or with "
+    "`curl -X POST http://127.0.0.1:{port}/api/v1/auth/token` while it runs on loopback — then "
+    "start it again."
+)
+
+
 def main(
     argv: Sequence[str] | None = None,
     *,
     migrate: Callable[[], None] = migrate,
     run: Callable[[str, int], None] = run,
+    token: Callable[[], str | None] = configured_token,
 ) -> None:
     args = parse_args(argv)
+    if not is_loopback(args.host):
+        if not token():
+            raise SystemExit(REFUSAL.format(host=args.host, port=args.port))
+        from app.config import settings
+
+        if settings.advertise_port is None:
+            settings.advertise_port = args.port
     migrate()
     run(args.host, args.port)
 

@@ -275,6 +275,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from app.services.analysis import check_analysis_capabilities
     check_analysis_capabilities()
 
+    # Bonjour (ADR-0134 point 4): only when a port to advertise is configured, which
+    # `python -m app.serve` does when it listens beyond loopback. Never fatal: a server that cannot
+    # announce itself still serves the clients that know its address.
+    from app.services.advertise import Advertiser
+    advertiser = Advertiser()
+    if app_config.advertise_port:
+        try:
+            await advertiser.start(app_config.advertise_port)
+        except Exception as e:
+            logger.warning(f"Could not advertise on the local network: {e}")
+
     # Start background task manager
     from app.services.background import get_background_manager
     bg = get_background_manager()
@@ -290,6 +301,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Shutdown
     logger.info("Shutting down Familiar API")
     clap_fetch.cancel()  # a partial download is a `.part` file, never loaded
+    await advertiser.stop()
     await bg.shutdown()
     logger.info("Background task manager stopped")
     await app.state.services.aclose()
