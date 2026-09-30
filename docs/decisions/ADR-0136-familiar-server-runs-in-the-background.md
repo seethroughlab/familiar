@@ -1,6 +1,6 @@
 # ADR-0136: Familiar Server Runs in the Background
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-29
 
@@ -138,8 +138,11 @@ database.
    - Pause Analysis
    - Quit Familiar Server
 
-7. **Its source is the Xcode project at `familiar/desktop/macos/`** (ADR-0135 point 2). It is a
-   thin supervisor: all server behaviour stays in `backend/`, which the Docker form runs unchanged.
+7. **Its source is a Swift package at `familiar/desktop/macos/`** (ADR-0135 point 2), assembled
+   into `Familiar Server.app` by a script, as the spike was, rather than an Xcode project. The
+   package keeps the supervisor's logic in a library that `swift test` reaches without a GUI, and
+   it avoids a hand-maintained `.xcodeproj` in a repository that has none. It is a thin
+   supervisor: all server behaviour stays in `backend/`, which the Docker form runs unchanged.
    Nothing in `desktop/macos/` implements a feature the NAS would lack.
 
 8. **Execution begins with a spike, and the rest of this ADR is shaped by it.** A throwaway build
