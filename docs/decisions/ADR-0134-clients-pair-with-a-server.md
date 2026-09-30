@@ -1,6 +1,6 @@
 # ADR-0134: Clients Pair with a Server
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-29
 
