@@ -4,8 +4,9 @@
 #   1. a folder with one real 40-second FLAC, granted read-only
 #   2. the Postgres agent started by hand (launchd would, after a Login Items approval)
 #   3. the app launched in its debug integration mode (no folder picker, agent already running)
-#   4. the server comes up, mints its own token, scans the track and analyses it: the analysis
-#      pool running inside the sandbox is ADR-0136 point 3's whole question
+#   4. the server comes up, mints its own token, scans the track and analyses it, with no approval
+#      (a first import arrives active): the analysis pool running inside the sandbox is ADR-0136
+#      point 3's whole question
 #   5. the music folder is exactly as it was
 #   6. everything stopped and removed: the app's container, the group container's Postgres
 #
@@ -76,16 +77,9 @@ echo "==> scan and analyse (from inside the sandbox)"
 H=(-H "X-Familiar-Token: $TOKEN")
 sync() { curl -s "${H[@]}" -X POST "http://127.0.0.1:$PORT/api/v1/library/sync" -H 'content-type: application/json' -d '{}' >/dev/null; }
 sync_done() { curl -s "${H[@]}" "http://127.0.0.1:$PORT/api/v1/library/sync/status" | "$PY" -c "import sys,json;print(json.load(sys.stdin).get('status'))"; }
-sync
-for _ in $(seq 1 60); do [ "$(sync_done)" = "completed" ] && break; sleep 2; done
-# Every new file lands in PENDING_REVIEW, and analysis skips it until approved (ADR-0117's review
-# flow). Approve as a listener would, then sync again to analyse.
-PROFILE=$(curl -s "${H[@]}" -X POST "http://127.0.0.1:$PORT/api/v1/profiles" -H 'content-type: application/json' -d '{"name":"Integration"}' | "$PY" -c "import sys,json;print(json.load(sys.stdin)['id'])")
-APPROVED=$(curl -s "${H[@]}" -H "X-Profile-ID: $PROFILE" -X POST "http://127.0.0.1:$PORT/api/v1/pending-tracks/bulk/approve-all" -H 'content-type: application/json' -d '{"queue_analysis": true}')
-echo "   approved: $APPROVED"
-# Approval does not itself queue analysis (`_queue_for_analysis` is a no-op): the next sync picks
-# the track up. The server also starts a sync of its own at launch, so rather than predict which
-# sync that will be, ask for one whenever none is running until the track is analysed.
+# No approval step: on a fresh server this is the library's first import, so the track arrives
+# active and is analysed without anyone reviewing it. A coworker's first run depends on exactly
+# this. Ask for a sync whenever none is running (the server also starts one itself at launch).
 PSQL="$APP/Contents/Resources/postgres/bin/psql"
 db() { PGPASSWORD=$(cat "$GROUP/postgres/password") "$PSQL" -h 127.0.0.1 -p 54329 -U familiar -d familiar -Atc "$1"; }
 for i in $(seq 1 90); do
@@ -97,7 +91,7 @@ for i in $(seq 1 90); do
   case "$STATE" in *" 1 analysed"*) break ;; esac
   sleep 5
 done
-case "$STATE" in *" 1 analysed"*) echo "   analysis ran inside the sandbox" ;; *) echo "analysis did not complete"; grep -iE "error|semlock|permission" "$CONTAINER/Data/Library/Application Support/Familiar Server/server.log" | tail -20; exit 1 ;; esac
+case "$STATE" in *" 1 analysed"*) echo "   analysis ran inside the sandbox, as a first import: status $(db "select status from tracks")" ;; *) echo "analysis did not complete"; grep -iE "error|semlock|permission" "$CONTAINER/Data/Library/Application Support/Familiar Server/server.log" | tail -20; exit 1 ;; esac
 
 echo "==> zero-touch"
 AFTER=$(find "$MUSIC" -type f -exec shasum {} + | sort | shasum)

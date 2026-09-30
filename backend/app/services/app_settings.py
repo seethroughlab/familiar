@@ -167,6 +167,13 @@ class AppSettings(BaseModel):
     server_id: str | None = None
     server_name: str | None = None
 
+    # Whether this library's first import has finished. Until it has, newly found files are
+    # active on arrival rather than pending review: review exists to vet *additions* to a library
+    # (duplicates, better copies, Soulseek downloads under ADR-0117), and a first import has
+    # nothing to compare them with. `None` until the first sync decides it: a library that already
+    # has tracks is treated as imported, so no existing installation changes behaviour.
+    initial_import_complete: bool | None = None
+
 
 
 class AppSettingsService:

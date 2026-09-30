@@ -145,10 +145,48 @@ def _get_scan_executor() -> ProcessPoolExecutor:
     return _scan_executor
 
 
+async def _initial_import_pending() -> bool:
+    """Whether this sync is the library's first import, so new files skip review.
+
+    Decided here, in the API process, and handed to the scan subprocess, so only one process ever
+    writes the setting. The first time it is asked, a library that already has tracks counts as
+    imported: existing installations keep reviewing everything new, exactly as before.
+    """
+    from sqlalchemy import func, select
+
+    from app.db.models import Track
+    from app.db.session import async_session_maker
+    from app.services.app_settings import get_app_settings_service
+
+    service = get_app_settings_service()
+    complete = service.get().initial_import_complete
+    if complete is None:
+        async with async_session_maker() as db:
+            has_tracks = ((await db.execute(select(func.count(Track.id)))).scalar() or 0) > 0
+        complete = has_tracks
+        service.update(initial_import_complete=complete)
+    return not complete
+
+
+def _finish_initial_import(scan_result: dict[str, Any]) -> None:
+    """Mark the first import done, but only once a scan has actually found music.
+
+    A server first pointed at an empty folder (Familiar Server before its owner copies anything
+    in) must not "finish" importing nothing, or everything added afterwards would wait for review.
+    """
+    from app.services.app_settings import get_app_settings_service
+
+    found = sum(scan_result.get(k, 0) for k in ("new", "updated", "unchanged", "pending_review"))
+    if found > 0:
+        get_app_settings_service().update(initial_import_complete=True)
+        logger.info("Initial import complete (%d files); new files will be reviewed from now on", found)
+
+
 def _run_scan_in_process(
     library_paths_str: list[str],
     reread_unchanged: bool,
     started_at: str,
+    initial_import: bool = False,
 ) -> dict[str, Any]:
     """Run library scan in a subprocess — keeps main event loop free for HTTP.
 
@@ -159,13 +197,14 @@ def _run_scan_in_process(
 
     logging.basicConfig(level=logging.INFO, format="%(message)s", force=True)
 
-    return asyncio.run(_async_scan_worker(library_paths_str, reread_unchanged, started_at))
+    return asyncio.run(_async_scan_worker(library_paths_str, reread_unchanged, started_at, initial_import))
 
 
 async def _async_scan_worker(
     library_paths_str: list[str],
     reread_unchanged: bool,
     started_at: str,
+    initial_import: bool = False,
 ) -> dict[str, Any]:
     """Async scan logic that runs inside the subprocess's own event loop.
 
@@ -213,6 +252,7 @@ async def _async_scan_worker(
             scanner = LibraryScanner(
                 db,
                 scan_state=_SyncProgressAdapter(progress),
+                initial_import=initial_import,
             )
 
             for library_path in library_paths:
@@ -341,6 +381,7 @@ async def run_library_sync(
             progress.error(error_msg)
             return {"status": "error", "error": error_msg}
 
+        initial_import = await _initial_import_pending()
         loop = asyncio.get_event_loop()
         scan_result = await loop.run_in_executor(
             _get_scan_executor(),
@@ -348,11 +389,14 @@ async def run_library_sync(
             [str(p) for p in valid_paths],
             reread_unchanged,
             progress.started_at,
+            initial_import,
         )
 
         if scan_result.get("status") == "error":
             progress.error(scan_result.get("error", "Scan failed"))
             return scan_result
+        if initial_import:
+            _finish_initial_import(scan_result)
 
         # Phase 3: Analysis - wait for all pending analysis to complete
         scan_stats = {
