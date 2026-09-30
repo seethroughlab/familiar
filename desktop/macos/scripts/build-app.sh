@@ -39,7 +39,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Library/
 cp "$BIN/FamiliarServer" "$BIN/familiar-postgres-agent" "$APP/Contents/MacOS/"
 cp "$SUPPORT/com.familiar.server.postgres.plist" "$APP/Contents/Library/LaunchAgents/"
 sed -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$(date +%Y%m%d%H%M)/" "$SUPPORT/Info.plist" > "$APP/Contents/Info.plist"
-cp -R "$PAYLOAD/python" "$PAYLOAD/postgres" "$PAYLOAD/backend" "$PAYLOAD/bin" "$APP/Contents/Resources/"
+cp -R "$PAYLOAD/python" "$PAYLOAD/postgres" "$PAYLOAD/backend" "$PAYLOAD/bin" "$PAYLOAD/lib" "$APP/Contents/Resources/"
 
 echo "==> sign with $ID"
 sign() { codesign -f -s "$ID" -o runtime --timestamp=none "$@" >/dev/null 2>&1; }
