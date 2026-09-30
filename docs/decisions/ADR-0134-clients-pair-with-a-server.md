@@ -33,6 +33,12 @@ Implementation:
     browser at once, because the gate turns on the moment one exists.
   - **Point 6.** `initServerToken` takes `#token=…` from the fragment, stores it, and removes it
     from the address bar with `replaceState`, keeping any other fragment parameters.
+  - **Point 3's premise was false, and is now true.** "Media stays exempt" assumed ADR-0045's
+    exemption existed. It did not: every `/api/` path was gated. The Pair a Device panel's "Create
+    server token" would therefore have broken web artwork, network-output playback and every Apple
+    client stream in one click. `MEDIA_ROUTES` in `app/api/auth.py` now exempts `GET`/`HEAD` on
+    the seven media shapes. Checked on a real tokened server: media returned 404 for an unknown id
+    with or without the token; `/tracks`, lyrics and an artwork `POST` returned 401 without it.
   - **Checked on a real server (2026-09-29):**
     - A LAN bind without a token was refused.
     - A token was minted over loopback.

@@ -112,6 +112,13 @@ Implementation:
   app needs a feature. Found while placing `GET /api/v1/contract` for
   [ADR-0113](ADR-0113-the-api-declares-a-contract-version.md), whose first draft misdiagnosed it as
   a missing `PUBLIC_PATHS` entry.
+- **Correction, 2026-09-29: the media exemption above was recorded as decided and never built.**
+  `path_requires_token` gated every `/api/` path, so configuring a token broke `<img>` artwork in
+  the web admin, streams fetched by WiiM or Sonos, and the Apple app's audio and artwork. Found
+  while building [ADR-0134](ADR-0134-clients-pair-with-a-server.md), whose point 3 relies on it;
+  built there as `MEDIA_ROUTES` in `backend/app/api/auth.py` (`GET`/`HEAD` on seven route shapes,
+  tested against the live route table so a rename cannot drop it silently). The decision above is
+  unchanged; this note records when it became true.
 - **Where execution stands, and this ADR is not finished.** Phase 1 (the token and the gate) and
   phase 2 (clients holding it) are built. **Point 4 (CORS narrowing) is not started, point 5 (on by
   default) is deliberately deferred, and point 2's profile allowlist — the large half — has not
