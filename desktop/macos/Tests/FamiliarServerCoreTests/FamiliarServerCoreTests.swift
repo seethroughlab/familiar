@@ -4,16 +4,14 @@ import XCTest
 @testable import FamiliarServerCore
 
 final class LayoutTests: XCTestCase {
-    func testPostgresStateIsSharedAndServerStateIsNot() {
-        let layout = Layout(
-            groupContainer: URL(fileURLWithPath: "/G"),
-            appSupport: URL(fileURLWithPath: "/A"),
-            resources: URL(fileURLWithPath: "/R")
-        )
-        // The agent and the sandboxed server both reach the group container, and nothing else.
-        XCTAssertTrue(layout.postgresData.path.hasPrefix("/G/"))
-        XCTAssertTrue(layout.postgresPasswordFile.path.hasPrefix("/G/"))
-        XCTAssertTrue(layout.serverData.path.hasPrefix("/A/"))
+    /// ADR-0140: one folder for the app and the agent. A group container, unentitled, asks the owner.
+    func testEverythingLivesInOneFolderTheAppAndAgentAgreeOn() {
+        let layout = Layout(appSupport: Layout.defaultAppSupport(home: "/Users/someone"), resources: URL(fileURLWithPath: "/R"))
+        let home = "/Users/someone/Library/Application Support/Familiar Server/"
+        XCTAssertTrue(layout.postgresData.path.hasPrefix(home + "postgres"))
+        XCTAssertTrue(layout.postgresPasswordFile.path.hasPrefix(home + "postgres"))
+        XCTAssertTrue(layout.serverData.path.hasPrefix(home + "data"))
+        XCTAssertFalse(layout.postgresData.path.contains("Group Containers"))
         XCTAssertEqual(layout.python.path, "/R/python/bin/python3")
     }
 }
@@ -48,11 +46,7 @@ final class PostgresSetupTests: XCTestCase {
 }
 
 final class ServerLaunchTests: XCTestCase {
-    private let layout = Layout(
-        groupContainer: URL(fileURLWithPath: "/G"),
-        appSupport: URL(fileURLWithPath: "/A"),
-        resources: URL(fileURLWithPath: "/R")
-    )
+    private let layout = Layout(appSupport: URL(fileURLWithPath: "/A"), resources: URL(fileURLWithPath: "/R"))
 
     func testItRunsAppServeOnLoopbackByDefault() {
         let launch = ServerLaunch(layout: layout, musicFolder: URL(fileURLWithPath: "/Music"), databasePassword: "pw")

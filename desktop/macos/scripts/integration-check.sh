@@ -12,7 +12,8 @@
 #      arrives active)
 #   5. ffmpeg (cover extraction, AAC) and libchromaprint (fingerprints) work under the profile
 #   6. the music folder is exactly as it was
-#   7. everything stopped and removed: the agent unregistered, the app's data, Postgres's data
+#   7. everything stopped and removed: the agent unregistered, and the one folder the app and the
+#      agent share (Postgres's data included)
 #
 # usage: scripts/integration-check.sh
 set -euo pipefail
@@ -21,13 +22,11 @@ HERE=$(cd "$(dirname "$0")/.." && pwd)
 WORK=$HERE/build/integration
 MUSIC=$WORK/music
 APP="$HERE/build/Familiar Server.app"
-GROUP=~/Library/Group\ Containers/7JL9RZ9C8P.fs
 SUPPORT=~/Library/Application\ Support/Familiar\ Server
 PY=$HERE/build/payload/python/bin/python3
 PORT=4400
 
 if lsof -nP -iTCP:$PORT -sTCP:LISTEN >/dev/null 2>&1; then echo "port $PORT is in use" >&2; exit 1; fi
-if [ -e "$GROUP/postgres" ]; then echo "$GROUP/postgres exists; refusing to overwrite it" >&2; exit 1; fi
 if [ -e "$SUPPORT" ]; then echo "$SUPPORT exists (an installed Familiar Server's data); refusing to remove it" >&2; exit 1; fi
 
 forget_token() { security delete-generic-password -s com.familiar.server.token >/dev/null 2>&1 || true; }
@@ -39,7 +38,7 @@ cleanup() {
   pkill -f "Familiar Server.app/Contents/Resources/python" 2>/dev/null || true
   pkill -f "Familiar Server.app/Contents/Resources/postgres/bin/postgres" 2>/dev/null || true
   sleep 2
-  rm -rf "$GROUP/postgres" "$SUPPORT"
+  rm -rf "$SUPPORT"
 }
 trap cleanup EXIT
 forget_token
@@ -69,7 +68,7 @@ DEV_MUSIC=$MUSIC "$HERE/scripts/build-app.sh" integration >/dev/null
 echo "==> app, registering its own Postgres agent"
 open -n --env FAMILIAR_SERVER_DEV_MUSIC="$MUSIC" "$APP"
 for _ in $(seq 1 90); do nc -z 127.0.0.1 54329 2>/dev/null && break; sleep 1; done
-nc -z 127.0.0.1 54329 || { echo "Postgres did not start"; tail -20 "$SUPPORT/server.log" 2>/dev/null; cat "$GROUP/postgres/postgres.log" 2>/dev/null; exit 1; }
+nc -z 127.0.0.1 54329 || { echo "Postgres did not start"; tail -20 "$SUPPORT/server.log" 2>/dev/null; cat "$SUPPORT/postgres/postgres.log" 2>/dev/null; exit 1; }
 launchctl print "gui/$(id -u)/com.familiar.server.postgres" >/dev/null 2>&1 \
   || { echo "Postgres is up, but not as the registered agent"; exit 1; }
 echo "   registered with SMAppService, started by launchd"
@@ -97,7 +96,7 @@ sync_done() { curl -s "${H[@]}" "http://127.0.0.1:$PORT/api/v1/library/sync/stat
 # active and is analysed without anyone reviewing it. A coworker's first run depends on exactly
 # this. Ask for a sync whenever none is running (the server also starts one itself at launch).
 PSQL="$APP/Contents/Resources/postgres/bin/psql"
-db() { PGPASSWORD=$(cat "$GROUP/postgres/password") "$PSQL" -h 127.0.0.1 -p 54329 -U familiar -d familiar -Atc "$1"; }
+db() { PGPASSWORD=$(cat "$SUPPORT/postgres/password") "$PSQL" -h 127.0.0.1 -p 54329 -U familiar -d familiar -Atc "$1"; }
 for i in $(seq 1 90); do
   STATE=$(db "select count(*) || ' track(s), ' || (select count(*) from track_analysis where features_version > 0) || ' analysed' from tracks" 2>&1 || true)
   SYNC=$(curl -s "${H[@]}" "http://127.0.0.1:$PORT/api/v1/library/sync/status" | "$PY" -c "import sys,json;d=json.load(sys.stdin);print(d.get('status'), d.get('phase'))" 2>/dev/null || true)

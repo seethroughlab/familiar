@@ -18,17 +18,10 @@ func fail(_ message: String) -> Never {
 
 let executable = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
 let contents = executable.deletingLastPathComponent().deletingLastPathComponent()  // …/Contents
-let groupContainer = FileManager.default
-    .containerURL(forSecurityApplicationGroupIdentifier: Identity.appGroup)
-    ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Group Containers/\(Identity.appGroup)")
-let layout = Layout(
-    groupContainer: groupContainer,
-    appSupport: groupContainer,  // unused by the agent
-    resources: contents.appendingPathComponent("Resources")
-)
+let layout = Layout(appSupport: Layout.defaultAppSupport(), resources: contents.appendingPathComponent("Resources"))
 
 // launchd gives an agent no log file of its own, and the plist cannot name a path under the user's
-// home, so the agent points its own output at the group container before doing anything else.
+// home, so the agent points its own output at its own folder before doing anything else.
 try? FileManager.default.createDirectory(
     at: layout.postgresLog.deletingLastPathComponent(), withIntermediateDirectories: true
 )

@@ -60,12 +60,7 @@ final class ServerController: ObservableObject {
             try? Self.agent.unregister()
             exit(0)
         }
-        let fm = FileManager.default
-        let group = fm.containerURL(forSecurityApplicationGroupIdentifier: Identity.appGroup)
-            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Group Containers/\(Identity.appGroup)")
-        let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Familiar Server")
-        layout = Layout(groupContainer: group, appSupport: support, resources: Bundle.main.resourceURL!)
+        layout = Layout(appSupport: Layout.defaultAppSupport(), resources: Bundle.main.resourceURL!)
         monitor = MachineMonitor { [weak self] state in self?.apply(Etiquette.decide(state)) }
         // However the app ends — its own Quit, a quit from the Dock or another app, logout, restart
         // — the server ends with it. Only the menu's Quit stopped it, so any other way out left
