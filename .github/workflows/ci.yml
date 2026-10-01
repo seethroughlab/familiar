@@ -1,17 +1,22 @@
 # CI.
 #
-# **The runner is a repository variable, not a literal**, so the tenancy can be changed without
-# editing this file. `CI_RUNNER` and `CI_LINUX_RUNNER` are unset in normal operation and every job
-# lands on the self-hosted runner, which is the NAS: it has the 23K-track library, the Docker
-# daemon and the caches, and it is free.
+# **Linux jobs run on GitHub-hosted runners, not the NAS.** This repository is public, so the
+# minutes cost nothing, and each job gets a machine of its own.
 #
-# Set them to `ubuntu-latest` / `["ubuntu-latest"]` when the NAS is unavailable. It went offline for
-# hours with four PRs queued behind it and nothing could be merged, because a self-hosted runner
-# that is down does not fail a check — it never starts one, so a PR sits at "pending" forever with
-# no signal at all. This repository is public, so GitHub-hosted minutes cost nothing.
+# They used to default to the self-hosted runner on the NAS, which also serves the music library,
+# runs Frigate and Plex, and hosts a second repository's runner. On 2026-10-01 a Familiar E2E job and
+# that other repository's job overlapped there, memory ran out, and the NAS thrashed without an OOM
+# kill for over an hour until it was power-cycled: no music, no cameras, and every queued check
+# pending. Before that it had gone offline for hours with four PRs queued and nothing mergeable,
+# because a self-hosted runner that is down never starts a check, so nothing fails. A Docker build
+# there had also stalled playback outright (a 20 MB track from ~1.5 s to ~40 s).
 #
-# `macOS Compose Integration` is deliberately left pinned. GitHub's macOS runners have no Docker
-# daemon, so it cannot run there at all.
+# The runner is still a repository variable, so the tenancy can change without editing this file:
+# set `CI_LINUX_RUNNER` to `["self-hosted","Linux"]` (or `CI_RUNNER` to `self-hosted`) to send jobs
+# back to the NAS, deliberately and knowing the above.
+#
+# `Familiar Server (core)` and `macOS Compose Integration` stay on the self-hosted Mac: the first
+# builds the Mac app, and GitHub's macOS runners have no Docker daemon for the second.
 name: CI
 
 on:
@@ -64,7 +69,9 @@ concurrency:
 jobs:
   macos-compose-check:
     name: macOS Compose Check
-    runs-on: ${{ vars.CI_RUNNER || 'self-hosted' }}
+    # Parses compose files; nothing here is macOS-specific, and a bare `self-hosted` label could land
+    # on any self-hosted machine.
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -249,7 +256,7 @@ jobs:
     # `No download found for request: cpython-3.11.15-macos-aarch64-none` before running a check.
     # It only surfaced when `CI_RUNNER` was cleared: while it was `ubuntu-latest` these landed on
     # hosted Linux and the ambiguity never showed.
-    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-latest"]') }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -278,7 +285,7 @@ jobs:
     # `No download found for request: cpython-3.11.15-macos-aarch64-none` before running a check.
     # It only surfaced when `CI_RUNNER` was cleared: while it was `ubuntu-latest` these landed on
     # hosted Linux and the ambiguity never showed.
-    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-latest"]') }}
     timeout-minutes: 10
     env:
       UV_HTTP_TIMEOUT: '120'
@@ -358,7 +365,7 @@ jobs:
 
   backend-test-contract:
     name: Backend Test (Contract)
-    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-latest"]') }}
     timeout-minutes: 10
     env:
       UV_HTTP_TIMEOUT: '120'
@@ -443,7 +450,7 @@ jobs:
 
   backend-test-core:
     name: Backend Test (Core)
-    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-latest"]') }}
     timeout-minutes: 10
     env:
       UV_HTTP_TIMEOUT: '120'
@@ -531,7 +538,7 @@ jobs:
   # measures coverage.
   backend-test-no-redis:
     name: Backend Test (Core, no Redis)
-    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-latest"]') }}
     timeout-minutes: 10
     env:
       UV_HTTP_TIMEOUT: '120'
@@ -579,7 +586,7 @@ jobs:
 
   backend-test-integration:
     name: Backend Test (Integration)
-    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-latest"]') }}
     timeout-minutes: 15
     env:
       UV_HTTP_TIMEOUT: '120'
@@ -683,7 +690,7 @@ jobs:
     #
     # That happened five times in a day, always to `Frontend Build`. Moving them here leaves the Mac
     # for the two jobs that genuinely need it.
-    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-latest"]') }}
     timeout-minutes: 10
     env:
       NPM_CONFIG_FETCH_RETRIES: '5'
@@ -735,7 +742,7 @@ jobs:
     #
     # That happened five times in a day, always to `Frontend Build`. Moving them here leaves the Mac
     # for the two jobs that genuinely need it.
-    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-latest"]') }}
     timeout-minutes: 15
     env:
       NPM_CONFIG_FETCH_RETRIES: '5'
@@ -781,7 +788,7 @@ jobs:
     #
     # That happened five times in a day, always to `Frontend Build`. Moving them here leaves the Mac
     # for the two jobs that genuinely need it.
-    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-latest"]') }}
     timeout-minutes: 15
     env:
       NPM_CONFIG_FETCH_RETRIES: '5'
@@ -835,63 +842,23 @@ jobs:
 
   docker-build:
     name: Docker Build
-    # Pull requests only. The self-hosted runner is the same machine that serves the
-    # music library, and a Docker build saturates its disks — during one, serving a 20MB
-    # track went from ~1.5s to ~40s and playback stalled outright. On a merge this would
-    # re-validate content the PR run already built, so the cost buys nothing.
+    # Pull requests only: on a merge it would re-validate an image the PR run already built.
     if: github.event_name != 'push'
-    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-latest"]') }}
     timeout-minutes: 60
-    # Advisory only: the self-hosted NAS runner's upstream connection is
-    # unreliable enough that multi-stage builds (apt + pnpm + uv + torch
-    # over 30+ min of network time) routinely flake on TCP connect errors
-    # and slow mirrors. Code correctness is already covered by the test
-    # jobs above; macOS Compose Integration exercises the image as well.
-    # A failed Docker Build surfaces in the run but does not mark CI red.
-    continue-on-error: true
+    # No longer `continue-on-error`. It was advisory because the NAS's network made 30-minute
+    # builds flake on TCP connects and slow mirrors, so a red build said nothing about the code. On a
+    # hosted runner it is the same build the release workflow runs, and a broken image is red again.
     needs: [backend-lint, backend-test-contract, backend-test-core, backend-test-no-redis, backend-test-integration, frontend-lint, frontend-test]
     steps:
       - uses: actions/checkout@v4
 
-      # Prune orphaned containers/networks/dangling images only — do NOT pass
-      # -a or --volumes, which would evict cached base images and the buildx
-      # layer cache. On the slow self-hosted Linux runner, a cold cache means
-      # a ~60m build (apt-get alone took 26m last run). Keeping cache warm is
-      # the difference between a 5m build and a timeout.
-      - name: Clean up dangling resources
-        run: |
-          docker system prune -f || true
-          df -h || true
-
-      # A *named* builder that outlives the job. Its layer cache lives in the
-      # buildkit container's own volume under /var/lib/docker — on disk, and
-      # updated in place, so nothing has to be exported and copied anywhere.
-      #
-      # This is what replaces `cache-to: type=local,mode=max`, which rewrote the
-      # entire 3.8G cache on every build — 5m03s of a 17m30s run measured on
-      # 2026-08-05, and paid in full even on docs-only PRs where not one layer
-      # changed.
-      #
-      # `cleanup: false` is what keeps it between runs. Note that "Clean up
-      # dangling resources" above removes *stopped* containers, so a builder
-      # that ever stops is recreated empty next run. That is survivable rather
-      # than costly because cache-from below still seeds it from disk.
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          name: familiar-persistent
-          cleanup: false
 
-      # The cache must live on disk, not under /tmp. /tmp on this runner is a
-      # tmpfs (systemd's default, half of RAM) — a 3.8G cache there was a
-      # quarter of the box's 15.6G. Nothing writes here any more, but the
-      # assert stays: this path silently becoming tmpfs would cost memory on
-      # the machine that also serves the music library.
-      - name: Ensure buildx cache dir exists on disk
-        run: |
-          mkdir -p /opt/actions-runner/_cache
-          test "$(findmnt -no FSTYPE -T /opt/actions-runner/_cache)" != tmpfs
-
+      # GitHub's cache, as release.yml uses, replacing the NAS's persistent builder and the cache
+      # folder under /opt/actions-runner/_cache. The scope is this job's own, so it never evicts the
+      # release's per-architecture caches.
       - name: Build Docker image
         uses: docker/build-push-action@v6
         timeout-minutes: 55
@@ -900,44 +867,22 @@ jobs:
           file: docker/Dockerfile
           push: false
           tags: familiar:test
-          # Read-only floor. The persistent builder above holds the live cache;
-          # this directory is a fixed snapshot that seeds it whenever the
-          # builder has been recreated, so losing the builder costs seconds
-          # rather than the ~60m a fully cold build takes. There is deliberately
-          # no cache-to: exporting is the 5m03s this change removes.
-          cache-from: type=local,src=/opt/actions-runner/_cache/familiar-buildx
-
-      # Bound the builder's cache, which is the job the rotate used to do — the
-      # local exporter could not prune in place, so a full rewrite was the only
-      # way to drop stale layers. Pruning does it directly and incrementally.
-      #
-      # The flag is `--max-used-space`; buildx v0.33 on this runner has no
-      # `--keep-storage`, whatever older documentation says. Failure is reported
-      # rather than swallowed, because a prune that silently never runs looks
-      # exactly like one that works until the disk fills.
-      - name: Bound the builder cache
-        if: always()
-        run: |
-          docker buildx prune --builder familiar-persistent --max-used-space=20GB -f \
-            || echo "::warning::buildx prune failed — the builder cache is unbounded"
+          cache-from: type=gha,scope=ci-docker-build
+          cache-to: type=gha,scope=ci-docker-build,mode=max
 
   e2e-test:
     name: E2E Tests (Playwright)
-    # Pull requests only — see docker-build. It also depends on docker-build, which does
-    # not run on push, so leaving it enabled would leave it permanently skipped anyway.
-    #
-    # `!cancelled()` rather than the default: `needs` is kept purely to *order* these two on the
-    # self-hosted runner, which is also the NAS that serves music — running a Docker build and a
-    # browser suite at once is a bad neighbour. This job downloads nothing from docker-build and
-    # builds its own frontend and backend, so there is no reason for a flaky NAS network to decide
-    # whether the browser tests run.
-    if: ${{ github.event_name != 'push' && !cancelled() }}
-    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
+    # Pull requests only, as docker-build. It used to `need` docker-build purely to *order* the two
+    # on the NAS, where a Docker build and a browser suite at once were a bad neighbour; it uses
+    # nothing docker-build makes and builds its own frontend and backend. On hosted runners each job
+    # has its own machine, so it now waits only for the tests below.
+    if: github.event_name != 'push'
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-latest"]') }}
     timeout-minutes: 30
-    needs: [docker-build]
+    needs: [backend-lint, backend-test-contract, backend-test-core, backend-test-no-redis, backend-test-integration, frontend-lint, frontend-test]
     # **Deliberately not `continue-on-error`.** It was, and the reason was sound: the job inherited
     # docker-build's flakiness, so a NAS hiccup would have blocked unrelated merges. Decoupling the
-    # two above removes that reason, and the cost of keeping it had become concrete — the chat
+    # two removed that reason, and the cost of keeping it had become concrete — the chat
     # specs' `/chat/status` mock never worked in CI, seven of them failed for an unknown length of
     # time, and nothing went red because nothing could. A suite that cannot fail quietly stops being
     # true. If NAS flakiness starts blocking merges through *this* job rather than through

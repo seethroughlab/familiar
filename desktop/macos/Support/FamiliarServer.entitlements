@@ -14,6 +14,12 @@
 	<true/>
 	<key>com.apple.security.network.client</key>
 	<true/>
+	<!-- Sparkle's installer, which a sandboxed app reaches by these two names (ADR-0135 point 3). -->
+	<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
+	<array>
+		<string>com.familiar.server-spks</string>
+		<string>com.familiar.server-spki</string>
+	</array>
 	<!-- Postgres's data and password, shared with the agent; and the only names under which the
 	     sandbox allows Python's semaphores (ADR-0136 point 3). -->
 	<key>com.apple.security.application-groups</key>

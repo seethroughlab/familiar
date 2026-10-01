@@ -108,8 +108,20 @@ final class ServerController: ObservableObject {
             do {
                 if Self.agent.status != .enabled { try Self.agent.register() }
             } catch {
-                status = .failed("Could not start the database: \(error.localizedDescription)")
-                return
+                let nsError = error as NSError
+                switch AgentRegistration.outcome(
+                    domain: nsError.domain, code: nsError.code,
+                    statusRequiresApproval: Self.agent.status == .requiresApproval
+                ) {
+                case .needsApproval:
+                    status = .needsApproval
+                    return
+                case .alreadyRegistered:
+                    break
+                case .failed:
+                    status = .failed("Could not start the database: \(error.localizedDescription) (\(nsError.domain) \(nsError.code))")
+                    return
+                }
             }
             if Self.agent.status == .requiresApproval {
                 status = .needsApproval
@@ -273,7 +285,21 @@ final class ServerController: ObservableObject {
 
     // MARK: - The menu's links
 
+    /// Whether a player is here to receive the pairing link: some app must handle `familiar://`.
+    /// Asked each time the menu is drawn, so installing the player changes the menu without a restart.
+    var playerInstalled: Bool {
+        NSWorkspace.shared.urlForApplication(toOpen: URL(string: "familiar://pair")!) != nil
+    }
+
+    func getPlayer(for platform: PlayerPlatform) {
+        NSWorkspace.shared.open(platform == .mac ? PlayerLinks.mac : PlayerLinks.iPhone)
+    }
+
+    enum PlayerPlatform { case mac, iPhone }
+
     /// The player on this Mac, paired through the same link a phone scans (ADR-0134 point 5).
+    /// With no player to open it, the link would go nowhere and the button would do nothing, so it
+    /// goes to the App Store instead.
     func openInFamiliar() {
         guard let token else { return }
         Task {
@@ -283,7 +309,7 @@ final class ServerController: ObservableObject {
                 serverID: id, name: contract?.serverName ?? Host.current().localizedName ?? "This Mac",
                 host: "127.0.0.1", port: ServerLaunch.defaultPort, token: token
             )
-            NSWorkspace.shared.open(url)
+            if !NSWorkspace.shared.open(url) { getPlayer(for: .mac) }
         }
     }
 

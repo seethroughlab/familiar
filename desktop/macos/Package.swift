@@ -12,11 +12,20 @@ let package = Package(
         .executable(name: "FamiliarServer", targets: ["FamiliarServer"]),
         .executable(name: "familiar-postgres-agent", targets: ["familiar-postgres-agent"]),
     ],
+    dependencies: [
+        // Updates (ADR-0135 point 3). Exact: an update framework is not something to float.
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0"),
+    ],
     targets: [
         // Every decision the app makes, where `swift test` can reach it without a GUI.
         .target(name: "FamiliarServerCore"),
         // The menu-bar app: sandboxed, read-only music, supervises the Python server.
-        .executableTarget(name: "FamiliarServer", dependencies: ["FamiliarServerCore"]),
+        .executableTarget(
+            name: "FamiliarServer",
+            dependencies: ["FamiliarServerCore", .product(name: "Sparkle", package: "Sparkle")],
+            // scripts/build-app.sh puts Sparkle.framework in Contents/Frameworks.
+            linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]
+        ),
         // The Postgres launch agent: unsandboxed (ADR-0136 point 4), initialises then becomes postgres.
         .executableTarget(name: "familiar-postgres-agent", dependencies: ["FamiliarServerCore"]),
         .testTarget(name: "FamiliarServerCoreTests", dependencies: ["FamiliarServerCore"]),
