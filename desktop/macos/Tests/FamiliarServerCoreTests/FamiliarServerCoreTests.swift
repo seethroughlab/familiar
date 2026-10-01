@@ -208,3 +208,20 @@ final class PlayerLinksTests: XCTestCase {
         XCTAssertEqual(PlayerLinks.mac.scheme, "macappstore")
     }
 }
+
+final class AgentRegistrationTests: XCTestCase {
+    /// "Operation not permitted" was the first real desktop's answer, and it means: ask the owner.
+    func testWaitingForTheOwnerIsNotAFailure() {
+        XCTAssertEqual(AgentRegistration.outcome(domain: NSPOSIXErrorDomain, code: Int(EPERM), statusRequiresApproval: false), .needsApproval)
+        XCTAssertEqual(AgentRegistration.outcome(domain: "SMAppServiceErrorDomain", code: 11, statusRequiresApproval: false), .needsApproval)
+        XCTAssertEqual(AgentRegistration.outcome(domain: "anything", code: 99, statusRequiresApproval: true), .needsApproval)
+    }
+
+    func testAlreadyRegisteredIsFine() {
+        XCTAssertEqual(AgentRegistration.outcome(domain: "SMAppServiceErrorDomain", code: 12, statusRequiresApproval: false), .alreadyRegistered)
+    }
+
+    func testABadSignatureIsStillAFailure() {
+        XCTAssertEqual(AgentRegistration.outcome(domain: "SMAppServiceErrorDomain", code: 3, statusRequiresApproval: false), .failed)
+    }
+}

@@ -138,3 +138,28 @@ public enum PlayerLinks {
     /// A web page: a phone app cannot be installed from a Mac, but the page can be shared to one.
     public static let iPhone = URL(string: "https://apps.apple.com/us/app/familiar-player/id\(appStoreID)")!
 }
+
+/// What a failed `SMAppService.register()` of the Postgres agent means (ADR-0136 point 4).
+///
+/// Waiting for the owner's approval is not a failure, but `register()` reports it by throwing, and
+/// what was first seen on a real desktop was "Operation not permitted": the app showed "Could not
+/// start the database" where it should have offered System Settings. ServiceManagement documents
+/// `kSMErrorLaunchDeniedByUser` for this, while the text read as POSIX `EPERM`, so each sign counts.
+public enum AgentRegistration: Equatable, Sendable {
+    case needsApproval
+    case alreadyRegistered
+    case failed
+
+    /// `kSMErrorLaunchDeniedByUser` and `kSMErrorAlreadyRegistered` (SMErrors.h: an enum from
+    /// `kSMErrorInternalFailure = 2`).
+    static let launchDeniedByUser = 11
+    static let alreadyRegisteredCode = 12
+
+    public static func outcome(domain: String, code: Int, statusRequiresApproval: Bool) -> AgentRegistration {
+        if statusRequiresApproval { return .needsApproval }
+        if domain == NSPOSIXErrorDomain && code == Int(EPERM) { return .needsApproval }
+        if code == launchDeniedByUser { return .needsApproval }
+        if code == alreadyRegisteredCode { return .alreadyRegistered }
+        return .failed
+    }
+}
