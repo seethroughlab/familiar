@@ -5,11 +5,10 @@ import Foundation
 import IOKit.ps
 import Security
 
-/// The music folder the owner chose, held as a read-only security-scoped bookmark (ADR-0136 point 2).
-///
-/// Familiar Server presents the picker itself: an app-scoped bookmark resolves only in the app that
-/// made it, so the player could not hand one over. Read-only is asked for twice, by the entitlement
-/// and by the bookmark, so a write would fail even if one of them were ever widened.
+/// The music folder the owner chose (ADR-0136 point 2), held as a path and a plain bookmark, which
+/// follows the folder if it is moved or renamed (ADR-0140 point 5). Not security-scoped: that exists
+/// only for the App Sandbox. What keeps the folder unwritten is the Seatbelt profile the server runs
+/// under (`ServerLaunch`), not how the folder was granted.
 @MainActor
 enum MusicFolder {
     private static let key = "musicFolderBookmark"
@@ -23,30 +22,36 @@ enum MusicFolder {
         panel.message = "Choose the folder that holds your music. Familiar only ever reads it."
         NSApp.activate(ignoringOtherApps: true)
         guard panel.runModal() == .OK, let url = panel.url else { return nil }
-        if let data = try? url.bookmarkData(
-            options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess],
-            includingResourceValuesForKeys: nil, relativeTo: nil
-        ) {
-            UserDefaults.standard.set(data, forKey: key)
-        }
+        save(url)
+        // Read it now, while the owner is looking at the picker. The first read of a network volume
+        // (or Desktop, Documents, Downloads) waits on a privacy prompt; read first by the server's
+        // startup check, it froze the server's start until someone found the prompt (ADR-0140).
+        _ = try? FileManager.default.contentsOfDirectory(atPath: url.path)
         return url
     }
 
-    /// The stored folder, with access started. `nil` if none was chosen or the bookmark is stale.
+    private static func save(_ url: URL) {
+        if let data = try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil) {
+            UserDefaults.standard.set(data, forKey: key)
+        }
+    }
+
+    /// The stored folder. `nil` if none was chosen or it cannot be found (an unmounted share, say).
     static func resolve() -> URL? {
         guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
         var stale = false
-        guard let url = try? URL(
-            resolvingBookmarkData: data, options: [.withSecurityScope],
-            relativeTo: nil, bookmarkDataIsStale: &stale
-        ), !stale, url.startAccessingSecurityScopedResource() else { return nil }
+        guard let url = try? URL(resolvingBookmarkData: data, options: [], relativeTo: nil, bookmarkDataIsStale: &stale)
+        else { return nil }
+        if stale { save(url) }  // moved or renamed: remember where it is now
         return url
     }
 }
 
-/// The server's token, which this app minted (ADR-0134 point 2), in the app's own Keychain.
+/// The server's token, which this app minted (ADR-0134 point 2), in the app's own Keychain. Named
+/// after the bundle, so the integration check's build (its own bundle id) never reads or deletes an
+/// installed Familiar Server's token.
 enum TokenStore {
-    private static let service = "com.familiar.server.token"
+    private static let service = (Bundle.main.bundleIdentifier ?? Identity.bundleID) + ".token"
 
     static func load() -> String? {
         let query: [String: Any] = [

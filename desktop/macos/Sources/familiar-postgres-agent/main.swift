@@ -16,19 +16,27 @@ func fail(_ message: String) -> Never {
     exit(1)
 }
 
-let executable = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
+/// This executable's absolute path, from the kernel. Not `argv[0]`: launchd starts a `BundleProgram`
+/// agent with the bundle-relative `Contents/MacOS/familiar-postgres-agent`, which resolved against
+/// `/` and sent the agent looking for `/Contents/Resources/postgres/bin/initdb`. Hidden for as long as
+/// the integration check started the agent by hand, with a full path (ADR-0140).
+func ownPath() -> URL {
+    var size: UInt32 = 0
+    _NSGetExecutablePath(nil, &size)
+    var buffer = [CChar](repeating: 0, count: Int(size))
+    guard _NSGetExecutablePath(&buffer, &size) == 0 else { fail("cannot find my own executable") }
+    return URL(fileURLWithPath: String(cString: buffer)).resolvingSymlinksInPath()
+}
+
+let executable = ownPath()
 let contents = executable.deletingLastPathComponent().deletingLastPathComponent()  // …/Contents
-let groupContainer = FileManager.default
-    .containerURL(forSecurityApplicationGroupIdentifier: Identity.appGroup)
-    ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Group Containers/\(Identity.appGroup)")
-let layout = Layout(
-    groupContainer: groupContainer,
-    appSupport: groupContainer,  // unused by the agent
-    resources: contents.appendingPathComponent("Resources")
-)
+// The app bundle's own id (this executable lives in its Contents/MacOS), so an integration build's
+// agent finds the integration build's folder.
+let bundleID = Bundle(url: contents.deletingLastPathComponent())?.bundleIdentifier ?? Identity.bundleID
+let layout = Layout(appSupport: Layout.defaultAppSupport(bundleID: bundleID), resources: contents.appendingPathComponent("Resources"))
 
 // launchd gives an agent no log file of its own, and the plist cannot name a path under the user's
-// home, so the agent points its own output at the group container before doing anything else.
+// home, so the agent points its own output at its own folder before doing anything else.
 try? FileManager.default.createDirectory(
     at: layout.postgresLog.deletingLastPathComponent(), withIntermediateDirectories: true
 )

@@ -1,12 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- Every executable the app launches (the Python interpreter): run inside the app's sandbox. -->
+<!-- Every executable the server runs (the Python interpreter, ffmpeg, the rest): hardened runtime,
+     confined by the Seatbelt profile ServerLaunch applies, not by the App Sandbox (ADR-0140). -->
 <plist version="1.0">
 <dict>
-	<key>com.apple.security.app-sandbox</key>
-	<true/>
-	<key>com.apple.security.inherit</key>
-	<true/>
 	<!-- numba's JIT (librosa's resampling and beat tracking) makes memory executable, and the
 	     hardened runtime kills the process with "Code Signature Invalid" unless allowed. It has to
 	     be this exception rather than `allow-jit`: llvmlite maps its memory without MAP_JIT, and

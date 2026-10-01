@@ -1,39 +1,42 @@
 import Foundation
 
-/// The identifiers that tie the app, its agent and the sandbox together (ADR-0136).
+/// The identifiers that tie the app and its agent together (ADR-0136, ADR-0140).
 public enum Identity {
     public static let bundleID = "com.familiar.server"
-    /// Short on purpose. macOS caps a POSIX semaphore name at 31 characters, and inside the sandbox
-    /// every name must begin with this group and a slash. `7JL9RZ9C8P.fs/mp-` plus Python's eight
-    /// random characters is 25. Measured in ADR-0136's spike.
-    public static let appGroup = "7JL9RZ9C8P.fs"
-    public static let semaphorePrefix = appGroup + "/mp"
     /// The launch agent that runs Postgres beside the sandbox (ADR-0136 point 4).
     public static let postgresAgentLabel = "com.familiar.server.postgres"
     public static let postgresAgentPlist = postgresAgentLabel + ".plist"
 }
 
-/// Where everything lives on disk.
+/// Where everything lives on disk: one folder, `~/Library/Application Support/Familiar Server`.
 ///
-/// Postgres's data and password live in the **app group container**, because two processes need
-/// them: the unsandboxed agent that runs Postgres, and the sandboxed server that connects to it.
-/// Both are group members, so neither needs the other's container and no Keychain item is shared.
-/// The server's own state (`FAMILIAR_DATA_DIR`) stays in the app's container.
+/// The app and its Postgres agent are both unsandboxed and run as the owner (ADR-0140), so they share
+/// it with no container or group between them. Postgres's data was in an app group container while
+/// the app was sandboxed; without the group entitlement, writing there asks the owner's permission
+/// ("would like to access data from other apps"), and the app waited on that prompt (ADR-0140).
 public struct Layout: Sendable, Equatable {
-    public let groupContainer: URL
     public let appSupport: URL
     public let resources: URL
 
-    public init(groupContainer: URL, appSupport: URL, resources: URL) {
-        self.groupContainer = groupContainer
+    public init(appSupport: URL, resources: URL) {
         self.appSupport = appSupport
         self.resources = resources
     }
 
-    // Shared with the agent.
-    public var postgresData: URL { groupContainer.appendingPathComponent("postgres/data") }
-    public var postgresPasswordFile: URL { groupContainer.appendingPathComponent("postgres/password") }
-    public var postgresLog: URL { groupContainer.appendingPathComponent("postgres/postgres.log") }
+    /// The folder for this user, computed the same way by the app and by the agent, from the bundle
+    /// they share. The integration check's builds carry their own bundle id (`build-app.sh`), so they
+    /// get their own folder and never touch an installed Familiar Server's data.
+    public static func defaultAppSupport(home: String = NSHomeDirectory(), bundleID: String = Identity.bundleID) -> URL {
+        let name = bundleID == Identity.bundleID
+            ? "Familiar Server"
+            : "Familiar Server (\(bundleID.replacingOccurrences(of: Identity.bundleID + ".", with: "")))"
+        return URL(fileURLWithPath: home).appendingPathComponent("Library/Application Support/\(name)")
+    }
+
+    // Postgres's, written by the agent and read by the app.
+    public var postgresData: URL { appSupport.appendingPathComponent("postgres/data") }
+    public var postgresPasswordFile: URL { appSupport.appendingPathComponent("postgres/password") }
+    public var postgresLog: URL { appSupport.appendingPathComponent("postgres/postgres.log") }
 
     // The server's own.
     public var serverData: URL { appSupport.appendingPathComponent("data") }

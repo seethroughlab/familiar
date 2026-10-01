@@ -1,6 +1,7 @@
 import AppKit
 import FamiliarServerCore
 import Foundation
+import os
 import ServiceManagement
 
 /// Runs the server on this Mac: Postgres through its launch agent, the Python server as a sandboxed
@@ -16,7 +17,13 @@ final class ServerController: ObservableObject {
         case failed(String)
     }
 
-    @Published private(set) var status: Status = .starting("Starting…")
+    /// Every change is logged, so where the app stopped can be read without its menu:
+    /// `log show --predicate 'subsystem == "com.familiar.server"'`. The first real install stopped at
+    /// "Operation not permitted", and the reason was only on screen.
+    @Published private(set) var status: Status = .starting("Starting…") {
+        didSet { Self.log.notice("status: \(String(describing: self.status), privacy: .public)") }
+    }
+    private static let log = Logger(subsystem: Identity.bundleID, category: "lifecycle")
     @Published private(set) var pauseReason: String?
     @Published private(set) var musicFolder: URL?
     @Published var lanEnabled: Bool = UserDefaults.standard.bool(forKey: "lanEnabled") {
@@ -46,18 +53,25 @@ final class ServerController: ObservableObject {
     private let devMusicFolder = ProcessInfo.processInfo.environment["FAMILIAR_SERVER_DEV_MUSIC"]
         .map { URL(fileURLWithPath: $0) }
     private let devExternalPostgres = ProcessInfo.processInfo.environment["FAMILIAR_SERVER_DEV_EXTERNAL_POSTGRES"] == "1"
+    /// Unregister the Postgres agent and quit. The integration check's cleanup: a registered agent
+    /// would otherwise start again at the next login, from the build folder.
+    private let devUnregister = ProcessInfo.processInfo.environment["FAMILIAR_SERVER_DEV_UNREGISTER"] == "1"
     #else
+    private let devUnregister = false
     private let devMusicFolder: URL? = nil
     private let devExternalPostgres = false
     #endif
 
     init() {
-        let fm = FileManager.default
-        let group = fm.containerURL(forSecurityApplicationGroupIdentifier: Identity.appGroup)
-            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Group Containers/\(Identity.appGroup)")
-        let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Familiar Server")
-        layout = Layout(groupContainer: group, appSupport: support, resources: Bundle.main.resourceURL!)
+        if devUnregister {
+            try? Self.agent.unregister()
+            try? SMAppService.mainApp.unregister()
+            exit(0)
+        }
+        layout = Layout(
+            appSupport: Layout.defaultAppSupport(bundleID: Bundle.main.bundleIdentifier ?? Identity.bundleID),
+            resources: Bundle.main.resourceURL!
+        )
         monitor = MachineMonitor { [weak self] state in self?.apply(Etiquette.decide(state)) }
         // However the app ends — its own Quit, a quit from the Dock or another app, logout, restart
         // — the server ends with it. Only the menu's Quit stopped it, so any other way out left
@@ -94,6 +108,11 @@ final class ServerController: ObservableObject {
     }
 
     private func bringUp(folder: URL) async {
+        // ADR-0140 point 4: without the profile nothing keeps the music unwritten, so no server.
+        guard FileManager.default.isExecutableFile(atPath: ServerLaunch.sandboxExec.path) else {
+            status = .failed("This Mac has no sandbox-exec, which keeps your music read-only. Familiar Server will not run without it.")
+            return
+        }
         do {
             try FileManager.default.createDirectory(at: layout.serverData, withIntermediateDirectories: true)
             try FileManager.default.createDirectory(

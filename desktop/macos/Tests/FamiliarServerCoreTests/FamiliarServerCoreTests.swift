@@ -4,24 +4,20 @@ import XCTest
 @testable import FamiliarServerCore
 
 final class LayoutTests: XCTestCase {
-    func testPostgresStateIsSharedAndServerStateIsNot() {
-        let layout = Layout(
-            groupContainer: URL(fileURLWithPath: "/G"),
-            appSupport: URL(fileURLWithPath: "/A"),
-            resources: URL(fileURLWithPath: "/R")
+    /// ADR-0140: one folder for the app and the agent. A group container, unentitled, asks the owner.
+    func testEverythingLivesInOneFolderTheAppAndAgentAgreeOn() {
+        let layout = Layout(appSupport: Layout.defaultAppSupport(home: "/Users/someone"), resources: URL(fileURLWithPath: "/R"))
+        let home = "/Users/someone/Library/Application Support/Familiar Server/"
+        XCTAssertTrue(layout.postgresData.path.hasPrefix(home + "postgres"))
+        XCTAssertTrue(layout.postgresPasswordFile.path.hasPrefix(home + "postgres"))
+        XCTAssertTrue(layout.serverData.path.hasPrefix(home + "data"))
+        XCTAssertFalse(layout.postgresData.path.contains("Group Containers"))
+        // The integration check's builds never share a folder with an installed Familiar Server.
+        XCTAssertEqual(
+            Layout.defaultAppSupport(home: "/Users/someone", bundleID: "com.familiar.server.integration").lastPathComponent,
+            "Familiar Server (integration)"
         )
-        // The agent and the sandboxed server both reach the group container, and nothing else.
-        XCTAssertTrue(layout.postgresData.path.hasPrefix("/G/"))
-        XCTAssertTrue(layout.postgresPasswordFile.path.hasPrefix("/G/"))
-        XCTAssertTrue(layout.serverData.path.hasPrefix("/A/"))
         XCTAssertEqual(layout.python.path, "/R/python/bin/python3")
-    }
-
-    /// ADR-0136's spike: macOS caps a semaphore name at 31 characters, and Python appends
-    /// `-` and eight random characters to the prefix.
-    func testTheSemaphorePrefixLeavesRoomForPythonsNames() {
-        XCTAssertTrue(Identity.semaphorePrefix.hasPrefix(Identity.appGroup + "/"))
-        XCTAssertLessThanOrEqual(Identity.semaphorePrefix.count + 1 + 8, 31)
     }
 }
 
@@ -55,29 +51,43 @@ final class PostgresSetupTests: XCTestCase {
 }
 
 final class ServerLaunchTests: XCTestCase {
-    private let layout = Layout(
-        groupContainer: URL(fileURLWithPath: "/G"),
-        appSupport: URL(fileURLWithPath: "/A"),
-        resources: URL(fileURLWithPath: "/R")
-    )
+    private let layout = Layout(appSupport: URL(fileURLWithPath: "/A"), resources: URL(fileURLWithPath: "/R"))
 
     func testItRunsAppServeOnLoopbackByDefault() {
         let launch = ServerLaunch(layout: layout, musicFolder: URL(fileURLWithPath: "/Music"), databasePassword: "pw")
-        XCTAssertEqual(launch.executable.path, "/R/python/bin/python3")
-        XCTAssertEqual(launch.arguments, ["-m", "app.serve", "--host", "127.0.0.1", "--port", "4400"])
+        XCTAssertEqual(Array(launch.arguments.suffix(7)), ["/R/python/bin/python3", "-m", "app.serve", "--host", "127.0.0.1", "--port", "4400"])
         XCTAssertEqual(launch.workingDirectory.path, "/R/backend")
     }
 
     func testLANIsAChoice() {
         let launch = ServerLaunch(layout: layout, musicFolder: URL(fileURLWithPath: "/Music"), databasePassword: "pw", lan: true)
-        XCTAssertEqual(launch.arguments[3], "0.0.0.0")
+        XCTAssertTrue(launch.arguments.contains("0.0.0.0"))
+    }
+
+    /// ADR-0140: the server never runs outside the profile that keeps the music unwritten.
+    func testTheServerRunsUnderTheZeroTouchProfile() {
+        let launch = ServerLaunch(layout: layout, musicFolder: URL(fileURLWithPath: "/Volumes/silo/music"), databasePassword: "pw")
+        XCTAssertEqual(launch.executable.path, "/usr/bin/sandbox-exec")
+        XCTAssertEqual(Array(launch.arguments.prefix(4)), ["-p", ServerLaunch.zeroTouchProfile, "-D", "MUSIC=/Volumes/silo/music"])
+        XCTAssertTrue(ServerLaunch.zeroTouchProfile.contains(#"(deny file-write* (subpath (param "MUSIC")))"#))
+    }
+
+    /// Seatbelt matches real paths, so the folder is given resolved.
+    func testTheFolderIsGivenAsItsRealPath() throws {
+        let link = FileManager.default.temporaryDirectory.appendingPathComponent("familiar-music-link-\(UUID())")
+        let real = FileManager.default.temporaryDirectory.appendingPathComponent("familiar-music-\(UUID())")
+        try FileManager.default.createDirectory(at: real, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: real)
+        defer { try? FileManager.default.removeItem(at: link); try? FileManager.default.removeItem(at: real) }
+        let launch = ServerLaunch(layout: layout, musicFolder: link, databasePassword: "pw")
+        XCTAssertEqual(launch.arguments[3], "MUSIC=\(real.resolvingSymlinksInPath().path)")
     }
 
     func testTheEnvironmentTheServerIsOwed() {
         let env = ServerLaunch(layout: layout, musicFolder: URL(fileURLWithPath: "/Music"), databasePassword: "pw").environment
         XCTAssertEqual(env["MUSIC_LIBRARY_PATH"], "/Music")
         XCTAssertEqual(env["FAMILIAR_DATA_DIR"], "/A/data")
-        XCTAssertEqual(env["FAMILIAR_SEMAPHORE_PREFIX"], "7JL9RZ9C8P.fs/mp")
+        XCTAssertNil(env["FAMILIAR_SEMAPHORE_PREFIX"], "no App Sandbox, no semaphore names to fit (ADR-0140)")
         XCTAssertEqual(env["MAX_ANALYSIS_WORKERS"], "1")
         XCTAssertTrue(env["PATH"]!.hasPrefix("/R/bin:"), "the bundled ffmpeg is found first")
         XCTAssertEqual(env["FAMILIAR_CHROMAPRINT_LIBRARY"], "/R/lib/libchromaprint.1.dylib")
@@ -190,7 +200,7 @@ final class UpdatePolicyTests: XCTestCase {
             .appendingPathComponent("Support/Info.plist")
         let plist = try XCTUnwrap(NSDictionary(contentsOf: support))
         XCTAssertEqual(plist["SUFeedURL"] as? String, UpdatePolicy.feedURL.absoluteString)
-        XCTAssertEqual(plist["SUEnableInstallerLauncherService"] as? Bool, true, "the sandbox needs it")
+        XCTAssertNil(plist["SUEnableInstallerLauncherService"], "only a sandboxed app needs it, and this one is not (ADR-0140)")
         XCTAssertNotNil(plist["SUPublicEDKey"] as? String)
     }
 }

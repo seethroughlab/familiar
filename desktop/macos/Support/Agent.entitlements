@@ -1,12 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- The Postgres agent and Postgres's own binaries: not sandboxed, because Postgres cannot be
-     (ADR-0136 point 4), but members of the app group whose container holds their data. -->
+<!-- The Postgres agent and Postgres's own binaries: hardened runtime, no sandbox (ADR-0136 point 4,
+     ADR-0140). Their data stays in ~/Library/Group Containers/7JL9RZ9C8P.fs, a path that no longer
+     needs the group entitlement to reach. -->
 <plist version="1.0">
-<dict>
-	<key>com.apple.security.application-groups</key>
-	<array>
-		<string>7JL9RZ9C8P.fs</string>
-	</array>
-</dict>
+<dict/>
 </plist>

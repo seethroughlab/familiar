@@ -1,13 +1,12 @@
 #!/bin/bash
-# Assemble and sign `Familiar Server.app` (ADR-0136), into desktop/macos/build/.
+# Assemble and sign `Familiar Server.app` (ADR-0136, ADR-0140), into desktop/macos/build/.
 #
-# Signing follows ADR-0136's spike, where each choice was measured:
-#   - the app: sandboxed, read-only music, network, the app group     (Support/FamiliarServer.entitlements)
-#   - Python and every executable it may run: inherit the app's sandbox (Support/Child.entitlements)
-#   - the Postgres agent and Postgres's binaries: unsandboxed, in the app group (Support/Agent.entitlements),
-#     because Postgres's System V interlock cannot run in the sandbox
-#   - everything with the hardened runtime and no exceptions; all of it signed by one team, so
-#     library validation passes for Python's extension modules and onnxruntime
+# Nothing is App-Sandboxed (ADR-0140): a sandboxed app cannot register the unsandboxed agent Postgres
+# needs. The music stays unwritten because the server runs under a Seatbelt profile (ServerLaunch).
+#   - the app and the Postgres agent: no entitlements    (Support/FamiliarServer.entitlements, Agent.entitlements)
+#   - Python and every executable it runs: numba's executable-memory exception only (Support/Child.entitlements)
+#   - everything with the hardened runtime; all of it signed by one team, so library validation
+#     passes for Python's extension modules and onnxruntime
 #
 # Needs scripts/build-payload.sh first. SIGN_IDENTITY defaults to the first valid Apple Development
 # identity. A distributed build is signed with the team's Developer ID Application identity
@@ -16,8 +15,8 @@
 # scripts/package.sh turns a Developer ID build into a notarized .dmg.
 #
 # usage: scripts/build-app.sh [tag]         the release tag; the bundle's version drops its `v`
-#        DEV_MUSIC=/path scripts/build-app.sh      debug build that also grants that folder read-only,
-#                                                  for scripts/integration-check.sh
+#        DEV_MUSIC=/path scripts/build-app.sh      debug build, which honours the development switches
+#                                                  scripts/integration-check.sh uses
 set -euo pipefail
 # Native arm64 only. Under Rosetta — the x86_64 GitHub runner on an Apple Silicon Mac — every
 # child would build for Intel: ffmpeg probes for x86 assembly and the Swift binaries come out
@@ -51,9 +50,20 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Library/LaunchAgents" "$APP/Contents/Frameworks"
 cp "$BIN/FamiliarServer" "$BIN/familiar-postgres-agent" "$APP/Contents/MacOS/"
 cp "$SUPPORT/com.familiar.server.postgres.plist" "$APP/Contents/Library/LaunchAgents/"
+# A debug build is the integration check's, and gets an identity of its own: its own bundle id (so
+# macOS's background-items record for an installed Familiar Server never judges it, and the reverse),
+# its own agent label (so the two agents never collide in launchd), and so its own data folder
+# (Layout.defaultAppSupport). Found 2026-10-01: a record left by sandboxed builds, keyed by bundle
+# id, kept "sandboxed" through unregistering, and refused every later build's agent.
+INTEGRATION_ID=com.familiar.server.integration
 # Updates (ADR-0135 point 3). ditto keeps the framework's Versions/ symlinks, which cp -R would not.
 ditto "$BIN/Sparkle.framework" "$APP/Contents/Frameworks/Sparkle.framework"
 sed -e "s/__VERSION__/${VERSION#v}/" -e "s/__BUILD__/$(date +%Y%m%d%H%M)/" "$SUPPORT/Info.plist" > "$APP/Contents/Info.plist"
+if [ "$CONFIG" = debug ]; then
+  /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $INTEGRATION_ID" "$APP/Contents/Info.plist"
+  AGENT_PLIST="$APP/Contents/Library/LaunchAgents/com.familiar.server.postgres.plist"
+  /usr/libexec/PlistBuddy -c "Set :Label $INTEGRATION_ID.postgres" -c "Set :AssociatedBundleIdentifiers:0 $INTEGRATION_ID" "$AGENT_PLIST"
+fi
 cp -R "$PAYLOAD/python" "$PAYLOAD/postgres" "$PAYLOAD/backend" "$PAYLOAD/bin" "$PAYLOAD/lib" "$APP/Contents/Resources/"
 
 echo "==> sign with $ID ($TIMESTAMP)"
@@ -68,7 +78,7 @@ find "$APP/Contents/Resources" -type f \( -name "*.dylib" -o -name "*.so" \) -pr
 # xargs hides a failure behind grep; ask each library instead.
 find "$APP/Contents/Resources" -type f \( -name "*.dylib" -o -name "*.so" \) -print0 \
   | xargs -0 -n 200 codesign --verify --strict
-# 2. Postgres's executables: the agent's entitlements. Everything else executable: inherit the sandbox.
+# 2. Postgres's executables: the agent's entitlements. Everything else executable: the child's.
 find "$APP/Contents/Resources" -type f -perm +111 ! -name "*.dylib" ! -name "*.so" -print0 | while IFS= read -r -d '' f; do
   is_macho "$f" || continue
   case "$f" in
@@ -86,14 +96,6 @@ sign "$SPARKLE/Updater.app"
 sign "$APP/Contents/Frameworks/Sparkle.framework"
 # 4. The agent, then the app itself last.
 sign --entitlements "$SUPPORT/Agent.entitlements" "$APP/Contents/MacOS/familiar-postgres-agent"
-APP_ENTITLEMENTS=$SUPPORT/FamiliarServer.entitlements
-if [ -n "${DEV_MUSIC:-}" ]; then
-  # The debug integration build stands the test folder in for the picker's read-only grant.
-  APP_ENTITLEMENTS=$HERE/build/dev.entitlements
-  /usr/libexec/PlistBuddy -x -c "Print" "$SUPPORT/FamiliarServer.entitlements" > "$APP_ENTITLEMENTS"
-  /usr/libexec/PlistBuddy -c "Add :com.apple.security.temporary-exception.files.absolute-path.read-only array" \
-    -c "Add :com.apple.security.temporary-exception.files.absolute-path.read-only:0 string ${DEV_MUSIC%/}/" "$APP_ENTITLEMENTS"
-fi
-sign --entitlements "$APP_ENTITLEMENTS" "$APP"
+sign --entitlements "$SUPPORT/FamiliarServer.entitlements" "$APP"
 codesign --verify --deep --strict "$APP"
 du -sh "$APP"
