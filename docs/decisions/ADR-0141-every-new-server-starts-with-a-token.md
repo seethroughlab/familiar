@@ -1,8 +1,11 @@
 # ADR-0141: Every New Server Starts with a Token
 
-Status: proposed
+Status: accepted
 
 Date: 2026-10-01
+
+Implementation:
+- **Accepted 2026-10-01**, as written.
 
 Extends [ADR-0045](ADR-0045-familiar-authenticates-inbound-requests.md) and supersedes its point 5;
 extends [ADR-0134](ADR-0134-clients-pair-with-a-server.md)
