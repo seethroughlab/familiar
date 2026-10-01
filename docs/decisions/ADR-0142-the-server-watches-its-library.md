@@ -1,8 +1,11 @@
 # ADR-0142: The Server Watches Its Library
 
-Status: proposed
+Status: accepted
 
 Date: 2026-10-01
+
+Implementation:
+- **Accepted 2026-10-01**, as written.
 
 Extends [ADR-0136](ADR-0136-familiar-server-runs-in-the-background.md) point 10 and
 [ADR-0117](ADR-0117-a-soulseek-download-is-a-pending-review-track-not-a-file-move.md)
