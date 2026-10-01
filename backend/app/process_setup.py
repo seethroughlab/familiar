@@ -1,7 +1,7 @@
 """How this server's processes adapt to the platform they run on.
 
 ADR-0131 point 4 allows the server to adapt to where it runs, provided no feature depends on macOS.
-Two adaptations live here, both no-ops unless their condition holds:
+Three adaptations live here, each a no-op unless its condition holds:
 
 - **Semaphore names (ADR-0136 point 3).** Inside the macOS App Sandbox, a POSIX semaphore may be
   created only under a name that begins with the app's group identifier and a slash. Every
@@ -10,6 +10,11 @@ Two adaptations live here, both no-ops unless their condition holds:
   ADR-0136's spike, and so was the fix: Familiar Server sets `FAMILIAR_SEMAPHORE_PREFIX`, and
   Python builds every semaphore name from `semprefix`. Applied in the parent at import and again
   in every pool worker, because a worker that creates its own lock builds its own name.
+- **MIME tables (ADR-0136 point 2).** `mimetypes` reads the system's tables, such as
+  `/etc/apache2/mime.types`, the first time anything asks for a type, and the App Sandbox refuses
+  that read. Python's `mimetypes.init` does not catch the `PermissionError`, so the first static
+  file the server sent, the web admin's own page, answered 500. Found on the first install against a
+  real library, 2026-10-01; the integration check never fetched a page, only the API.
 - **Background priority (ADR-0138 point 3).** `nice(10)` decides who gets the CPU. On Darwin the
   background QoS clamp (`PRIO_DARWIN_BG`) also moves the work onto efficiency cores and throttles
   its I/O, which is what keeps a laptop cool while it analyses a library.
@@ -37,6 +42,28 @@ def apply_semaphore_prefix() -> str | None:
     if prefix:
         multiprocessing.current_process()._config["semprefix"] = prefix  # type: ignore[attr-defined]
     return prefix
+
+
+def init_mimetypes() -> list[str]:
+    """Load `mimetypes` from the system tables this process may read, and only those.
+
+    Called once at startup, so the lazy initialisation inside the first `guess_type` never runs and
+    never meets a table it is not allowed to open. Returns the tables used.
+    """
+    import mimetypes
+
+    readable = []
+    for path in mimetypes.knownfiles:
+        try:
+            with open(path, encoding="utf-8"):
+                readable.append(path)
+        except OSError:
+            continue
+    # `init(files=…)` on a first call reads `knownfiles` *and* the files given, so the list itself
+    # has to be replaced, not supplemented.
+    mimetypes.knownfiles = readable
+    mimetypes.init()
+    return readable
 
 
 def lower_priority() -> None:
