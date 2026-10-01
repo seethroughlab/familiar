@@ -1,6 +1,7 @@
 import AppKit
 import FamiliarServerCore
 import Foundation
+import os
 import ServiceManagement
 
 /// Runs the server on this Mac: Postgres through its launch agent, the Python server as a sandboxed
@@ -16,7 +17,13 @@ final class ServerController: ObservableObject {
         case failed(String)
     }
 
-    @Published private(set) var status: Status = .starting("Starting…")
+    /// Every change is logged, so where the app stopped can be read without its menu:
+    /// `log show --predicate 'subsystem == "com.familiar.server"'`. The first real install stopped at
+    /// "Operation not permitted", and the reason was only on screen.
+    @Published private(set) var status: Status = .starting("Starting…") {
+        didSet { Self.log.notice("status: \(String(describing: self.status), privacy: .public)") }
+    }
+    private static let log = Logger(subsystem: Identity.bundleID, category: "lifecycle")
     @Published private(set) var pauseReason: String?
     @Published private(set) var musicFolder: URL?
     @Published var lanEnabled: Bool = UserDefaults.standard.bool(forKey: "lanEnabled") {
@@ -58,9 +65,13 @@ final class ServerController: ObservableObject {
     init() {
         if devUnregister {
             try? Self.agent.unregister()
+            try? SMAppService.mainApp.unregister()
             exit(0)
         }
-        layout = Layout(appSupport: Layout.defaultAppSupport(), resources: Bundle.main.resourceURL!)
+        layout = Layout(
+            appSupport: Layout.defaultAppSupport(bundleID: Bundle.main.bundleIdentifier ?? Identity.bundleID),
+            resources: Bundle.main.resourceURL!
+        )
         monitor = MachineMonitor { [weak self] state in self?.apply(Etiquette.decide(state)) }
         // However the app ends — its own Quit, a quit from the Dock or another app, logout, restart
         // — the server ends with it. Only the menu's Quit stopped it, so any other way out left

@@ -50,9 +50,20 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Library/LaunchAgents" "$APP/Contents/Frameworks"
 cp "$BIN/FamiliarServer" "$BIN/familiar-postgres-agent" "$APP/Contents/MacOS/"
 cp "$SUPPORT/com.familiar.server.postgres.plist" "$APP/Contents/Library/LaunchAgents/"
+# A debug build is the integration check's, and gets an identity of its own: its own bundle id (so
+# macOS's background-items record for an installed Familiar Server never judges it, and the reverse),
+# its own agent label (so the two agents never collide in launchd), and so its own data folder
+# (Layout.defaultAppSupport). Found 2026-10-01: a record left by sandboxed builds, keyed by bundle
+# id, kept "sandboxed" through unregistering, and refused every later build's agent.
+INTEGRATION_ID=com.familiar.server.integration
 # Updates (ADR-0135 point 3). ditto keeps the framework's Versions/ symlinks, which cp -R would not.
 ditto "$BIN/Sparkle.framework" "$APP/Contents/Frameworks/Sparkle.framework"
 sed -e "s/__VERSION__/${VERSION#v}/" -e "s/__BUILD__/$(date +%Y%m%d%H%M)/" "$SUPPORT/Info.plist" > "$APP/Contents/Info.plist"
+if [ "$CONFIG" = debug ]; then
+  /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $INTEGRATION_ID" "$APP/Contents/Info.plist"
+  AGENT_PLIST="$APP/Contents/Library/LaunchAgents/com.familiar.server.postgres.plist"
+  /usr/libexec/PlistBuddy -c "Set :Label $INTEGRATION_ID.postgres" -c "Set :AssociatedBundleIdentifiers:0 $INTEGRATION_ID" "$AGENT_PLIST"
+fi
 cp -R "$PAYLOAD/python" "$PAYLOAD/postgres" "$PAYLOAD/backend" "$PAYLOAD/bin" "$PAYLOAD/lib" "$APP/Contents/Resources/"
 
 echo "==> sign with $ID ($TIMESTAMP)"

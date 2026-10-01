@@ -21,8 +21,35 @@ Implementation:
   - `scripts/integration-check.sh` now lets the app register its own agent, and checks launchd
     holds it. It runs on a library its owner can write, so a healthy server proves the profile is
     on, and its cleanup unregisters the agent through a debug-only switch.
-  - **Not yet run** at the time of writing: the integration check, which needs port 4400 and the
-    Postgres folder that a live test against a real library was using.
+- **Integration check passing, 2026-10-01**, with the app registering its own agent: registered
+  with SMAppService, started by launchd, healthy on a writable library, analysis, ffmpeg and
+  fingerprints under the profile, the server stopping with the app, the music unchanged. Getting
+  there found four things the decision's text did not anticipate:
+  - **Point 1's "the data stays in the group container" was wrong.** Unsandboxed and without the
+    group entitlement, writing to `~/Library/Group Containers/7JL9RZ9C8P.fs` asks the owner's
+    permission (TCC `SystemPolicyAppData`), and the app waited on that prompt, unseen, before
+    registering its agent. The app and agent now share `~/Library/Application Support/Familiar
+    Server`; `Identity.appGroup` is gone.
+  - **macOS keeps a background-items record per bundle id, and it remembered "sandboxed".**
+    `sfltool dumpbtm` showed `com.familiar.server` with `Flags: [ sandboxed ]`, left by the
+    sandboxed builds; it survived `SMAppService.mainApp.unregister()`, a Launch Services
+    re-registration and moving the old container aside, and BTM refused every later agent with
+    "must be sandboxed because the app is sandboxed" although the kernel's `sandbox_check` said the
+    process was not. The same build under another bundle id registered at once, with no approval
+    step, which is what proved the design. Only `sfltool resetbtm`, which resets every app's items,
+    clears it. A Mac that ran `v0.2.0-beta8` keeps this record; so far that is one Mac.
+  - **The agent found its files from `argv[0]`,** which launchd gives a `BundleProgram` as
+    `Contents/MacOS/…`, relative; it looked for `/Contents/Resources/postgres/bin/initdb`. It now
+    asks `_NSGetExecutablePath`. Hidden as long as the check started the agent by hand.
+  - **The integration build now has an identity of its own:** bundle id
+    `com.familiar.server.integration`, agent label `….integration.postgres`, its own data folder,
+    its own Keychain item. The check had shared all four with an installed Familiar Server, and its
+    cleanup deleted the token by name.
+  - The error `register()` returns for that refusal is `SMAppServiceErrorDomain` **1**. #360 read the
+    first install's "Operation not permitted" as a wait for approval (code 11, or POSIX `EPERM`); it
+    was this refusal, and #360's classifier does not match it. Harmless, but its premise was wrong.
+  - The app now logs every status change under subsystem `com.familiar.server`, which is how the
+    last two were found.
 
 Supersedes points 2–4 of [ADR-0136](ADR-0136-familiar-server-runs-in-the-background.md), and
 extends [ADR-0135](ADR-0135-familiar-server-is-a-separate-app.md)

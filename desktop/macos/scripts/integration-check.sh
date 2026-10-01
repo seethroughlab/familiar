@@ -22,14 +22,17 @@ HERE=$(cd "$(dirname "$0")/.." && pwd)
 WORK=$HERE/build/integration
 MUSIC=$WORK/music
 APP="$HERE/build/Familiar Server.app"
-SUPPORT=~/Library/Application\ Support/Familiar\ Server
+# The debug build's own identity (build-app.sh): its own bundle id, agent label, data folder and
+# Keychain item, so this check never touches an installed Familiar Server.
+ID=com.familiar.server.integration
+SUPPORT=~/Library/Application\ Support/Familiar\ Server\ \(integration\)
 PY=$HERE/build/payload/python/bin/python3
 PORT=4400
 
 if lsof -nP -iTCP:$PORT -sTCP:LISTEN >/dev/null 2>&1; then echo "port $PORT is in use" >&2; exit 1; fi
-if [ -e "$SUPPORT" ]; then echo "$SUPPORT exists (an installed Familiar Server's data); refusing to remove it" >&2; exit 1; fi
+if [ -e "$SUPPORT" ]; then echo "$SUPPORT exists (a previous run's?); remove it first" >&2; exit 1; fi
 
-forget_token() { security delete-generic-password -s com.familiar.server.token >/dev/null 2>&1 || true; }
+forget_token() { security delete-generic-password -s "$ID.token" >/dev/null 2>&1 || true; }
 cleanup() {
   forget_token
   # Unregister the agent, or launchd starts it again at the next login, from this build folder.
@@ -69,7 +72,7 @@ echo "==> app, registering its own Postgres agent"
 open -n --env FAMILIAR_SERVER_DEV_MUSIC="$MUSIC" "$APP"
 for _ in $(seq 1 90); do nc -z 127.0.0.1 54329 2>/dev/null && break; sleep 1; done
 nc -z 127.0.0.1 54329 || { echo "Postgres did not start"; tail -20 "$SUPPORT/server.log" 2>/dev/null; cat "$SUPPORT/postgres/postgres.log" 2>/dev/null; exit 1; }
-launchctl print "gui/$(id -u)/com.familiar.server.postgres" >/dev/null 2>&1 \
+launchctl print "gui/$(id -u)/$ID.postgres" >/dev/null 2>&1 \
   || { echo "Postgres is up, but not as the registered agent"; exit 1; }
 echo "   registered with SMAppService, started by launchd"
 for _ in $(seq 1 180); do curl -sf "http://127.0.0.1:$PORT/api/v1/health" >/dev/null && break; sleep 1; done
@@ -133,7 +136,7 @@ OUTSIDE=$(cd "$HERE/build/payload/backend" && PATH="$HERE/build/payload/bin:/usr
 [ "$STORED" = "$OUTSIDE" ] && echo "   identical to the same child run outside the profile" || { echo "fingerprints differ"; exit 1; }
 
 echo "==> quit as macOS quits it (logout, the Dock), not by the menu"
-osascript -e 'tell application id "com.familiar.server" to quit' >/dev/null
+osascript -e "tell application id \"$ID\" to quit" >/dev/null
 for _ in $(seq 1 30); do pgrep -f "Familiar Server.app/Contents/Resources/python" >/dev/null || break; sleep 1; done
 if pgrep -f "Familiar Server.app/Contents/Resources/python" >/dev/null; then
   echo "the server outlived the app"; exit 1

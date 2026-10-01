@@ -23,9 +23,14 @@ public struct Layout: Sendable, Equatable {
         self.resources = resources
     }
 
-    /// The folder for this user, computed the same way by the app and by the agent.
-    public static func defaultAppSupport(home: String = NSHomeDirectory()) -> URL {
-        URL(fileURLWithPath: home).appendingPathComponent("Library/Application Support/Familiar Server")
+    /// The folder for this user, computed the same way by the app and by the agent, from the bundle
+    /// they share. The integration check's builds carry their own bundle id (`build-app.sh`), so they
+    /// get their own folder and never touch an installed Familiar Server's data.
+    public static func defaultAppSupport(home: String = NSHomeDirectory(), bundleID: String = Identity.bundleID) -> URL {
+        let name = bundleID == Identity.bundleID
+            ? "Familiar Server"
+            : "Familiar Server (\(bundleID.replacingOccurrences(of: Identity.bundleID + ".", with: "")))"
+        return URL(fileURLWithPath: home).appendingPathComponent("Library/Application Support/\(name)")
     }
 
     // Postgres's, written by the agent and read by the app.

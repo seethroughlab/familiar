@@ -47,9 +47,11 @@ enum MusicFolder {
     }
 }
 
-/// The server's token, which this app minted (ADR-0134 point 2), in the app's own Keychain.
+/// The server's token, which this app minted (ADR-0134 point 2), in the app's own Keychain. Named
+/// after the bundle, so the integration check's build (its own bundle id) never reads or deletes an
+/// installed Familiar Server's token.
 enum TokenStore {
-    private static let service = "com.familiar.server.token"
+    private static let service = (Bundle.main.bundleIdentifier ?? Identity.bundleID) + ".token"
 
     static func load() -> String? {
         let query: [String: Any] = [

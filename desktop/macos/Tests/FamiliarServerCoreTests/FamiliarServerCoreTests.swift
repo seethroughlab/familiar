@@ -12,6 +12,11 @@ final class LayoutTests: XCTestCase {
         XCTAssertTrue(layout.postgresPasswordFile.path.hasPrefix(home + "postgres"))
         XCTAssertTrue(layout.serverData.path.hasPrefix(home + "data"))
         XCTAssertFalse(layout.postgresData.path.contains("Group Containers"))
+        // The integration check's builds never share a folder with an installed Familiar Server.
+        XCTAssertEqual(
+            Layout.defaultAppSupport(home: "/Users/someone", bundleID: "com.familiar.server.integration").lastPathComponent,
+            "Familiar Server (integration)"
+        )
         XCTAssertEqual(layout.python.path, "/R/python/bin/python3")
     }
 }
