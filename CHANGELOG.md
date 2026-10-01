@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-beta9] - 2026-10-01
+
+**Familiar Server works.** In `v0.2.0-beta8` it installed, but could not start its database: macOS
+refuses to let a sandboxed app register an unsandboxed helper, and Postgres cannot run sandboxed.
+No migrations; the API contract stays at v1.
+
+### Familiar Server
+
+- **Not App-Sandboxed** (ADR-0140, superseding ADR-0136 points 2–4). The promise the sandbox kept,
+  that nothing which reads your music can write it, is kept instead by a macOS sandbox profile
+  around the server that denies writing the music folder and nothing else. It binds every process
+  the server starts, analysis workers and ffmpeg included. Without it the server does not start.
+- **Updates itself** with Sparkle (ADR-0135 point 3), from a signed feed. This is the first release
+  that carries it, so the next one is the first that arrives on its own.
+- **Says where the player is**: "Get Familiar for Mac…" and "Get Familiar for iPhone…" from the
+  first run, and "Open in Familiar" only when a player is installed to open it.
+- Its data lives in `~/Library/Application Support/Familiar Server`.
+- Quitting it however you quit it (logout and restart included) stops the server. Only its menu's
+  Quit did, and anything else left the server running and the next launch unable to start.
+- Picking a network share asks macOS's permission beside the folder picker, not later, behind the
+  server's start.
+- The web admin no longer answered 500 inside the sandbox; with no sandbox, the cause is gone too.
+- **If you installed beta8 on a Mac,** macOS remembers it as sandboxed and refuses the new build's
+  database. Running `sfltool resetbtm` and restarting clears it; it resets every app's background
+  items, which then ask again.
+
+### Library
+
+- **Approving a pending track analyses it now**, not at the next sync, which could be two hours away.
+
+### Infrastructure
+
+- CI's Linux jobs run on GitHub-hosted runners, not the NAS, after two jobs at once exhausted its
+  memory and froze it for an hour.
+
 ## [0.2.0-beta8] - 2026-09-30
 
 Everything since `v0.2.0-beta7`: the server stops needing Docker. **One migration**
