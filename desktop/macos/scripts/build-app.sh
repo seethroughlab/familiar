@@ -19,6 +19,13 @@
 #        DEV_MUSIC=/path scripts/build-app.sh      debug build that also grants that folder read-only,
 #                                                  for scripts/integration-check.sh
 set -euo pipefail
+# Native arm64 only. Under Rosetta — the x86_64 GitHub runner on an Apple Silicon Mac — every
+# child would build for Intel: ffmpeg probes for x86 assembly and the Swift binaries come out
+# x86_64 beside an arm64 Python. So re-run natively, and refuse a real Intel Mac outright.
+if [ "$(uname -m)" != arm64 ]; then
+  if [ "$(sysctl -n sysctl.proc_translated 2>/dev/null)" = 1 ]; then exec arch -arm64 /bin/bash "$0" "$@"; fi
+  echo "Familiar Server is built on Apple Silicon; this machine is $(uname -m)" >&2; exit 1
+fi
 CONFIG=release
 [ -n "${DEV_MUSIC:-}" ] && CONFIG=debug
 

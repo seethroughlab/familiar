@@ -18,6 +18,13 @@
 # The version is the release tag, `v` and all, exactly as the Docker image is given it: the backend
 # reports it, and downloads its CLAP encoders from the release of that name (ADR-0132 point 8).
 set -euo pipefail
+# Native arm64 only. Under Rosetta — the x86_64 GitHub runner on an Apple Silicon Mac — every
+# child would build for Intel: ffmpeg probes for x86 assembly and the Swift binaries come out
+# x86_64 beside an arm64 Python. So re-run natively, and refuse a real Intel Mac outright.
+if [ "$(uname -m)" != arm64 ]; then
+  if [ "$(sysctl -n sysctl.proc_translated 2>/dev/null)" = 1 ]; then exec arch -arm64 /bin/bash "$0" "$@"; fi
+  echo "Familiar Server is built on Apple Silicon; this machine is $(uname -m)" >&2; exit 1
+fi
 
 PG_VERSION=16.15
 FFMPEG_VERSION=8.1.3
