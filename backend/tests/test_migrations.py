@@ -224,7 +224,8 @@ def test_incremental_migrations_match_the_models() -> None:
         problems: list[str] = []
         for name, table in Base.metadata.tables.items():
             expected = (
-                {c.name for c in table.columns} if name in new_tables
+                {c.name for c in table.columns}
+                if name in new_tables
                 else new_columns.get(name, set())
             )
             if not expected:
@@ -285,28 +286,36 @@ def test_docker_health_check_endpoint(client: TestClient) -> None:
     )
 
 
-def test_uvicorn_has_workers() -> None:
-    """Verify uvicorn is configured with multiple workers.
+def test_image_starts_one_server_process(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The image starts through `app.serve`, which runs exactly one uvicorn worker.
 
-    A single uvicorn process can become unresponsive under load, causing
-    health checks to timeout even when the server is technically running.
-    Multiple workers ensure there's always capacity to handle health checks.
+    One, not several: each worker spawns its own analysis subprocess with the CLAP model
+    (~1.5 GB), and more would exhaust a small machine. This test once asserted `--workers` appeared
+    in the CMD at all, which a `--workers 1` satisfied; since ADR-0141 the CMD is `app.serve`, so
+    the count is checked where it is now set.
     """
     repo_root = Path(__file__).parent.parent.parent
-    dockerfile_path = repo_root / "docker" / "Dockerfile"
-
-    dockerfile_content = dockerfile_path.read_text()
-
-    # Check that uvicorn CMD includes --workers
-    assert "--workers" in dockerfile_content, (
-        "uvicorn should be configured with --workers to prevent health check "
-        "timeouts under load. Add '--workers', '4' to the CMD in Dockerfile."
+    cmd = next(
+        line
+        for line in (repo_root / "docker" / "Dockerfile").read_text().splitlines()
+        if line.startswith("CMD ")
     )
+    assert '"app.serve"' in cmd, f"the image should start through app.serve, not: {cmd}"
+
+    import uvicorn
+
+    from app import serve
+
+    calls: list[dict] = []
+    monkeypatch.setattr(uvicorn, "run", lambda *a, **kw: calls.append(kw))
+    serve.run("127.0.0.1", 8000)
+    assert calls and calls[0].get("workers") == 1
 
 
 # ---------------------------------------------------------------------------
 # Migration round-trip (downgrade → upgrade) tests
 # ---------------------------------------------------------------------------
+
 
 def _alembic_run(*args: str) -> subprocess.CompletedProcess[str]:
     """Run an alembic command and return the result."""
@@ -372,15 +381,9 @@ def _get_reversible_migrations() -> list[str]:
             if isinstance(node, ast.FunctionDef) and node.name == "downgrade":
                 body = node.body
                 # pass-only or docstring-only → not real
-                is_trivial = (
-                    len(body) == 1
-                    and (
-                        isinstance(body[0], ast.Pass)
-                        or (
-                            isinstance(body[0], ast.Expr)
-                            and isinstance(body[0].value, ast.Constant)
-                        )
-                    )
+                is_trivial = len(body) == 1 and (
+                    isinstance(body[0], ast.Pass)
+                    or (isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant))
                 )
                 downgrade_is_real = not is_trivial
 
@@ -424,15 +427,11 @@ def test_reversible_migration_round_trip(client: TestClient, revision: str) -> N
 
     # Downgrade one step from this revision
     result = _alembic_run("downgrade", f"{revision}-1")
-    assert result.returncode == 0, (
-        f"downgrade from {revision} failed: {result.stderr}"
-    )
+    assert result.returncode == 0, f"downgrade from {revision} failed: {result.stderr}"
 
     # Upgrade back
     result = _alembic_run("upgrade", revision)
-    assert result.returncode == 0, (
-        f"upgrade back to {revision} failed: {result.stderr}"
-    )
+    assert result.returncode == 0, f"upgrade back to {revision} failed: {result.stderr}"
 
     # Restore to head for the next test
     result = _alembic_run("upgrade", "head")
