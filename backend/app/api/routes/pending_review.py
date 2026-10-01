@@ -1,5 +1,6 @@
 """Pending review queue API — manage newly discovered tracks awaiting user approval."""
 
+import asyncio
 import logging
 from pathlib import PurePosixPath
 from typing import Any
@@ -283,20 +284,47 @@ def _apply_review_edits(track: Track, edits: dict[str, Any] | None) -> None:
     track.metadata_overrides = metadata_overrides.record(track.metadata_overrides, applied)
 
 
-async def _activate_track(db: AsyncSession, track: Track, queue_analysis: bool = True) -> None:
-    """Set track to ACTIVE and clear review_info."""
+def _activate_track(track: Track) -> None:
+    """Set track to ACTIVE and clear review_info. Analysis is queued after the commit."""
     track.status = TrackStatus.ACTIVE
     track.review_info = None
-    if queue_analysis:
-        await _queue_for_analysis(track)
 
 
-async def _queue_for_analysis(track: Track) -> None:
-    """Queue a track for analysis.
+def _queue_for_analysis(track_ids: list[UUID]) -> int:
+    """Analyse approved tracks now, rather than at the next sync. Call after the commit.
 
-    Analysis pipeline auto-discovers unanalyzed ACTIVE tracks on its next run.
-    No explicit queueing needed — setting the track to ACTIVE is sufficient.
+    Approval used to rely on "the next sync picks it up", and the next sync can be two hours away:
+    an approved track sat unanalysed, and unplayable by anything that needs its features, until then.
+    Returns how many were queued.
+
+    - **During a sync, nothing is queued.** Its analysis phases look for unanalysed ACTIVE tracks,
+      and queue them by phase (`features`, then `embedding`); a `full` request from here would be a
+      second, concurrent analysis of the same track under a different key.
+    - **A paused server analyses on resume** (ADR-0138): the work waits for the pause to lift
+      instead of starting on a laptop that is on battery or hot.
+    - The work runs in the background, so approving a folder answers at once.
     """
+    if not track_ids:
+        return 0
+    from app.services.background import get_background_manager
+    from app.services.background.pause import background_pause
+
+    bg = get_background_manager()
+    if bg.is_sync_running():
+        return 0
+
+    async def analyse_when_unpaused() -> None:
+        await background_pause.wait_while_paused()
+        for track_id in track_ids:
+            await bg.run_analysis(str(track_id))
+
+    _approval_tasks.add(task := asyncio.create_task(analyse_when_unpaused()))
+    task.add_done_callback(_approval_tasks.discard)
+    return len(track_ids)
+
+
+#: Held so the event loop's weak reference is not the only one (asyncio's own advice).
+_approval_tasks: set[asyncio.Task] = set()
 
 
 async def _transfer_user_data(db: AsyncSession, old_track_id: UUID, new_track_id: UUID) -> None:
@@ -468,9 +496,11 @@ async def group_approve(
         # the file, despite the identical name. Renaming the request field would break the web app's
         # approve call, so the collision is documented instead. ADR-0051 notes it too.
         _apply_review_edits(track, request.metadata_overrides)
-        await _activate_track(db, track, request.queue_analysis)
+        _activate_track(track)
 
     await db.commit()
+    if request.queue_analysis:
+        _queue_for_analysis([track.id for track in tracks])
     return {"status": "approved", "count": len(tracks)}
 
 
@@ -522,6 +552,7 @@ async def group_replace_upgrades(
     """Replace all upgrades within a group."""
     tracks = await _get_pending_tracks_in_folder(db, request.folder_path)
     replaced = 0
+    activated: list[UUID] = []
 
     for track in tracks:
         if not (track.review_info and track.review_info.get("trump_status") == "trumps"):
@@ -537,11 +568,14 @@ async def group_replace_upgrades(
             continue
 
         await _transfer_user_data(db, old_track_id, track.id)
-        await _activate_track(db, track, request.queue_analysis)
+        _activate_track(track)
         old_track.status = TrackStatus.SKIPPED
+        activated.append(track.id)
         replaced += 1
 
     await db.commit()
+    if request.queue_analysis:
+        _queue_for_analysis(activated)
     return {"status": "replaced", "count": replaced}
 
 
@@ -608,9 +642,11 @@ async def bulk_approve_all(
     tracks = list(result.scalars().all())
 
     for track in tracks:
-        await _activate_track(db, track, request.queue_analysis)
+        _activate_track(track)
 
     await db.commit()
+    if request.queue_analysis:
+        _queue_for_analysis([track.id for track in tracks])
     return {"status": "approved", "count": len(tracks)}
 
 
@@ -653,8 +689,10 @@ async def approve_track(
     """Approve a single pending track."""
     track = await _get_pending_track(db, track_id)
     _apply_review_edits(track, request.metadata_overrides)
-    await _activate_track(db, track, request.queue_analysis)
+    _activate_track(track)
     await db.commit()
+    if request.queue_analysis:
+        _queue_for_analysis([track_id])
     return {"status": "approved", "track_id": str(track_id)}
 
 
@@ -685,12 +723,14 @@ async def replace_track(
 
     # New track → ACTIVE
     _apply_review_edits(track, request.metadata_overrides)
-    await _activate_track(db, track, request.queue_analysis)
+    _activate_track(track)
 
     # Old track → SKIPPED
     old_track.status = TrackStatus.SKIPPED
 
     await db.commit()
+    if request.queue_analysis:
+        _queue_for_analysis([track_id])
     return {"status": "replaced", "track_id": str(track_id), "replaced_track_id": str(old_track_id)}
 
 
