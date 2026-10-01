@@ -43,13 +43,16 @@ struct ServerMenu: View {
         switch controller.status {
         case .needsFolder:
             Button("Choose Music Folder…") { controller.chooseFolder() }
+            Divider()
+            // ADR-0135 point 5: the first run says where the player is, since the server plays nothing.
+            playerLinks
         case .needsApproval:
             Button("Allow in System Settings…") { controller.openLoginItemsSettings() }
             Button("Try Again") { controller.start() }
         case .failed:
             Button("Try Again") { controller.start() }
         default:
-            Button("Open in Familiar") { controller.openInFamiliar() }
+            playerLinks
             Button("Pair a Phone…") { controller.openAdmin(path: "server/access") }
             Button("Open Admin") { controller.openAdmin() }
             Toggle("Allow Phones to Connect", isOn: $controller.lanEnabled)
@@ -82,6 +85,17 @@ struct ServerMenu: View {
 
     private var version: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+    }
+
+    /// Open the player when one is installed; otherwise, where to get it. Never a button that does
+    /// nothing because its destination is not there.
+    @ViewBuilder private var playerLinks: some View {
+        if controller.status == .running && controller.playerInstalled {
+            Button("Open in Familiar") { controller.openInFamiliar() }
+        } else if !controller.playerInstalled {
+            Button("Get Familiar for Mac…") { controller.getPlayer(for: .mac) }
+        }
+        Button("Get Familiar for iPhone…") { controller.getPlayer(for: .iPhone) }
     }
 
     private var statusLine: String {
