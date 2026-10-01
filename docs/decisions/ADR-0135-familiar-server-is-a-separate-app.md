@@ -35,8 +35,12 @@ Implementation:
   binaries left beside it), and the build scripts now re-run themselves natively if started under
   Rosetta. The released `.dmg` (371 MB) assesses as `Notarized Developer ID` after a quarantined
   download, and every one of its 416 libraries and executables carries arm64.
-- **Not built:** point 3 (Sparkle), so an update is a new download until it is; point 5's first-run
-  links.
+- **Point 5 built 2026-10-01.** The menu offers "Get Familiar for Mac…" (the Mac App Store app)
+  and "Get Familiar for iPhone…" (the store page, to share to a phone) from the first run on.
+  "Open in Familiar" appears only when some app handles `familiar://`; before, with no player
+  installed, it opened a link nothing received and did nothing. `PlayerLinks` is tested against the
+  App Store id the site links, which `check-claims` checks against the live store.
+- **Not built:** point 3 (Sparkle), so an update is a new download until it is.
 
 Extends [ADR-0131](ADR-0131-the-server-is-its-own-app.md)
 

@@ -173,3 +173,17 @@ final class PairingLinkBuilderTests: XCTestCase {
         XCTAssertFalse(url.absoluteString.contains("+"), "a literal plus would read back as a space")
     }
 }
+
+final class PlayerLinksTests: XCTestCase {
+    /// The site's install links are checked against the live App Store by `check-claims`; this keeps
+    /// the menu's in step with them.
+    func testTheMenuLinksTheAppTheSiteLinks() throws {
+        let repo = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+        let site = try String(contentsOf: repo.appendingPathComponent("site/index.html"), encoding: .utf8)
+        XCTAssertTrue(site.contains("apps.apple.com/us/app/familiar-player/id\(PlayerLinks.appStoreID)?platform=mac"))
+        XCTAssertTrue(site.contains(PlayerLinks.iPhone.absoluteString))
+        XCTAssertEqual(PlayerLinks.mac.scheme, "macappstore")
+    }
+}
