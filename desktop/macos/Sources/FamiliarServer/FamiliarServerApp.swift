@@ -1,15 +1,23 @@
 // Familiar Server: the Familiar server as a Mac menu-bar app (ADR-0131, ADR-0135, ADR-0136, ADR-0138).
 import FamiliarServerCore
 import ServiceManagement
+import Sparkle
 import SwiftUI
 
 @main
 struct FamiliarServerApp: App {
     @StateObject private var controller = ServerController()
+    /// Updates (ADR-0135 point 3), started only for a release build (`UpdatePolicy`).
+    private let updates = SPUStandardUpdaterController(
+        startingUpdater: UpdatePolicy.checksForUpdates(
+            version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        ),
+        updaterDelegate: nil, userDriverDelegate: nil
+    )
 
     var body: some Scene {
         MenuBarExtra {
-            ServerMenu(controller: controller)
+            ServerMenu(controller: controller, updates: updates)
         } label: {
             Image(systemName: controller.pauseReason == nil ? "music.note.house" : "music.note.house.fill")
         }
@@ -19,6 +27,7 @@ struct FamiliarServerApp: App {
 
 struct ServerMenu: View {
     @ObservedObject var controller: ServerController
+    let updates: SPUStandardUpdaterController
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     var body: some View {
@@ -60,6 +69,9 @@ struct ServerMenu: View {
         }
 
         Divider()
+        if updates.updater.sessionInProgress == false, UpdatePolicy.checksForUpdates(version: version) {
+            Button("Check for Updates…") { updates.checkForUpdates(nil) }
+        }
         Toggle("Start at Login", isOn: $launchAtLogin)
             .onChange(of: launchAtLogin) { _, enabled in
                 do {
@@ -69,6 +81,10 @@ struct ServerMenu: View {
                 }
             }
         Button("Quit Familiar Server") { controller.quit() }
+    }
+
+    private var version: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
     }
 
     /// Open the player when one is installed; otherwise, where to get it. Never a button that does

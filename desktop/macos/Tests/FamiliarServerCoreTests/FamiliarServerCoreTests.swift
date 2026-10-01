@@ -174,6 +174,27 @@ final class PairingLinkBuilderTests: XCTestCase {
     }
 }
 
+final class UpdatePolicyTests: XCTestCase {
+    func testOnlyAReleaseLooksForUpdates() {
+        XCTAssertTrue(UpdatePolicy.checksForUpdates(version: "0.2.0-beta8"))
+        XCTAssertTrue(UpdatePolicy.checksForUpdates(version: "1.0.0"))
+        for build in ["dev", "integration", ""] {
+            XCTAssertFalse(UpdatePolicy.checksForUpdates(version: build), build)
+        }
+    }
+
+    /// The release job pushes to this branch; Info.plist and the app must name the same feed.
+    func testTheAppAndItsInfoPlistNameOneFeed() throws {
+        let support = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Support/Info.plist")
+        let plist = try XCTUnwrap(NSDictionary(contentsOf: support))
+        XCTAssertEqual(plist["SUFeedURL"] as? String, UpdatePolicy.feedURL.absoluteString)
+        XCTAssertEqual(plist["SUEnableInstallerLauncherService"] as? Bool, true, "the sandbox needs it")
+        XCTAssertNotNil(plist["SUPublicEDKey"] as? String)
+    }
+}
+
 final class PlayerLinksTests: XCTestCase {
     /// The site's install links are checked against the live App Store by `check-claims`; this keeps
     /// the menu's in step with them.
