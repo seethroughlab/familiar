@@ -40,7 +40,21 @@ Implementation:
   "Open in Familiar" appears only when some app handles `familiar://`; before, with no player
   installed, it opened a link nothing received and did nothing. `PlayerLinks` is tested against the
   App Store id the site links, which `check-claims` checks against the live store.
-- **Not built:** point 3 (Sparkle), so an update is a new download until it is.
+- **Point 3 built 2026-10-01: Sparkle 2.10.0**, exact, as a Swift package. The feed is
+  `appcast.xml` on this repository's `appcast` branch, read at
+  `raw.githubusercontent.com/seethroughlab/familiar/appcast/appcast.xml`: point 3 said "beside the
+  image", but GitHub's stable `releases/latest/download/…` skips prereleases, and every release
+  so far is one. The release job publishes after the `.dmg` is attached, via
+  `scripts/publish-update.sh`, which signs with the `SPARKLE_ED_PRIVATE_KEY` secret and refuses a
+  key whose public half (derived with OpenSSL 3) is not the `SUPublicEDKey` in `Info.plist`. The
+  key pair was generated with Sparkle's `generate_keys --account familiar-server`; the private
+  half is also in the login keychain of the Mac that generated it. The app is sandboxed, so Sparkle
+  installs through its launcher service and the app holds the two `mach-lookup` exceptions it
+  names. Only a release build checks (`UpdatePolicy`): a `dev` or `integration` build would put
+  Sparkle's dialog on the desktop of whoever runs the integration check. Notarized with Sparkle
+  embedded, on the first submission; the integration check passes. **Not yet seen end to end:**
+  an installed release offered and installing the next one, which needs two releases that both
+  carry Sparkle.
 
 Extends [ADR-0131](ADR-0131-the-server-is-its-own-app.md)
 
