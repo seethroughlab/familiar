@@ -162,7 +162,15 @@ docker compose -f docker-compose.prod.yml up -d
 *"failed to initialize logging driver: journald"*. On macOS `./start.sh` detects this and adds the
 override for you.
 
-Access at http://localhost:4400. API keys are configured in your `.env` file — open **Library** in the top bar to manage your library and start a scan. The first run downloads about 7 GB.
+**Sign in.** A new server makes itself a token at first start, so it isn't open to everyone on
+your network, and prints a sign-in link to its log:
+
+```bash
+docker logs familiar-api 2>&1 | grep '#token='     # or, any time: docker exec familiar-api python -m app.token
+```
+
+Open that link (put in the address you reach the server at), and the web admin is signed in; pair
+phones from **Server → Access**. The web admin is at http://localhost:4400. API keys are configured in your `.env` file — open **Library** in the top bar to manage your library and start a scan. The first run downloads about 7 GB.
 
 Step-by-step guides, no prior Docker experience assumed:
 

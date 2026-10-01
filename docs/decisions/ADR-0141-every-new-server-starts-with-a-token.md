@@ -6,6 +6,27 @@ Date: 2026-10-01
 
 Implementation:
 - **Accepted 2026-10-01**, as written.
+- **Built 2026-10-01, points 1–5.**
+  - **`app/serve.py`:** migrates first, then decides with a pure `decide()` (has a token, open by
+    choice, new, existing-and-open), asking the database about tracks only when that settles the
+    case. A new server mints with `generate_token()`, the function "Create server token" uses, and
+    prints `sign_in_link()`: built from `FRONTEND_URL` if set, otherwise with the address left to
+    fill in.
+  - **`REFUSAL` is gone.** `--no-advertise` keeps the Docker image from announcing a container port
+    nobody reaches. Advertising follows the token: an open server does not announce itself.
+  - **`python -m app.token`** prints the link again. **`FAMILIAR_OPEN_SERVER`** is in
+    `app/config.py`, and `GET /auth/token` reports it as `open_by_choice` (additive; contract still
+    v1).
+  - **Web admin:** the Overview warns about an open server unless it is open by choice, and the
+    token button says every client pairs once while streams and artwork stay open.
+  - **Images:** `docker/Dockerfile` and `deploy/fly/Dockerfile` start
+    `python -m app.serve --host 0.0.0.0 --port 8000 --no-advertise`, and both entrypoints recognise
+    it. `deploy/fly/fly.toml` sets `FAMILIAR_OPEN_SERVER`.
+  - **CI:** macOS Compose Integration starts a new server from the real image, and checks that the
+    sign-in link is in its log, that `/api/v1/tracks` answers 401, and that `app.token` reprints
+    the link.
+  - Familiar Server is unaffected: it starts on loopback and mints through the API, so it already
+    holds its token before it ever binds beyond loopback.
 
 Extends [ADR-0045](ADR-0045-familiar-authenticates-inbound-requests.md) and supersedes its point 5;
 extends [ADR-0134](ADR-0134-clients-pair-with-a-server.md)

@@ -48,6 +48,11 @@ class Settings(BaseSettings):
         default=False, validation_alias=AliasChoices("FAMILIAR_ALLOW_WRITABLE_LIBRARY")
     )
 
+    # Run without a token on purpose (ADR-0141 point 4): no token is minted at first start, and the
+    # "open to anyone who can reach it" warning becomes one line saying the choice was made. The
+    # public demo (ADR-0038) sets it, beside FAMILIAR_ALLOW_WRITABLE_LIBRARY.
+    open_server: bool = Field(default=False, validation_alias=AliasChoices("FAMILIAR_OPEN_SERVER"))
+
     # Advertise this server on the local network as `_familiar._tcp` on this port (ADR-0134 point
     # 4). Unset, nothing is advertised: in Docker's default bridge network mDNS does not reach the
     # LAN and the container's port is not the host's, so advertising there would announce the wrong

@@ -164,3 +164,23 @@ describe('loading is not failure', () => {
     expect(attentionAnswer([], false).head).toBe('Nothing needs attention');
   });
 });
+
+describe('an open server (ADR-0141 point 3)', () => {
+  const header = 'X-Familiar-Token';
+
+  it('says a server with no token is open to anyone who can reach it', () => {
+    const items = attentionItems({ token: { configured: false, open_by_choice: false, header } });
+    const item = items.find((i) => i.title.includes('open to anyone'));
+    expect(item?.to).toBe('/server/access');
+  });
+
+  it('stays quiet when the server is open by choice, as the demo is', () => {
+    const items = attentionItems({ token: { configured: false, open_by_choice: true, header } });
+    expect(items.some((i) => i.title.includes('open to anyone'))).toBe(false);
+  });
+
+  it('stays quiet once a token exists', () => {
+    const items = attentionItems({ token: { configured: true, token: 't', open_by_choice: false, header } });
+    expect(items.some((i) => i.title.includes('open to anyone'))).toBe(false);
+  });
+});

@@ -3,7 +3,9 @@ set -e
 
 chown -R familiar:familiar /data/music /data/art /data/videos /app/data 2>/dev/null || true
 
-if [[ "$1" == "uvicorn"* ]] || [[ "$*" == *"uvicorn"* ]]; then
+# The API container: started by `python -m app.serve` (ADR-0141 point 5), or by uvicorn in an image
+# or override that predates it.
+if [[ "$*" == *"app.serve"* ]] || [[ "$1" == "uvicorn"* ]] || [[ "$*" == *"uvicorn"* ]]; then
     echo "Ensuring pgvector extension..."
     gosu familiar python -c "
 import asyncio

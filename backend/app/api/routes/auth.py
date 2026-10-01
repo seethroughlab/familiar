@@ -30,6 +30,9 @@ class TokenStatus(BaseModel):
     configured: bool
     token: str | None = None
     header: str = TOKEN_HEADER
+    #: Running without a token on purpose (`FAMILIAR_OPEN_SERVER`, ADR-0141 point 4). The web admin
+    #: warns about an open server only when this is False.
+    open_by_choice: bool = False
 
 
 class TokenIssued(BaseModel):
@@ -61,10 +64,11 @@ async def get_token(request: Request) -> TokenStatus:
     holding it, once one exists.
     """
     from app.api.exceptions import AuthenticationError
+    from app.config import settings as env_settings
 
     settings = get_app_settings_service().get()
     if not settings.access_token:
-        return TokenStatus(configured=False)
+        return TokenStatus(configured=False, open_by_choice=env_settings.open_server)
     if not _authorised(request):
         raise AuthenticationError()
     return TokenStatus(configured=True, token=settings.access_token)

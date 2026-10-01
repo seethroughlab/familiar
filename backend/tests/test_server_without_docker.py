@@ -13,7 +13,7 @@ import pytest
 
 import app.config as config_module
 from app.config import Settings, get_app_version
-from app.serve import DEFAULT_HOST, DEFAULT_PORT, main
+from app.serve import DEFAULT_HOST, DEFAULT_PORT, Start, decide, main
 
 
 class TestDataDir:
@@ -82,13 +82,15 @@ class TestServe:
 
         monkeypatch.setattr(settings, "advertise_port", None)
 
-    def _run(self, argv, token="configured"):
+    def _run(self, argv, token="configured", has_tracks=False):
         calls: list[object] = []
         main(
             argv,
             migrate=lambda: calls.append("migrate"),
             run=lambda h, p: calls.append((h, p)),
             token=lambda: token,
+            has_tracks=lambda: has_tracks,
+            mint=lambda: calls.append("mint") or "minted",
         )
         return calls
 
@@ -101,17 +103,33 @@ class TestServe:
     def test_host_and_port_come_from_arguments(self):
         assert self._run(["--host", "0.0.0.0", "--port", "8000"])[-1] == ("0.0.0.0", 8000)
 
-    def test_beyond_loopback_without_a_token_it_refuses_before_touching_anything(self):
-        """ADR-0134 point 2: a laptop on café Wi-Fi must not become an open server."""
-        calls: list[object] = []
-        with pytest.raises(SystemExit, match="no token"):
-            main(
-                ["--host", "0.0.0.0"],
-                migrate=lambda: calls.append("migrate"),
-                run=lambda h, p: calls.append((h, p)),
-                token=lambda: None,
-            )
-        assert calls == []
+    def test_a_new_server_mints_its_token_and_prints_a_sign_in_link(self, capsys):
+        """ADR-0141 point 1: no token and no tracks is a new server. It mints, after migrating."""
+        calls = self._run(["--host", "0.0.0.0"], token=None, has_tracks=False)
+        assert calls == ["migrate", "mint", ("0.0.0.0", DEFAULT_PORT)]
+        assert "/#token=minted" in capsys.readouterr().err
+
+    def test_an_existing_open_server_keeps_serving_and_says_so(self, capsys):
+        """ADR-0141 point 3: an upgrade never takes a tokenless server offline."""
+        calls = self._run(["--host", "0.0.0.0"], token=None, has_tracks=True)
+        assert "mint" not in calls and calls[-1] == ("0.0.0.0", DEFAULT_PORT)
+        assert "anyone who can reach it" in capsys.readouterr().err
+
+    def test_open_by_choice_mints_nothing(self, monkeypatch, capsys):
+        """ADR-0141 point 4: the demo."""
+        from app.config import settings
+
+        monkeypatch.setattr(settings, "open_server", True)
+        calls = self._run(["--host", "0.0.0.0"], token=None, has_tracks=False)
+        assert "mint" not in calls
+        assert "by choice" in capsys.readouterr().err
+
+    def test_the_decision_asks_about_tracks_only_when_it_must(self):
+        def asked():
+            raise AssertionError("has_tracks consulted")
+
+        assert decide(token="t", open_server=False, has_tracks=asked) is Start.HAS_TOKEN
+        assert decide(token=None, open_server=True, has_tracks=asked) is Start.OPEN_BY_CHOICE
 
     def test_loopback_needs_no_token(self):
         assert self._run([], token=None)[-1] == (DEFAULT_HOST, DEFAULT_PORT)
@@ -122,6 +140,18 @@ class TestServe:
 
         self._run(["--host", "0.0.0.0", "--port", "4455"])
         assert settings.advertise_port == 4455
+
+    def test_docker_does_not_advertise_its_container_port(self):
+        from app.config import settings
+
+        self._run(["--host", "0.0.0.0", "--port", "8000", "--no-advertise"])
+        assert settings.advertise_port is None
+
+    def test_an_open_server_does_not_advertise(self):
+        from app.config import settings
+
+        self._run(["--host", "0.0.0.0"], token=None, has_tracks=True)
+        assert settings.advertise_port is None
 
     def test_a_failed_migration_does_not_start_the_server(self):
         def fail():

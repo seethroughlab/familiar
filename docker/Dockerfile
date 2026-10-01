@@ -310,7 +310,9 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=30s --start-period=30s --retries=3 \
     CMD python -c "import httpx; httpx.get('http://localhost:8000/api/v1/health', timeout=20)" || exit 1
 
-# Default command runs the API server with a single worker
-# Single worker is required because each worker spawns its own analysis subprocess
-# with CLAP model (~1.5GB RAM). Multiple workers would cause OOM on resource-limited systems.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+# The server starts the way Familiar Server starts it (ADR-0141 point 5): `app.serve` migrates, then
+# decides about the token (a new server mints one and prints a sign-in link to this log) and runs
+# uvicorn with a single worker, because each worker spawns its own analysis subprocess with the CLAP
+# model (~1.5 GB) and more would exhaust a small machine. --no-advertise: in Docker's bridge network
+# mDNS does not reach the LAN, and port 8000 is the container's, not the one anyone reaches.
+CMD ["python", "-m", "app.serve", "--host", "0.0.0.0", "--port", "8000", "--no-advertise"]

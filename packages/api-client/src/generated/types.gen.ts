@@ -7030,6 +7030,10 @@ export type TokenStatus = {
      */
     header?: string;
     /**
+     * Open By Choice
+     */
+    open_by_choice?: boolean;
+    /**
      * Token
      */
     token?: string | null;
