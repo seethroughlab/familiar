@@ -115,3 +115,13 @@ public enum PairingLinkBuilder {
         return URL(string: "familiar://pair?\(query)")!
     }
 }
+
+/// Where to get the player, for the menu's first-run links (ADR-0135 point 5). One App Store record
+/// serves the Mac and the phone; the site's install section links the same id.
+public enum PlayerLinks {
+    public static let appStoreID = "6759879772"
+    /// The Mac App Store app itself, not a web page that offers to open it.
+    public static let mac = URL(string: "macappstore://apps.apple.com/app/id\(appStoreID)")!
+    /// A web page: a phone app cannot be installed from a Mac, but the page can be shared to one.
+    public static let iPhone = URL(string: "https://apps.apple.com/us/app/familiar-player/id\(appStoreID)")!
+}
