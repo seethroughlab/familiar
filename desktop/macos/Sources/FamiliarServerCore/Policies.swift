@@ -116,6 +116,19 @@ public enum PairingLinkBuilder {
     }
 }
 
+/// Whether this build looks for updates (ADR-0135 point 3). Only a release does: a development or
+/// integration build ("dev", "integration") has no place in the feed, and its first check would put
+/// Sparkle's dialog on the desktop of whoever is running the integration check.
+public enum UpdatePolicy {
+    /// The feed the release job publishes on the `appcast` branch (`scripts/appcast.py`).
+    public static let feedURL = URL(string: "https://raw.githubusercontent.com/seethroughlab/familiar/appcast/appcast.xml")!
+
+    public static func checksForUpdates(version: String) -> Bool {
+        guard let first = version.unicodeScalars.first else { return false }
+        return CharacterSet.decimalDigits.contains(first)
+    }
+}
+
 /// Where to get the player, for the menu's first-run links (ADR-0135 point 5). One App Store record
 /// serves the Mac and the phone; the site's install section links the same id.
 public enum PlayerLinks {
@@ -124,4 +137,29 @@ public enum PlayerLinks {
     public static let mac = URL(string: "macappstore://apps.apple.com/app/id\(appStoreID)")!
     /// A web page: a phone app cannot be installed from a Mac, but the page can be shared to one.
     public static let iPhone = URL(string: "https://apps.apple.com/us/app/familiar-player/id\(appStoreID)")!
+}
+
+/// What a failed `SMAppService.register()` of the Postgres agent means (ADR-0136 point 4).
+///
+/// Waiting for the owner's approval is not a failure, but `register()` reports it by throwing, and
+/// what was first seen on a real desktop was "Operation not permitted": the app showed "Could not
+/// start the database" where it should have offered System Settings. ServiceManagement documents
+/// `kSMErrorLaunchDeniedByUser` for this, while the text read as POSIX `EPERM`, so each sign counts.
+public enum AgentRegistration: Equatable, Sendable {
+    case needsApproval
+    case alreadyRegistered
+    case failed
+
+    /// `kSMErrorLaunchDeniedByUser` and `kSMErrorAlreadyRegistered` (SMErrors.h: an enum from
+    /// `kSMErrorInternalFailure = 2`).
+    static let launchDeniedByUser = 11
+    static let alreadyRegisteredCode = 12
+
+    public static func outcome(domain: String, code: Int, statusRequiresApproval: Bool) -> AgentRegistration {
+        if statusRequiresApproval { return .needsApproval }
+        if domain == NSPOSIXErrorDomain && code == Int(EPERM) { return .needsApproval }
+        if code == launchDeniedByUser { return .needsApproval }
+        if code == alreadyRegisteredCode { return .alreadyRegistered }
+        return .failed
+    }
 }

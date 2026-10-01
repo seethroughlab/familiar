@@ -387,8 +387,20 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "$TAG" "desktop/macos/build/Familiar-Server-${TAG#v}.dmg" --clobber
 
-      - name: Remove the signing keychain and the notary key
+      # After the upload: the feed must never name a file that is not there yet. Every installed
+      # Familiar Server reads this branch (ADR-0135 point 3), so a key that does not match the one
+      # the app carries fails here, not on everyone's Mac.
+      - name: Publish the update to the Sparkle feed
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          [ -n "$SPARKLE_ED_PRIVATE_KEY" ] || { echo "::error::secret SPARKLE_ED_PRIVATE_KEY is not set"; exit 1; }
+          umask 077
+          printf '%s' "$SPARKLE_ED_PRIVATE_KEY" > "$RUNNER_TEMP/sparkle.key"
+          desktop/macos/scripts/publish-update.sh "$TAG" "$RUNNER_TEMP/sparkle.key"
+
+      - name: Remove the signing keychain and the notary and update keys
         if: always()
         run: |
           [ -n "${SIGNING_KEYCHAIN:-}" ] && security delete-keychain "$SIGNING_KEYCHAIN" || true
-          rm -f "$RUNNER_TEMP/notary.p8"
+          rm -f "$RUNNER_TEMP/notary.p8" "$RUNNER_TEMP/sparkle.key"

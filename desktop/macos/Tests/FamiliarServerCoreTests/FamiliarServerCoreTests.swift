@@ -174,6 +174,27 @@ final class PairingLinkBuilderTests: XCTestCase {
     }
 }
 
+final class UpdatePolicyTests: XCTestCase {
+    func testOnlyAReleaseLooksForUpdates() {
+        XCTAssertTrue(UpdatePolicy.checksForUpdates(version: "0.2.0-beta8"))
+        XCTAssertTrue(UpdatePolicy.checksForUpdates(version: "1.0.0"))
+        for build in ["dev", "integration", ""] {
+            XCTAssertFalse(UpdatePolicy.checksForUpdates(version: build), build)
+        }
+    }
+
+    /// The release job pushes to this branch; Info.plist and the app must name the same feed.
+    func testTheAppAndItsInfoPlistNameOneFeed() throws {
+        let support = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Support/Info.plist")
+        let plist = try XCTUnwrap(NSDictionary(contentsOf: support))
+        XCTAssertEqual(plist["SUFeedURL"] as? String, UpdatePolicy.feedURL.absoluteString)
+        XCTAssertEqual(plist["SUEnableInstallerLauncherService"] as? Bool, true, "the sandbox needs it")
+        XCTAssertNotNil(plist["SUPublicEDKey"] as? String)
+    }
+}
+
 final class PlayerLinksTests: XCTestCase {
     /// The site's install links are checked against the live App Store by `check-claims`; this keeps
     /// the menu's in step with them.
@@ -185,5 +206,22 @@ final class PlayerLinksTests: XCTestCase {
         XCTAssertTrue(site.contains("apps.apple.com/us/app/familiar-player/id\(PlayerLinks.appStoreID)?platform=mac"))
         XCTAssertTrue(site.contains(PlayerLinks.iPhone.absoluteString))
         XCTAssertEqual(PlayerLinks.mac.scheme, "macappstore")
+    }
+}
+
+final class AgentRegistrationTests: XCTestCase {
+    /// "Operation not permitted" was the first real desktop's answer, and it means: ask the owner.
+    func testWaitingForTheOwnerIsNotAFailure() {
+        XCTAssertEqual(AgentRegistration.outcome(domain: NSPOSIXErrorDomain, code: Int(EPERM), statusRequiresApproval: false), .needsApproval)
+        XCTAssertEqual(AgentRegistration.outcome(domain: "SMAppServiceErrorDomain", code: 11, statusRequiresApproval: false), .needsApproval)
+        XCTAssertEqual(AgentRegistration.outcome(domain: "anything", code: 99, statusRequiresApproval: true), .needsApproval)
+    }
+
+    func testAlreadyRegisteredIsFine() {
+        XCTAssertEqual(AgentRegistration.outcome(domain: "SMAppServiceErrorDomain", code: 12, statusRequiresApproval: false), .alreadyRegistered)
+    }
+
+    func testABadSignatureIsStillAFailure() {
+        XCTAssertEqual(AgentRegistration.outcome(domain: "SMAppServiceErrorDomain", code: 3, statusRequiresApproval: false), .failed)
     }
 }

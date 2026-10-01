@@ -26,6 +26,17 @@
 	<array>
 		<string>_familiar._tcp</string>
 	</array>
+	<!-- Updates (ADR-0135 point 3): the feed the release job publishes, and the public half of the
+	     key that signs every update; the private half is the SPARKLE_ED_PRIVATE_KEY secret. The app
+	     is sandboxed, so Sparkle installs through its launcher service. -->
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/seethroughlab/familiar/appcast/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>keIdHK2pK5GVEDrZ7ETN5zyxvj4Mj9tZUgbWoZCVlr8=</string>
+	<key>SUEnableInstallerLauncherService</key>
+	<true/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Familiar Server lets your phone find it on your network, so you can pair it and listen.</string>
 </dict>

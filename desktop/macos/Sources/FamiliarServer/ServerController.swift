@@ -116,8 +116,20 @@ final class ServerController: ObservableObject {
             do {
                 if Self.agent.status != .enabled { try Self.agent.register() }
             } catch {
-                status = .failed("Could not start the database: \(error.localizedDescription)")
-                return
+                let nsError = error as NSError
+                switch AgentRegistration.outcome(
+                    domain: nsError.domain, code: nsError.code,
+                    statusRequiresApproval: Self.agent.status == .requiresApproval
+                ) {
+                case .needsApproval:
+                    status = .needsApproval
+                    return
+                case .alreadyRegistered:
+                    break
+                case .failed:
+                    status = .failed("Could not start the database: \(error.localizedDescription) (\(nsError.domain) \(nsError.code))")
+                    return
+                }
             }
             if Self.agent.status == .requiresApproval {
                 status = .needsApproval
