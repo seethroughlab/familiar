@@ -48,9 +48,11 @@ BIN=$(cd "$HERE" && swift build -c $CONFIG --show-bin-path)
 
 echo "==> assemble"
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Library/LaunchAgents"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Library/LaunchAgents" "$APP/Contents/Frameworks"
 cp "$BIN/FamiliarServer" "$BIN/familiar-postgres-agent" "$APP/Contents/MacOS/"
 cp "$SUPPORT/com.familiar.server.postgres.plist" "$APP/Contents/Library/LaunchAgents/"
+# Updates (ADR-0135 point 3). ditto keeps the framework's Versions/ symlinks, which cp -R would not.
+ditto "$BIN/Sparkle.framework" "$APP/Contents/Frameworks/Sparkle.framework"
 sed -e "s/__VERSION__/${VERSION#v}/" -e "s/__BUILD__/$(date +%Y%m%d%H%M)/" "$SUPPORT/Info.plist" > "$APP/Contents/Info.plist"
 cp -R "$PAYLOAD/python" "$PAYLOAD/postgres" "$PAYLOAD/backend" "$PAYLOAD/bin" "$PAYLOAD/lib" "$APP/Contents/Resources/"
 
@@ -74,7 +76,15 @@ find "$APP/Contents/Resources" -type f -perm +111 ! -name "*.dylib" ! -name "*.s
     *) sign --entitlements "$SUPPORT/Child.entitlements" "$f" ;;
   esac
 done
-# 3. The agent, then the app itself last.
+# 3. Sparkle, inside out, as its sandboxing guide orders it: the XPC services (the downloader keeps
+#    its own entitlements), the installer, the updater, then the framework.
+SPARKLE="$APP/Contents/Frameworks/Sparkle.framework/Versions/B"
+sign "$SPARKLE/XPCServices/Installer.xpc"
+sign --preserve-metadata=entitlements "$SPARKLE/XPCServices/Downloader.xpc"
+sign "$SPARKLE/Autoupdate"
+sign "$SPARKLE/Updater.app"
+sign "$APP/Contents/Frameworks/Sparkle.framework"
+# 4. The agent, then the app itself last.
 sign --entitlements "$SUPPORT/Agent.entitlements" "$APP/Contents/MacOS/familiar-postgres-agent"
 APP_ENTITLEMENTS=$SUPPORT/FamiliarServer.entitlements
 if [ -n "${DEV_MUSIC:-}" ]; then
@@ -85,5 +95,5 @@ if [ -n "${DEV_MUSIC:-}" ]; then
     -c "Add :com.apple.security.temporary-exception.files.absolute-path.read-only:0 string ${DEV_MUSIC%/}/" "$APP_ENTITLEMENTS"
 fi
 sign --entitlements "$APP_ENTITLEMENTS" "$APP"
-codesign --verify --strict "$APP"
+codesign --verify --deep --strict "$APP"
 du -sh "$APP"

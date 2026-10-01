@@ -115,3 +115,16 @@ public enum PairingLinkBuilder {
         return URL(string: "familiar://pair?\(query)")!
     }
 }
+
+/// Whether this build looks for updates (ADR-0135 point 3). Only a release does: a development or
+/// integration build ("dev", "integration") has no place in the feed, and its first check would put
+/// Sparkle's dialog on the desktop of whoever is running the integration check.
+public enum UpdatePolicy {
+    /// The feed the release job publishes on the `appcast` branch (`scripts/appcast.py`).
+    public static let feedURL = URL(string: "https://raw.githubusercontent.com/seethroughlab/familiar/appcast/appcast.xml")!
+
+    public static func checksForUpdates(version: String) -> Bool {
+        guard let first = version.unicodeScalars.first else { return false }
+        return CharacterSet.decimalDigits.contains(first)
+    }
+}
