@@ -1,30 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- The app and, by inheritance, the Python server (ADR-0136 points 2 and 3). No read-write file
-     access of any kind: the music folder is granted read-only, and zero-touch rests on that. -->
+<!-- The app: not App-Sandboxed (ADR-0140). A sandboxed app cannot register the unsandboxed agent
+     Postgres needs, so the one rule the sandbox was for, that nothing which reads the music can
+     write it, is enforced on the Python server by a Seatbelt profile (ServerLaunch) instead.
+     Hardened runtime, Developer ID, notarized; no exceptions. -->
 <plist version="1.0">
-<dict>
-	<key>com.apple.security.app-sandbox</key>
-	<true/>
-	<key>com.apple.security.files.user-selected.read-only</key>
-	<true/>
-	<key>com.apple.security.files.bookmarks.app-scope</key>
-	<true/>
-	<key>com.apple.security.network.server</key>
-	<true/>
-	<key>com.apple.security.network.client</key>
-	<true/>
-	<!-- Sparkle's installer, which a sandboxed app reaches by these two names (ADR-0135 point 3). -->
-	<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
-	<array>
-		<string>com.familiar.server-spks</string>
-		<string>com.familiar.server-spki</string>
-	</array>
-	<!-- Postgres's data and password, shared with the agent; and the only names under which the
-	     sandbox allows Python's semaphores (ADR-0136 point 3). -->
-	<key>com.apple.security.application-groups</key>
-	<array>
-		<string>7JL9RZ9C8P.fs</string>
-	</array>
-</dict>
+<dict/>
 </plist>

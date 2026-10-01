@@ -1,6 +1,6 @@
 # ADR-0136: Familiar Server Runs in the Background
 
-Status: accepted
+Status: accepted; points 2–4 superseded by [ADR-0140](ADR-0140-familiar-server-enforces-zero-touch-with-a-seatbelt-profile.md)
 
 Date: 2026-09-29
 

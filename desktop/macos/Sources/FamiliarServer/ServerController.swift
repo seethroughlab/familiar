@@ -46,12 +46,20 @@ final class ServerController: ObservableObject {
     private let devMusicFolder = ProcessInfo.processInfo.environment["FAMILIAR_SERVER_DEV_MUSIC"]
         .map { URL(fileURLWithPath: $0) }
     private let devExternalPostgres = ProcessInfo.processInfo.environment["FAMILIAR_SERVER_DEV_EXTERNAL_POSTGRES"] == "1"
+    /// Unregister the Postgres agent and quit. The integration check's cleanup: a registered agent
+    /// would otherwise start again at the next login, from the build folder.
+    private let devUnregister = ProcessInfo.processInfo.environment["FAMILIAR_SERVER_DEV_UNREGISTER"] == "1"
     #else
+    private let devUnregister = false
     private let devMusicFolder: URL? = nil
     private let devExternalPostgres = false
     #endif
 
     init() {
+        if devUnregister {
+            try? Self.agent.unregister()
+            exit(0)
+        }
         let fm = FileManager.default
         let group = fm.containerURL(forSecurityApplicationGroupIdentifier: Identity.appGroup)
             ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Group Containers/\(Identity.appGroup)")
@@ -94,6 +102,11 @@ final class ServerController: ObservableObject {
     }
 
     private func bringUp(folder: URL) async {
+        // ADR-0140 point 4: without the profile nothing keeps the music unwritten, so no server.
+        guard FileManager.default.isExecutableFile(atPath: ServerLaunch.sandboxExec.path) else {
+            status = .failed("This Mac has no sandbox-exec, which keeps your music read-only. Familiar Server will not run without it.")
+            return
+        }
         do {
             try FileManager.default.createDirectory(at: layout.serverData, withIntermediateDirectories: true)
             try FileManager.default.createDirectory(

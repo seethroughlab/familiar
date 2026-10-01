@@ -1,13 +1,12 @@
 import Foundation
 
-/// The identifiers that tie the app, its agent and the sandbox together (ADR-0136).
+/// The identifiers that tie the app and its agent together (ADR-0136, ADR-0140).
 public enum Identity {
     public static let bundleID = "com.familiar.server"
-    /// Short on purpose. macOS caps a POSIX semaphore name at 31 characters, and inside the sandbox
-    /// every name must begin with this group and a slash. `7JL9RZ9C8P.fs/mp-` plus Python's eight
-    /// random characters is 25. Measured in ADR-0136's spike.
+    /// Names the folder that holds Postgres's data, `~/Library/Group Containers/7JL9RZ9C8P.fs`. It
+    /// was an App Sandbox group, short so that semaphore names fit under it (ADR-0136 point 3);
+    /// with no sandbox (ADR-0140) it is only a path, kept so that nothing already there moves.
     public static let appGroup = "7JL9RZ9C8P.fs"
-    public static let semaphorePrefix = appGroup + "/mp"
     /// The launch agent that runs Postgres beside the sandbox (ADR-0136 point 4).
     public static let postgresAgentLabel = "com.familiar.server.postgres"
     public static let postgresAgentPlist = postgresAgentLabel + ".plist"

@@ -1,8 +1,28 @@
 # ADR-0140: Familiar Server Enforces Zero-Touch with a Seatbelt Profile, Not the App Sandbox
 
-Status: proposed
+Status: accepted
 
 Date: 2026-10-01
+
+Implementation:
+- **Accepted 2026-10-01**, as written.
+- **Built 2026-10-01, points 1–5.**
+  - `ServerLaunch` runs `/usr/bin/sandbox-exec -p <profile> -D MUSIC=<folder>` before Python. The
+    folder is given with its symlinks resolved, because Seatbelt matches real paths.
+  - The app and agent entitlements are empty, and the child keeps only numba's executable-memory
+    exception. `FAMILIAR_SEMAPHORE_PREFIX` and `Identity.semaphorePrefix` are gone.
+  - Sparkle's `SUEnableInstallerLauncherService` and its two `mach-lookup` exceptions are removed.
+  - The folder is a plain bookmark, re-saved when stale, and read once when chosen so that the
+    privacy prompt appears beside the picker.
+  - `bringUp` refuses to start without `sandbox-exec`.
+  - The app's data moves out of the sandbox container to `~/Library/Application Support/Familiar
+    Server`. A build from before this starts over there; the only one ever installed was the first
+    test install.
+  - `scripts/integration-check.sh` now lets the app register its own agent, and checks launchd
+    holds it. It runs on a library its owner can write, so a healthy server proves the profile is
+    on, and its cleanup unregisters the agent through a debug-only switch.
+  - **Not yet run** at the time of writing: the integration check, which needs port 4400 and the
+    Postgres folder that a live test against a real library was using.
 
 Supersedes points 2–4 of [ADR-0136](ADR-0136-familiar-server-runs-in-the-background.md), and
 extends [ADR-0135](ADR-0135-familiar-server-is-a-separate-app.md)

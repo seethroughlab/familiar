@@ -313,7 +313,12 @@ comes as **Familiar Server** (a Developer ID menu-bar Mac app, source at `deskto
 or as Docker on Linux/NAS, and both are first-class. The Mac player stays in the App Store and carries
 no server. **Windows is shelved until the Mac ecosystem is done** (0131 point 4 makes that checkable).
 Two earlier drafts, a server inside the player, were reversed; 0131's Context says why, so do not
-rebuild them. Execution order differs from the numbering:
+rebuild them. **`ADR-0140` (accepted 2026-10-01) supersedes 0136 points 2–4: Familiar Server is not
+App-Sandboxed.** macOS refuses to let a sandboxed app register an unsandboxed agent, and Postgres
+cannot run sandboxed, so the first real install failed at "Operation not permitted". Zero-touch is
+enforced instead by a Seatbelt profile (`sandbox-exec`) on the Python server that denies writing the
+music folder, which also makes `os.access` report it unwritable. Do not re-add the App Sandbox
+without reading 0140. Execution order differs from the numbering:
 
 | # | ADR | Why here |
 |---|---|---|
@@ -322,7 +327,7 @@ rebuild them. Execution order differs from the numbering:
 | 3 | `0134` | Pairing: the Apple client finally sends `X-Familiar-Token`, `_familiar._tcp` over zeroconf, one `familiar://pair` link as a QR code or opened on the same Mac. Nothing listens beyond loopback until a phone is paired. Clears ADR-0045 point 5's larger blocker. |
 | 4 | `0136` spike | Does Postgres run inside Familiar Server's sandbox? The answer shapes 0136 point 4. |
 | 5 | `0135` | Familiar Server's notarized `.dmg` and Sparkle appcast, built by `release.yml` from the image's tag. |
-| 6 | `0136` with `0138` | The menu-bar login-item app (read-only folder via the sandbox, which also finally enforces zero-touch), and the etiquette it keeps: pause on battery/heat, background QoS, never hold the Mac awake. |
+| 6 | `0136` with `0138` | The menu-bar login-item app (read-only folder, zero-touch enforced by macOS — by the App Sandbox as built, by a Seatbelt profile since `0140`), and the etiquette it keeps: pause on battery/heat, background QoS, never hold the Mac awake. |
 | 7 | `0137` | The phone keeps a copy of its library: favourites kept by default, kept playlists, a storage budget, a defined "away" state. |
 
 **`0138` found that a library sync starts every two hours** (`CronTrigger(hour="*/2")`), so "nothing is
@@ -357,7 +362,8 @@ desktop/
 └── macos/                 # Familiar Server, the Mac form of the server (ADR-0136): a Swift package
                            # (menu-bar app, Postgres launch agent, FamiliarServerCore) assembled into
                            # an .app by scripts/build-payload.sh + build-app.sh; integration-check.sh
-                           # runs the real bundle in the real sandbox.
+                           # runs the real bundle as it really starts, agent registration and
+                           # zero-touch profile included (ADR-0140).
 backend/
 ├── app/
 │   ├── api/routes/        # FastAPI endpoints (~29 route files)
