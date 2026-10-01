@@ -191,11 +191,17 @@ jobs:
           docker compose -f docker-compose.local.yml down -v 2>/dev/null || true
           docker compose -f docker-compose.prod.yml down -v 2>/dev/null || true
 
+      # Not 4400: this runner is a Mac that may be running Familiar Server, which listens there,
+      # and a health check that reached it would pass without testing the stack at all.
       - name: Create .env for test
         working-directory: docker
         run: |
+          if lsof -nP -iTCP:4410 -sTCP:LISTEN >/dev/null 2>&1; then
+            echo "::error::port 4410 is already in use on this runner"; exit 1
+          fi
           echo "MUSIC_LIBRARY_PATH=${{ github.workspace }}/backend/tests/fixtures/audio" > .env
-          echo "FRONTEND_URL=http://localhost:4400" >> .env
+          echo "API_PORT=4410" >> .env
+          echo "FRONTEND_URL=http://localhost:4410" >> .env
 
       # Use local build compose (builds from source) since the published
       # image may not have an ARM64 manifest yet
@@ -207,10 +213,10 @@ jobs:
         run: |
           echo "Waiting for API to be healthy..."
           for i in $(seq 1 40); do
-            STATUS=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:4400/api/v1/health 2>/dev/null || echo "000")
+            STATUS=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:4410/api/v1/health 2>/dev/null || echo "000")
             if [ "$STATUS" = "200" ]; then
               echo "API is healthy"
-              curl -s http://localhost:4400/api/v1/health | python3 -m json.tool
+              curl -s http://localhost:4410/api/v1/health | python3 -m json.tool
               exit 0
             fi
             echo "Attempt $i/40: HTTP $STATUS (waiting 5s...)"
