@@ -26,6 +26,15 @@ Implementation:
   `v` only for `CFBundleShortVersionString` and the file name; `build-payload.sh` refuses anything
   else. No release yet carries the encoders — #343 merged after `v0.2.0-beta7` — so the first Mac
   server that can fetch them is the next release's.
+- **First release, `v0.2.0-beta8`, 2026-10-01: the `.dmg` shipped on the third run of the job.** The
+  first failed at the import: `DEVELOPER_ID_P12_PASSWORD` had been set through a shell with no
+  terminal, so `gh` stored an empty value, and the job's own check caught it. The second failed in
+  ffmpeg's configure, probing x86 assembly: **the self-hosted Mac's runner was GitHub's x86_64
+  build under Rosetta**, so every job it ran built for Intel, familiar-apple's included. The runner
+  was swapped to the `osx-arm64` package of the same version (registration kept, the x86_64
+  binaries left beside it), and the build scripts now re-run themselves natively if started under
+  Rosetta. The released `.dmg` (371 MB) assesses as `Notarized Developer ID` after a quarantined
+  download, and every one of its 416 libraries and executables carries arm64.
 - **Not built:** point 3 (Sparkle), so an update is a new download until it is; point 5's first-run
   links.
 
