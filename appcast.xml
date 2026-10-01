@@ -1,0 +1,18 @@
+<?xml version='1.0' encoding='utf-8'?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+  <channel>
+    <title>Familiar Server</title>
+    <link>https://github.com/seethroughlab/familiar/releases</link>
+    <description>Updates to Familiar Server, the Mac form of the Familiar server.</description>
+    <item>
+      <title>Familiar Server 0.2.0-beta9</title>
+      <pubDate>Thu, 01 Oct 2026 22:52:07 GMT</pubDate>
+      <link>https://github.com/seethroughlab/familiar/releases/tag/v0.2.0-beta9</link>
+      <sparkle:version>202610011845</sparkle:version>
+      <sparkle:shortVersionString>0.2.0-beta9</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/seethroughlab/familiar/releases/tag/v0.2.0-beta9</sparkle:releaseNotesLink>
+      <enclosure url="https://github.com/seethroughlab/familiar/releases/download/v0.2.0-beta9/Familiar-Server-0.2.0-beta9.dmg" length="358841973" type="application/octet-stream" sparkle:edSignature="iu1HPuhKFXkRpjrtdO6oQ3QF2YJpCtYp+3p9DTdhOt7Mnhx2NZhu55ykQici0wFzcFIl6m0drd37MKVaaRcaBw==" />
+    </item>
+  </channel>
+</rss>
