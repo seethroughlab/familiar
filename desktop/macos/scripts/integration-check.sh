@@ -126,6 +126,14 @@ OUTSIDE=$(cd "$HERE/build/payload/backend" && PATH="$HERE/build/payload/bin:/usr
   "$MUSIC/Test Artist/Test Album/01 Sine.flac" | "$PY" -c "import sys,json;print(json.load(sys.stdin)[1])")
 [ "$STORED" = "$OUTSIDE" ] && echo "   identical to the same child run outside the sandbox" || { echo "fingerprints differ"; exit 1; }
 
+echo "==> quit as macOS quits it (logout, the Dock), not by the menu"
+osascript -e 'tell application id "com.familiar.server" to quit' >/dev/null
+for _ in $(seq 1 30); do pgrep -f "Familiar Server.app/Contents/Resources/python" >/dev/null || break; sleep 1; done
+if pgrep -f "Familiar Server.app/Contents/Resources/python" >/dev/null; then
+  echo "the server outlived the app"; exit 1
+fi
+echo "   the server stopped with the app"
+
 echo "==> zero-touch"
 AFTER=$(find "$MUSIC" -type f -exec shasum {} + | sort | shasum)
 [ "$BEFORE" = "$AFTER" ] && echo "   the music folder is exactly as it was" || { echo "THE MUSIC FOLDER CHANGED"; find "$MUSIC"; exit 1; }
