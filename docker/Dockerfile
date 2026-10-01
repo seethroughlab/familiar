@@ -134,18 +134,46 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # the boundary is a real one and should be crossed deliberately.
 FROM python-base AS onnx-export
 WORKDIR /export
+# Every input of the export is pinned: the encoders' hashes live in source
+# (backend/app/services/clap_artifacts.py), and new bytes mean new vectors. Unpinned, torch
+# 2.14.1 alone moved both files and failed v0.2.0-beta8's release (2026-09-30). With these
+# versions the export reproduced the pinned hashes on arm64, and the step below checks every build
+# on either architecture. Change any of them only
+# together with those hashes and EMBEDDING_VERSION.
+ARG CLAPBACK_EXPORT_REF=11d884a116fe8a358617843d8b1e5df090d1b769
+ARG CLAP_MODEL_REVISION=8fa0f1c6d0433df6e97c127f64b2a1d6c0dcda8a
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv venv /opt/exportenv && \
     VIRTUAL_ENV=/opt/exportenv uv pip install \
-        torch --index-url https://download.pytorch.org/whl/cpu && \
+        'torch==2.14.0' --index-url https://download.pytorch.org/whl/cpu && \
     VIRTUAL_ENV=/opt/exportenv uv pip install \
-        'transformers>=4.40,<5' onnx onnxruntime numpy
+        'transformers==4.57.6' 'tokenizers==0.22.2' 'safetensors==0.8.0' 'huggingface-hub==0.36.2' \
+        'onnx==1.23.0' 'onnxruntime==1.30.0' 'numpy==2.4.6'
 # Fetched rather than COPY --from: `scripts/` is not part of the wheel, so it does
 # not exist in the installed package. Same mechanism the image already uses for
-# silero_vad.onnx below.
-ADD https://raw.githubusercontent.com/seethroughlab/clapback/main/packages/embed/scripts/export_models.py ./export_models.py
+# silero_vad.onnx below. At a commit, not `main`, and with the model at a revision: the script
+# asks Hugging Face for whatever `main` is.
+ADD https://raw.githubusercontent.com/seethroughlab/clapback/${CLAPBACK_EXPORT_REF}/packages/embed/scripts/export_models.py ./export_models.py
+RUN sed -i "s/from_pretrained(CHECKPOINT)/from_pretrained(CHECKPOINT, revision=\"${CLAP_MODEL_REVISION}\")/" export_models.py && \
+    test "$(grep -c "revision=\"${CLAP_MODEL_REVISION}\"" export_models.py)" -eq 2
 RUN --mount=type=cache,target=/root/.cache/huggingface \
     /opt/exportenv/bin/python export_models.py --out /models
+# The build fails here, on any machine, if the bytes are not the pinned ones: CI's image build
+# and the release's both, rather than only the release's smoke test after the images are pushed.
+COPY backend/app/services/clap_artifacts.py /export/clap_artifacts.py
+RUN /opt/exportenv/bin/python - <<'VERIFY'
+import hashlib, re, sys
+pins = dict(re.findall(r'"(clap_\w+\.onnx)": Artifact\(\s*size=[\d_]+,\s*sha256="([0-9a-f]{64})"',
+                       open("/export/clap_artifacts.py").read()))
+assert len(pins) == 2, f"expected two pinned encoders in clap_artifacts.py, found {pins}"
+bad = []
+for name, expected in pins.items():
+    digest = hashlib.sha256(open(f"/models/{name}", "rb").read()).hexdigest()
+    print(f"{name}: {digest}")
+    if digest != expected:
+        bad.append(f"{name}: sha256 {digest}, pinned {expected}")
+sys.exit("\n".join(["the CLAP export does not reproduce the pinned encoders:", *bad]) if bad else 0)
+VERIFY
 
 # =============================================================================
 # Stage 4: Production image
