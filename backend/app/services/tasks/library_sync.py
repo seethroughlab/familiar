@@ -936,3 +936,74 @@ class _SyncProgressAdapter:
 
     def error(self, msg: str) -> None:
         self.sync_progress.error(msg)
+
+
+# ---------------------------------------------------------------------------------------------------
+# A scan of the folders that changed (ADR-0142 point 3)
+# ---------------------------------------------------------------------------------------------------
+
+
+def _run_folder_scan_in_process(
+    library_paths_str: list[str], folders_str: list[str], initial_import: bool
+) -> dict[str, Any]:
+    """Scan only `folders`, in the scan process, as the full scan runs there: file reads and hashing
+    stay off the event loop that serves streams."""
+    import logging
+
+    logging.basicConfig(level=logging.INFO, format="%(message)s", force=True)
+    return asyncio.run(_async_folder_scan(library_paths_str, folders_str, initial_import))
+
+
+async def _async_folder_scan(
+    library_paths_str: list[str], folders_str: list[str], initial_import: bool
+) -> dict[str, Any]:
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+    from app.services.scanner import LibraryScanner
+
+    folders = [Path(f) for f in folders_str]
+    totals = {"new": 0, "updated": 0, "unchanged": 0, "relocated": 0, "recovered": 0, "pending_review": 0}
+    engine = create_async_engine(settings.database_url, echo=False, future=True)
+    try:
+        maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        async with maker() as db:
+            scanner = LibraryScanner(db, initial_import=initial_import)
+            for library_path in (Path(p) for p in library_paths_str):
+                mine = [f for f in folders if f == library_path or library_path in f.parents]
+                if not mine:
+                    continue
+                result = await scanner.scan(library_path, reanalyze_changed=True, only=mine)
+                for key in totals:
+                    totals[key] += result.get(key, 0)
+        return {"status": "success", **totals}
+    except Exception as e:  # noqa: BLE001 - reported to the watcher, which logs it; the sync is the net
+        logger.error(f"Folder scan failed: {e}", exc_info=True)
+        return {"status": "error", "error": str(e)}
+    finally:
+        await engine.dispose()
+
+
+async def run_folder_scan(folders: list[Path]) -> dict[str, Any]:
+    """Scan `folders` and analyse what is new, without a full sync (ADR-0142 point 3).
+
+    The caller holds the manager's library lock, so a full sync cannot run alongside and add the
+    same file twice. Analysis is queued here because no sync phase follows to queue it.
+    """
+    from app.services.tasks import queue_unanalyzed_tracks
+
+    library_paths = [str(p) for p in settings.music_library_paths if p.is_dir()]
+    initial_import = await _initial_import_pending()
+    result = await asyncio.get_event_loop().run_in_executor(
+        _get_scan_executor(),
+        _run_folder_scan_in_process,
+        library_paths,
+        [str(f) for f in folders],
+        initial_import,
+    )
+    if result.get("status") != "success":
+        return result
+    if initial_import:
+        _finish_initial_import(result)
+    if result.get("new") or result.get("updated") or result.get("relocated") or result.get("recovered"):
+        result["queued"] = await queue_unanalyzed_tracks()
+    return result

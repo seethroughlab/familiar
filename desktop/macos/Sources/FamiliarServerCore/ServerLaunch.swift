@@ -47,7 +47,9 @@ public struct ServerLaunch: Equatable, Sendable {
         workingDirectory = layout.backend
 
         var env: [String: String] = [:]
-        for key in ["HOME", "TMPDIR", "USER", "LANG", "APP_SANDBOX_CONTAINER_ID"] {
+        // FAMILIAR_WATCH_QUIET_SECONDS: the integration check shortens the library watch's quiet period
+        // (ADR-0142) so it can add a track and see it arrive without waiting three minutes.
+        for key in ["HOME", "TMPDIR", "USER", "LANG", "FAMILIAR_WATCH_QUIET_SECONDS"] {
             if let value = inherited[key] { env[key] = value }
         }
         env["PATH"] = [layout.bin.path, "/usr/bin", "/bin"].joined(separator: ":")

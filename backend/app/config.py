@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     # "open to anyone who can reach it" warning becomes one line saying the choice was made. The
     # public demo (ADR-0038) sets it, beside FAMILIAR_ALLOW_WRITABLE_LIBRARY.
     open_server: bool = Field(default=False, validation_alias=AliasChoices("FAMILIAR_OPEN_SERVER"))
+    # Watch the library and scan folders that change (ADR-0142). Off only for the test suite, which
+    # starts the app many times against fixture folders.
+    watch_library: bool = Field(default=True, validation_alias=AliasChoices("FAMILIAR_WATCH_LIBRARY"))
 
     # Advertise this server on the local network as `_familiar._tcp` on this port (ADR-0134 point
     # 4). Unset, nothing is advertised: in Docker's default bridge network mDNS does not reach the

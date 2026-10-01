@@ -39,9 +39,6 @@ final class ServerController: ObservableObject {
     private var restartPolicy = RestartPolicy()
     private var stopping = false
     private var monitor: MachineMonitor?
-    private var watch: FolderWatch?
-    private var debouncer = SyncDebouncer()
-    private var syncTimer: Timer?
     private var lastDecision: Etiquette.Decision = .run
     private(set) var token: String? = TokenStore.load()
 
@@ -156,17 +153,12 @@ final class ServerController: ObservableObject {
             }
         }
         guard await waitForPort(PostgresSetup.port, seconds: 60) else {
-            status = .failed("The database did not start. Its log is in the app group container.")
+            status = .failed("The database did not start. Its log is postgres/postgres.log in ~/Library/Application Support/Familiar Server.")
             return
         }
 
-        watch = FolderWatch(folder: folder) { [weak self] in
-            Task { @MainActor in self?.debouncer.noteChange(at: Date()) }
-        }
-        syncTimer?.invalidate()
-        syncTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.syncIfDue() }
-        }
+        // New music is the server's to notice now (ADR-0142): it watches the folder itself, as a Docker
+        // server does, and scans what changed. This app's FSEvents watch and debouncer were removed.
         launchServer()
     }
 
@@ -252,8 +244,6 @@ final class ServerController: ObservableObject {
 
     func stopServer() {
         stopping = true
-        watch = nil
-        syncTimer?.invalidate()
         guard let p = process, p.isRunning else { return }
         p.terminate()  // SIGTERM; uvicorn shuts down and cancels in-flight fetches
         let deadline = Date().addingTimeInterval(15)
@@ -300,14 +290,6 @@ final class ServerController: ObservableObject {
         Timer.scheduledTimer(withTimeInterval: 3601, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.monitor?.refresh() }
         }
-    }
-
-    // MARK: - New music (ADR-0136 point 10)
-
-    private func syncIfDue() {
-        guard debouncer.takeDue(at: Date()), status == .running else { return }
-        let client = ServerClient(token: token)
-        Task { try? await client.startSync() }
     }
 
     // MARK: - The menu's links

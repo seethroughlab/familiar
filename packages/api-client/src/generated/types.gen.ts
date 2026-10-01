@@ -8061,6 +8061,34 @@ export type VolumeRequest = {
 };
 
 /**
+ * WatchStatusResponse
+ *
+ * Whether new music is noticed when its folder goes quiet, or only at the next sync (ADR-0142).
+ */
+export type WatchStatusResponse = {
+    /**
+     * Last Scan At
+     */
+    last_scan_at?: number | null;
+    /**
+     * Pending
+     */
+    pending?: number;
+    /**
+     * Reason
+     */
+    reason?: string | null;
+    /**
+     * Roots
+     */
+    roots?: Array<string>;
+    /**
+     * Watching
+     */
+    watching: boolean;
+};
+
+/**
  * WorkerInfo
  *
  * Information about a background worker.
@@ -12799,6 +12827,47 @@ export type IngestGetSyncStatusEndpointResponses = {
 };
 
 export type IngestGetSyncStatusEndpointResponse = IngestGetSyncStatusEndpointResponses[keyof IngestGetSyncStatusEndpointResponses];
+
+export type IngestGetWatchStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/library/sync/watch';
+};
+
+export type IngestGetWatchStatusErrors = {
+    /**
+     * Bad Request
+     */
+    400: ErrorEnvelope;
+    /**
+     * Unauthorized
+     */
+    401: ErrorEnvelope;
+    /**
+     * Not Found
+     */
+    404: ErrorEnvelope;
+    /**
+     * Unprocessable Entity
+     */
+    422: ErrorEnvelope;
+    /**
+     * Internal Server Error
+     */
+    500: ErrorEnvelope;
+};
+
+export type IngestGetWatchStatusError = IngestGetWatchStatusErrors[keyof IngestGetWatchStatusErrors];
+
+export type IngestGetWatchStatusResponses = {
+    /**
+     * Successful Response
+     */
+    200: WatchStatusResponse;
+};
+
+export type IngestGetWatchStatusResponse = IngestGetWatchStatusResponses[keyof IngestGetWatchStatusResponses];
 
 export type LibraryGetYearDistributionData = {
     body?: never;

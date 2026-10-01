@@ -153,19 +153,6 @@ final class EtiquetteTests: XCTestCase {
     }
 }
 
-final class SyncDebouncerTests: XCTestCase {
-    func testASyncWaitsForTheFolderToGoQuiet() {
-        var debouncer = SyncDebouncer(quietPeriod: 180)
-        let t0 = Date(timeIntervalSince1970: 0)
-        XCTAssertFalse(debouncer.takeDue(at: t0), "nothing changed")
-        debouncer.noteChange(at: t0)
-        debouncer.noteChange(at: t0.addingTimeInterval(100))  // an album still copying
-        XCTAssertFalse(debouncer.takeDue(at: t0.addingTimeInterval(200)))
-        XCTAssertTrue(debouncer.takeDue(at: t0.addingTimeInterval(281)))
-        XCTAssertFalse(debouncer.takeDue(at: t0.addingTimeInterval(500)), "one sync per quiet spell")
-    }
-}
-
 final class PairingLinkBuilderTests: XCTestCase {
     /// The player form-decodes (familiar-apple `PairingLink`), and so does `URLComponents`.
     func testValuesSurviveTheRoundTrip() {

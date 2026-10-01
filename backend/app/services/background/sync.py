@@ -44,6 +44,10 @@ class SyncMixin(_SyncBase):
         """Initialize sync-related state. Call from __init__."""
         self._current_sync_task: asyncio.Task | None = None
         self._lock = asyncio.Lock()
+        # Held for the whole scan, by a full sync and by the watcher's scan of changed folders
+        # (ADR-0142), so the two never add the same new file at once. One server process, so an
+        # asyncio lock is enough.
+        self.library_lock = asyncio.Lock()
 
     def is_sync_running(self) -> bool:
         """Check if a library sync is currently running.
@@ -181,7 +185,8 @@ class SyncMixin(_SyncBase):
         from app.services.tasks import run_library_sync
 
         try:
-            result = await run_library_sync(reread_unchanged=reread_unchanged)
+            async with self.library_lock:
+                result = await run_library_sync(reread_unchanged=reread_unchanged)
             await self._post_sync_backup()
             await self._post_sync_auto_proposals()
             record_background_event(

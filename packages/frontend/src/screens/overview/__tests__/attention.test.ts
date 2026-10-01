@@ -184,3 +184,17 @@ describe('an open server (ADR-0141 point 3)', () => {
     expect(items.some((i) => i.title.includes('open to anyone'))).toBe(false);
   });
 });
+
+describe('the library watch (ADR-0142 point 6)', () => {
+  it('says when new music waits for the next sync, and why', () => {
+    const items = attentionItems({ watch: { watching: false, reason: 'OSError: inotify watch limit reached', roots: [], pending: 0 } });
+    const item = items.find((i) => i.title.includes('next sync'));
+    expect(item?.detail).toContain('watch limit');
+    expect(item?.tone).toBe('info');
+  });
+
+  it('stays quiet while watching', () => {
+    const items = attentionItems({ watch: { watching: true, roots: ['/music'], pending: 0 } });
+    expect(items.some((i) => i.title.includes('next sync'))).toBe(false);
+  });
+});

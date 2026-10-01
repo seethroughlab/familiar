@@ -1,5 +1,4 @@
 import AppKit
-import CoreServices
 import FamiliarServerCore
 import Foundation
 import IOKit.ps
@@ -120,40 +119,5 @@ final class MachineMonitor {
               let type = IOPSGetProvidingPowerSourceType(info)?.takeUnretainedValue() as String?
         else { return false }
         return type == kIOPSBatteryPowerValue
-    }
-}
-
-/// FSEvents on the music folder, reporting that *something* changed (ADR-0136 point 10).
-final class FolderWatch {
-    private var stream: FSEventStreamRef?
-    private let onChange: @Sendable () -> Void
-
-    init(folder: URL, onChange: @escaping @Sendable () -> Void) {
-        self.onChange = onChange
-        var context = FSEventStreamContext(
-            version: 0, info: Unmanaged.passUnretained(self).toOpaque(),
-            retain: nil, release: nil, copyDescription: nil
-        )
-        let callback: FSEventStreamCallback = { _, info, _, _, _, _ in
-            guard let info else { return }
-            Unmanaged<FolderWatch>.fromOpaque(info).takeUnretainedValue().onChange()
-        }
-        stream = FSEventStreamCreate(
-            nil, callback, &context, [folder.path] as CFArray,
-            FSEventStreamEventId(kFSEventStreamEventIdSinceNow), 5.0,
-            FSEventStreamCreateFlags(kFSEventStreamCreateFlagNoDefer)
-        )
-        if let stream {
-            FSEventStreamSetDispatchQueue(stream, DispatchQueue.global(qos: .utility))
-            FSEventStreamStart(stream)
-        }
-    }
-
-    deinit {
-        if let stream {
-            FSEventStreamStop(stream)
-            FSEventStreamInvalidate(stream)
-            FSEventStreamRelease(stream)
-        }
     }
 }

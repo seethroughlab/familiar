@@ -37,6 +37,10 @@ from app.db.models import (
 )
 from app.main import app
 
+# The app starts many times here, against fixture folders; a library watch (ADR-0142) on each would
+# only add noise and background scans. Read at startup, so setting it here is enough.
+settings.watch_library = False
+
 
 @pytest.fixture(autouse=True)
 def deterministic_random():

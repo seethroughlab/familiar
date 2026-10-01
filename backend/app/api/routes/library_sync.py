@@ -102,6 +102,28 @@ async def start_sync(
     )
 
 
+class WatchStatusResponse(BaseModel):
+    """Whether new music is noticed when its folder goes quiet, or only at the next sync (ADR-0142)."""
+
+    watching: bool
+    reason: str | None = None
+    roots: list[str] = []
+    pending: int = 0
+    last_scan_at: float | None = None
+
+
+@router.get("/sync/watch", response_model=WatchStatusResponse)
+async def get_watch_status() -> WatchStatusResponse:
+    """The library watch: on, or why not. The Overview shows the answer."""
+    from app.services.library_watch import get_library_watch
+
+    status = get_library_watch().status
+    return WatchStatusResponse(
+        watching=status.watching, reason=status.reason, roots=status.roots,
+        pending=status.pending, last_scan_at=status.last_scan_at,
+    )
+
+
 @router.get("/sync/status", response_model=SyncStatus)
 async def get_sync_status_endpoint() -> SyncStatus:
     """Get current sync status with unified progress.

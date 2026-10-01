@@ -82,9 +82,4 @@ public struct ServerClient: Sendable {
     public func resume() async throws {
         try await send(request("api/v1/background/resume", method: "POST"))
     }
-
-    /// Start a library sync, as the folder watch does when new music arrives (ADR-0136 point 10).
-    public func startSync() async throws {
-        try await send(request("api/v1/library/sync", method: "POST", json: [:]))
-    }
 }

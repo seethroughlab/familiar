@@ -6,6 +6,31 @@ Date: 2026-10-01
 
 Implementation:
 - **Accepted 2026-10-01**, as written.
+- **Built 2026-10-01, points 1–6.**
+  - **`app/services/library_watch.py`:** `watchfiles.awatch` over each library root.
+    - `FolderClock` holds a folder until it has been quiet for `QUIET_SECONDS` (180;
+      `FAMILIAR_WATCH_QUIET_SECONDS` overrides it for tests), and a due ancestor covers its children.
+    - `folder_to_scan` maps a new audio file to its folder and a new folder to itself, and ignores
+      `Inbox/` and everything not music.
+    - Deletions are left to the sync. It waits out a pause, and defers while a sync is running,
+      keeping its folders rather than dropping them, because that sync may already be past discovery.
+  - **`LibraryScanner.scan(…, only=[folders])`** discovers only those folders and skips the missing
+    pass. `run_folder_scan` runs it in the scan process, as the full scan runs, and queues analysis
+    for what is new.
+  - **A full sync and a folder scan share `library_lock`,** an in-process lock (one server process),
+    rather than the Redis sync lock: the latter is cleared as orphaned without a progress record, and
+    a record would show a full sync in the admin.
+  - **`GET /library/sync/watch`** reports watching, or why not. The Overview shows "New music is
+    found at the next sync" when the library cannot be watched.
+  - **Familiar Server:** `FolderWatch`, `SyncDebouncer` and `ServerClient.startSync` are removed.
+  - **Tests:** a test proves a scan of some folders marks nothing elsewhere missing; it fails with
+    the skip removed.
+  - **Seen working in the real Mac bundle under the zero-touch profile:** the integration check adds
+    a track and the server finds it with no sync asked for. On Linux the mechanism is the one the NAS
+    measurement in Context saw.
+  - **Found on the way:** the integration check carried two copies of its "quit as macOS quits it"
+    step, a merge artifact on `main`. The second targeted `com.familiar.server` rather than the
+    integration build, so it quit nothing and passed. It is removed.
 
 Extends [ADR-0136](ADR-0136-familiar-server-runs-in-the-background.md) point 10 and
 [ADR-0117](ADR-0117-a-soulseek-download-is-a-pending-review-track-not-a-file-move.md)

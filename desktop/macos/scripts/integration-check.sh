@@ -69,7 +69,7 @@ DEV_MUSIC=$MUSIC "$HERE/scripts/build-app.sh" integration >/dev/null
 [ -w "$MUSIC" ] || { echo "the test library must be writable, or step 3 proves nothing" >&2; exit 1; }
 
 echo "==> app, registering its own Postgres agent"
-open -n --env FAMILIAR_SERVER_DEV_MUSIC="$MUSIC" "$APP"
+open -n --env FAMILIAR_SERVER_DEV_MUSIC="$MUSIC" --env FAMILIAR_WATCH_QUIET_SECONDS=5 "$APP"
 for _ in $(seq 1 90); do nc -z 127.0.0.1 54329 2>/dev/null && break; sleep 1; done
 nc -z 127.0.0.1 54329 || { echo "Postgres did not start"; tail -20 "$SUPPORT/server.log" 2>/dev/null; cat "$SUPPORT/postgres/postgres.log" 2>/dev/null; exit 1; }
 launchctl print "gui/$(id -u)/$ID.postgres" >/dev/null 2>&1 \
@@ -135,16 +135,32 @@ OUTSIDE=$(cd "$HERE/build/payload/backend" && PATH="$HERE/build/payload/bin:/usr
   "$MUSIC/Test Artist/Test Album/01 Sine.flac" | "$PY" -c "import sys,json;print(json.load(sys.stdin)[1])")
 [ "$STORED" = "$OUTSIDE" ] && echo "   identical to the same child run outside the profile" || { echo "fingerprints differ"; exit 1; }
 
-echo "==> quit as macOS quits it (logout, the Dock), not by the menu"
-osascript -e "tell application id \"$ID\" to quit" >/dev/null
-for _ in $(seq 1 30); do pgrep -f "Familiar Server.app/Contents/Resources/python" >/dev/null || break; sleep 1; done
-if pgrep -f "Familiar Server.app/Contents/Resources/python" >/dev/null; then
-  echo "the server outlived the app"; exit 1
-fi
-echo "   the server stopped with the app"
+echo "==> new music, noticed by the server's own watch (ADR-0142)"
+# No sync is asked for: the server must see the folder change, wait for it to go quiet (5 s here,
+# three minutes in use) and scan just that folder. A new, unique file, so it is new rather than a
+# move. This script writes it, so the zero-touch baseline is retaken after.
+mkdir -p "$MUSIC/Second Artist/Second Album"
+"$PY" - "$MUSIC/Second Artist/Second Album/01 Fresh.flac" <<'PYEOF'
+import sys, numpy as np, soundfile as sf
+sr = 44100
+t = np.arange(sr * 20) / sr
+tone = 0.3 * np.sin(2 * np.pi * 330 * t) * (1 + 0.5 * np.sin(2 * np.pi * 3 * t))
+sf.write(sys.argv[1], np.stack([tone, tone], axis=1), sr, format="FLAC")
+PYEOF
+BEFORE=$(find "$MUSIC" -type f -exec shasum {} + | sort | shasum)
+for _ in $(seq 1 60); do
+  [ "$(db "select count(*) from tracks where file_path like '%01 Fresh.flac'")" = "1" ] && break
+  sleep 2
+done
+[ "$(db "select count(*) from tracks where file_path like '%01 Fresh.flac'")" = "1" ] \
+  || { echo "the server did not notice the new track"; grep -iE "watch|changed folder" "$SUPPORT/server.log" | tail -5; exit 1; }
+echo "   added without a sync: $(db "select status from tracks where file_path like '%01 Fresh.flac'")"
+WATCH=$(curl -s "${H[@]}" "http://127.0.0.1:$PORT/api/v1/library/sync/watch" | "$PY" -c "import sys,json; d=json.load(sys.stdin); print('watching' if d['watching'] else 'NOT watching: %s' % d['reason'])")
+echo "   $WATCH"
+case "$WATCH" in watching) ;; *) exit 1 ;; esac
 
 echo "==> quit as macOS quits it (logout, the Dock), not by the menu"
-osascript -e 'tell application id "com.familiar.server" to quit' >/dev/null
+osascript -e "tell application id \"$ID\" to quit" >/dev/null
 for _ in $(seq 1 30); do pgrep -f "Familiar Server.app/Contents/Resources/python" >/dev/null || break; sleep 1; done
 if pgrep -f "Familiar Server.app/Contents/Resources/python" >/dev/null; then
   echo "the server outlived the app"; exit 1

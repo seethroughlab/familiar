@@ -124,6 +124,7 @@ export const queryKeys = {
   soulseekStatus: {
     all: ['soulseek-status'] as const,
   },
+  libraryWatch: ['library', 'watch'] as const,
   pairing: {
     token: ['pairing', 'token'] as const,
     info: ['pairing', 'info'] as const,
