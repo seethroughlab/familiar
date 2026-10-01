@@ -59,6 +59,14 @@ final class ServerController: ObservableObject {
             .appendingPathComponent("Familiar Server")
         layout = Layout(groupContainer: group, appSupport: support, resources: Bundle.main.resourceURL!)
         monitor = MachineMonitor { [weak self] state in self?.apply(Etiquette.decide(state)) }
+        // However the app ends — its own Quit, a quit from the Dock or another app, logout, restart
+        // — the server ends with it. Only the menu's Quit stopped it, so any other way out left
+        // Python running with no parent and port 4400 held, and the next launch could not start.
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.stopServer() }
+        }
         // At launch, not when the menu is first opened: a menu-style MenuBarExtra builds its
         // contents only on click, so a start hung on the menu would wait for someone to open it,
         // which at login is no one. Found by scripts/integration-check.sh.

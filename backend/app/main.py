@@ -251,8 +251,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Before any pool exists: inside the macOS App Sandbox, semaphores need the app group's prefix
     # (ADR-0136 point 3). A no-op unless Familiar Server set FAMILIAR_SEMAPHORE_PREFIX.
-    from app.process_setup import apply_semaphore_prefix
+    from app.process_setup import apply_semaphore_prefix, init_mimetypes
     apply_semaphore_prefix()
+    init_mimetypes()
 
     # Validate library path and log warnings
     import asyncio
