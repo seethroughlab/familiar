@@ -64,6 +64,11 @@ if [ "$CONFIG" = debug ]; then
   AGENT_PLIST="$APP/Contents/Library/LaunchAgents/com.familiar.server.postgres.plist"
   /usr/libexec/PlistBuddy -c "Set :Label $INTEGRATION_ID.postgres" -c "Set :AssociatedBundleIdentifiers:0 $INTEGRATION_ID" "$AGENT_PLIST"
 fi
+# The icon: the player's waveform with its colours swapped, compiled the way Xcode compiles the
+# player's, so macOS draws the two alike (AppIcon.icns for older systems, Assets.car for newer).
+xcrun actool "$SUPPORT/Assets.xcassets" --compile "$APP/Contents/Resources" --platform macosx \
+  --minimum-deployment-target 14.0 --app-icon AppIcon \
+  --output-partial-info-plist "$HERE/build/actool-info.plist" >/dev/null
 cp -R "$PAYLOAD/python" "$PAYLOAD/postgres" "$PAYLOAD/backend" "$PAYLOAD/bin" "$PAYLOAD/lib" "$APP/Contents/Resources/"
 
 echo "==> sign with $ID ($TIMESTAMP)"

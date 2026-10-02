@@ -10,6 +10,10 @@
 	<string>Familiar Server</string>
 	<key>CFBundleExecutable</key>
 	<string>FamiliarServer</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

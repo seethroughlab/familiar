@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Familiar Server
+
+- **Has an icon**: the player's waveform with its colours swapped, so the two sit together in
+  Applications and are told apart at a glance. It had the blank default.
+
 ## [0.2.0-beta10] - 2026-10-01
 
 **The Linux server and Familiar Server now behave the same way where you notice it**: both start
