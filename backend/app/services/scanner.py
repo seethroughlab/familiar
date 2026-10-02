@@ -382,6 +382,7 @@ class LibraryScanner:
             "relocated": 0,       # Found at different path
             "pending_review": 0,  # New tracks awaiting user review
             "skipped_empty": 0,   # Zero-byte files rejected before insert
+            "skipped_unreadable": 0,  # Listed, but could not be opened
         }
 
         # Track IDs to queue for analysis after commit
@@ -428,14 +429,24 @@ class LibraryScanner:
                      expected_mtime = existing_track.file_modified_at.timestamp()
                      expected_size = existing_track.file_size
 
-            file_hash, file_mtime, file_size = await loop.run_in_executor(
-                _file_executor, 
-                _get_file_info_sync, 
-                file_path, 
-                file_stat,
-                expected_mtime,
-                expected_size
-            )
+            # A file the listing returned can still refuse to open. Found 2026-10-02 on a NAS share
+            # mounted over SMB on macOS: a name with a decomposed é is listed, and stat and open
+            # fail under every normal form. One such file used to end the whole scan, so the sync
+            # never reached analysis. Skip it and say so; it stays in found_paths, so a track
+            # already held for it is not marked missing over one bad read.
+            try:
+                file_hash, file_mtime, file_size = await loop.run_in_executor(
+                    _file_executor,
+                    _get_file_info_sync,
+                    file_path,
+                    file_stat,
+                    expected_mtime,
+                    expected_size,
+                )
+            except OSError as e:
+                logger.warning(f"SKIP (unreadable: {e.strerror or e}): {path_str}")
+                results["skipped_unreadable"] += 1
+                continue
             
             # If hash is None, it matched the expectation (optimization)
             if file_hash is None:

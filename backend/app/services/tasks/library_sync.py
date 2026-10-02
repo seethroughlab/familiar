@@ -226,6 +226,7 @@ async def _async_scan_worker(
         "pending_review": 0,
         "compilation_albums": 0,
         "compilation_tracks": 0,
+        "skipped_unreadable": 0,
     }
 
     # Build a SyncProgressReporter with the parent's started_at timestamp
@@ -270,6 +271,7 @@ async def _async_scan_worker(
                 results["relocated"] += scan_results.get("relocated", 0)
                 results["recovered"] += scan_results.get("recovered", 0)
                 results["pending_review"] += scan_results.get("pending_review", 0)
+                results["skipped_unreadable"] += scan_results.get("skipped_unreadable", 0)
 
             orphan_results = await scanner.cleanup_orphaned_tracks(library_paths)
             results["marked_missing"] += orphan_results.get("orphaned", 0)
