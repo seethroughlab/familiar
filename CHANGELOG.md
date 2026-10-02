@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-beta10] - 2026-10-01
+
+**The Linux server and Familiar Server now behave the same way where you notice it**: both start
+with sign-in on, and both find new music without waiting for a sync. No migrations; the API
+contract stays at v1 (two additions).
+
+### Sign-in (ADR-0141)
+
+- **A new server starts with a token.** The first time a server with no token and no tracks starts,
+  it makes one and prints a sign-in link to its log. On Docker:
+  `docker logs familiar-api 2>&1 | grep '#token='`. `python -m app.token` prints it again.
+- **An existing server with no token keeps working**, and says so: a warning in its log at every
+  start, and "This server is open to anyone who can reach it" on the Overview, linking to
+  Server › Access, where one button creates a token.
+- `FAMILIAR_OPEN_SERVER=1` runs without a token on purpose and silences the warning. The public
+  demo sets it.
+- Both images start through `python -m app.serve`, the way Familiar Server does, so a start-up rule
+  can no longer apply to only one form of the server.
+
+### Library (ADR-0142)
+
+- **The server watches its music folder** and scans a folder once nothing in it has changed for
+  three minutes (`FAMILIAR_WATCH_QUIET_SECONDS`). Before, new music on Linux appeared at the next
+  sync, up to two hours later. A scan of one folder never marks anything else missing; that stays
+  the full sync's job.
+- `Inbox/` is left to the Soulseek poll, which already starts a sync when a download settles.
+- If the watch cannot start (Linux's inotify limit, for one), the Overview says new music waits for
+  the next sync, and why. A network share that sends no change events is not detected; new music
+  there still arrives at the next sync.
+- Familiar Server's own folder watch is gone; the server does it now on both platforms.
+
 ## [0.2.0-beta9] - 2026-10-01
 
 **Familiar Server works.** In `v0.2.0-beta8` it installed, but could not start its database: macOS
