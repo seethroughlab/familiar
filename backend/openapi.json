@@ -11441,6 +11441,47 @@
         "title": "VolumeRequest",
         "type": "object"
       },
+      "WatchStatusResponse": {
+        "description": "Whether new music is noticed when its folder goes quiet, or only at the next sync (ADR-0142).",
+        "properties": {
+          "last_scan_at": {
+            "title": "Last Scan At",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "pending": {
+            "default": 0,
+            "title": "Pending",
+            "type": "integer"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "roots": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Roots",
+            "type": "array"
+          },
+          "watching": {
+            "title": "Watching",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "watching"
+        ],
+        "title": "WatchStatusResponse",
+        "type": "object"
+      },
       "WorkerInfo": {
         "description": "Information about a background worker.",
         "properties": {
@@ -20457,6 +20498,78 @@
           }
         },
         "summary": "Get Sync Status Endpoint",
+        "tags": [
+          "ingest"
+        ]
+      }
+    },
+    "/api/v1/library/sync/watch": {
+      "get": {
+        "description": "The library watch: on, or why not. The Overview shows the answer.",
+        "operationId": "ingest_get_watch_status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WatchStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get Watch Status",
         "tags": [
           "ingest"
         ]

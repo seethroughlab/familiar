@@ -321,7 +321,10 @@ music folder, which also makes `os.access` report it unwritable. Do not re-add t
 without reading 0140. **`ADR-0141`**: a new server (no token, no tracks) mints a token at first start
 and prints a sign-in link to its log (`python -m app.token` reprints it); an existing tokenless
 server keeps serving and warns; `FAMILIAR_OPEN_SERVER` (the demo) is open on purpose. Both images
-start through `python -m app.serve`, so a start-up rule cannot again apply to only one form. Execution order differs from the numbering:
+start through `python -m app.serve`, so a start-up rule cannot again apply to only one form.
+**`ADR-0142`**: the server watches its own library (`watchfiles`), scans only folders
+quiet for three minutes, never marks anything missing from such a scan, and leaves `Inbox/` to the
+Soulseek poll; Familiar Server's own FSEvents watch is gone. Execution order differs from the numbering:
 
 | # | ADR | Why here |
 |---|---|---|

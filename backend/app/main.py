@@ -304,6 +304,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await bg.startup(services=app.state.services)
     logger.info("Background task manager started")
 
+    # New music is noticed when its folder goes quiet, not at the next sync (ADR-0142).
+    from app.services.library_watch import get_library_watch
+
+    watch_stop = asyncio.Event()
+    watch_task = (
+        asyncio.create_task(get_library_watch().run(watch_stop)) if app_config.watch_library else None
+    )
+
     # The MCP session manager must be running or every /mcp request fails at *request* time with
     # "Task group is not initialized", not at startup — so it looks like a runtime bug rather than
     # missing wiring (ADR-0043 point 1).
@@ -313,6 +321,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Shutdown
     logger.info("Shutting down Familiar API")
     clap_fetch.cancel()  # a partial download is a `.part` file, never loaded
+    watch_stop.set()
+    if watch_task is not None:
+        watch_task.cancel()
     await advertiser.stop()
     await bg.shutdown()
     logger.info("Background task manager stopped")

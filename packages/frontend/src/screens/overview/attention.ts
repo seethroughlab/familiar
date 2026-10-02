@@ -24,6 +24,7 @@ import type { SyncStatus } from '../../api/library';
 import type { BackupStatus } from '../../api/s3Backup';
 import type { ArtworkCoverage } from '../../api/library';
 import type { TokenStatus } from '../../api/pairing';
+import type { WatchStatus } from '../../api/libraryWatch';
 
 export type Tone = 'ok' | 'warn' | 'bad' | 'idle' | 'info';
 
@@ -46,6 +47,7 @@ export interface OverviewInputs {
   discovery?: DiscoveryHealth;
   artwork?: ArtworkCoverage;
   token?: TokenStatus;
+  watch?: WatchStatus;
   now?: number;
 }
 
@@ -154,6 +156,17 @@ export function attentionItems(inputs: OverviewInputs): AttentionItem[] {
       detail: 'It has no token. Creating one turns sign-in on; each app and device then pairs once',
       to: '/server/access',
       where: 'Server › Access',
+    });
+  }
+
+  // ADR-0142 point 6: if the library cannot be watched, new music waits for the periodic sync.
+  if (inputs.watch && !inputs.watch.watching && inputs.watch.reason !== 'not started') {
+    items.push({
+      tone: 'info',
+      title: 'New music is found at the next sync, not straight away',
+      detail: inputs.watch.reason ?? 'The library is not being watched',
+      to: '/library',
+      where: 'Library',
     });
   }
 

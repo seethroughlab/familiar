@@ -293,6 +293,7 @@ class LibraryScanner:
         reanalyze_changed: bool = True,
         # Legacy parameter
         full_scan: bool | None = None,
+        only: list[Path] | None = None,
     ) -> dict[str, Any]:
         """Scan library for new, changed, or deleted files.
 
@@ -301,6 +302,11 @@ class LibraryScanner:
             reread_unchanged: Re-read metadata for files even if unchanged
             reanalyze_changed: Queue changed files for audio analysis
             full_scan: Deprecated. Use reread_unchanged instead.
+            only: Folders under `library_path` to look in, instead of all of it (ADR-0142 point 3:
+                the watcher's scan of the folders that changed). New and changed files are handled
+                as always, moves included (a new path whose content matches a track whose file is
+                gone). **Nothing is marked missing:** a scan that has not looked at the whole
+                library cannot know what is gone, so that stays with the full sync.
 
         Returns:
             Dict with scan results: total, new, updated, deleted, queued
@@ -348,9 +354,17 @@ class LibraryScanner:
             if self.scan_state:
                 self.scan_state.set_discovery(dirs_scanned, files_found)
 
-        found_files_with_stats = await loop.run_in_executor(
-            _file_executor, _discover_files_sync, library_path, discovery_progress
-        )
+        if only is None:
+            found_files_with_stats = await loop.run_in_executor(
+                _file_executor, _discover_files_sync, library_path, discovery_progress
+            )
+        else:
+            found_files_with_stats = []
+            for folder in only:
+                if folder.is_dir():
+                    found_files_with_stats += await loop.run_in_executor(
+                        _file_executor, _discover_files_sync, folder, discovery_progress
+                    )
         found_paths = {str(p) for p, _ in found_files_with_stats}
         # Create list of just paths for compatibility with existing logic
         found_files = [p for p, _ in found_files_with_stats]
@@ -543,9 +557,10 @@ class LibraryScanner:
             # Note: Analysis is now queued after scan completes via queue_unanalyzed_tracks
             pending_analysis_ids = []
 
-        # Handle missing files - only check files that were under this library_path
+        # Handle missing files - only check files that were under this library_path. Not on a scan of
+        # some folders (`only`), which has not looked anywhere else.
         library_prefix = str(library_path)
-        missing_paths = set(
+        missing_paths = set() if only is not None else set(
             p for p in existing_paths.keys()
             if p.startswith(library_prefix)
         ) - found_paths

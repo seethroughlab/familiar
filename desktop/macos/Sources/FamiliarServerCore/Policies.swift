@@ -75,30 +75,6 @@ public enum Etiquette {
     }
 }
 
-/// ADR-0136 point 10: request a sync a while after the library stops changing, not per file.
-///
-/// Copying an album into the folder is dozens of events in a few seconds. A sync per event would be
-/// dozens of syncs; this waits until the folder has been quiet for `quietPeriod`.
-public struct SyncDebouncer: Equatable, Sendable {
-    public let quietPeriod: TimeInterval
-    public private(set) var lastChange: Date?
-
-    public init(quietPeriod: TimeInterval = 180) {
-        self.quietPeriod = quietPeriod
-    }
-
-    public mutating func noteChange(at date: Date) {
-        lastChange = date
-    }
-
-    /// Whether a sync is due now. Calling it when due consumes the change.
-    public mutating func takeDue(at now: Date) -> Bool {
-        guard let last = lastChange, now.timeIntervalSince(last) >= quietPeriod else { return false }
-        lastChange = nil
-        return true
-    }
-}
-
 /// The `familiar://pair` link Familiar Server opens for the player on this Mac (ADR-0134 point 5).
 ///
 /// Encoded the way the web admin encodes it (`URLSearchParams`), which the player's `PairingLink`
