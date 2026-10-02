@@ -318,7 +318,10 @@ App-Sandboxed.** macOS refuses to let a sandboxed app register an unsandboxed ag
 cannot run sandboxed, so the first real install failed at "Operation not permitted". Zero-touch is
 enforced instead by a Seatbelt profile (`sandbox-exec`) on the Python server that denies writing the
 music folder, which also makes `os.access` report it unwritable. Do not re-add the App Sandbox
-without reading 0140. Execution order differs from the numbering:
+without reading 0140. **`ADR-0141`**: a new server (no token, no tracks) mints a token at first start
+and prints a sign-in link to its log (`python -m app.token` reprints it); an existing tokenless
+server keeps serving and warns; `FAMILIAR_OPEN_SERVER` (the demo) is open on purpose. Both images
+start through `python -m app.serve`, so a start-up rule cannot again apply to only one form. Execution order differs from the numbering:
 
 | # | ADR | Why here |
 |---|---|---|

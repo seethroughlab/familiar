@@ -75,8 +75,9 @@ export function PairDevicePanel() {
         <div className="space-y-3">
           <p className="text-sm text-zinc-300">
             Pairing gives a device this server&apos;s token, and this server has none yet. Creating
-            one also turns on authentication: from then on, a client needs the token to use the API.
-            This browser keeps it automatically.
+            one turns sign-in on for the whole server: from then on, every app and device that uses
+            it, players included, needs the token, so each pairs once. Music streams and artwork
+            stay open, so speakers keep playing. This browser keeps the token automatically.
           </p>
           <button
             onClick={() => create.mutate()}

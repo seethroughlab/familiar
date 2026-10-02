@@ -9,10 +9,19 @@ It does not install, find or start Postgres; that belongs to whatever packaged t
 not stamp an old, pre-Alembic database as the entrypoint does either: that path exists for Docker
 installs that predate migrations, and a server started this way has never had one.
 
-The default host is loopback. Listening on anything else requires a server token, and refuses to
-start without one (ADR-0134 point 2): a laptop on café Wi-Fi must not become a server anyone there
-can reach. Binding beyond loopback also turns on the `_familiar._tcp` advertisement, on that port,
-so a phone on the same network can find it.
+The default host is loopback. Listening on anything else is where tokens are decided (ADR-0141),
+after the migration, because "new server" means an empty library:
+
+- a server with a token serves, and advertises `_familiar._tcp` on its port so a phone can find it
+  (unless `--no-advertise`: the Docker image, whose container port is not the one anyone reaches);
+- a **new** server, with no token and no tracks, mints one and prints a sign-in link to its log;
+- an **existing** server with no token keeps serving, as it always has, and says at every start
+  that anyone who can reach it can use it;
+- `FAMILIAR_OPEN_SERVER=1` runs without a token on purpose (the public demo), and says so once.
+
+This replaced ADR-0045 point 5's refusal, which as written would have taken every existing tokenless
+server offline on the upgrade that shipped it. Familiar Server starts on loopback and mints its own
+token through the API (ADR-0134 point 2), so none of this applies to it until it already has one.
 """
 
 from __future__ import annotations
@@ -21,6 +30,7 @@ import argparse
 import ipaddress
 import sys
 from collections.abc import Callable, Sequence
+from enum import Enum
 
 from app.config import BACKEND_ROOT
 
@@ -55,6 +65,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="python -m app.serve", description=__doc__.splitlines()[0])
     parser.add_argument("--host", default=DEFAULT_HOST, help=f"interface to bind (default {DEFAULT_HOST})")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"port (default {DEFAULT_PORT})")
+    parser.add_argument(
+        "--no-advertise", dest="advertise", action="store_false",
+        help="do not announce _familiar._tcp (the Docker image: its container port is not the host's)",
+    )
     return parser.parse_args(argv)
 
 
@@ -73,12 +87,68 @@ def configured_token() -> str | None:
     return get_app_settings_service().get().access_token
 
 
-REFUSAL = (
-    "Refusing to listen on {host}: this server has no token, so anyone on the network could use "
-    "it (ADR-0134 point 2). Create one first — in the web admin under Server → Access, or with "
-    "`curl -X POST http://127.0.0.1:{port}/api/v1/auth/token` while it runs on loopback — then "
-    "start it again."
-)
+class Start(Enum):
+    """What a server listening beyond loopback does about its token (ADR-0141)."""
+
+    HAS_TOKEN = "has a token"
+    OPEN_BY_CHOICE = "open by choice"
+    NEW = "new: mint a token"
+    EXISTING_OPEN = "existing, open"
+
+
+def decide(*, token: str | None, open_server: bool, has_tracks: Callable[[], bool]) -> Start:
+    """The decision alone, without doing any of it. `has_tracks` is only asked when it matters."""
+    if token:
+        return Start.HAS_TOKEN
+    if open_server:
+        return Start.OPEN_BY_CHOICE
+    return Start.EXISTING_OPEN if has_tracks() else Start.NEW
+
+
+def library_has_tracks() -> bool:
+    """Whether this server has imported anything: the same "new" a first import uses."""
+    import asyncio
+
+    from sqlalchemy import exists, select
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    from app.config import settings
+    from app.db.models import Track
+
+    async def query() -> bool:
+        engine = create_async_engine(settings.database_url)
+        try:
+            async with engine.connect() as connection:
+                return bool(await connection.scalar(select(exists().select_from(Track.__table__))))
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(query())
+
+
+def mint_token() -> str:
+    """The token "Create server token" makes, stored where it does."""
+    from app.api.auth import generate_token
+    from app.services.app_settings import get_app_settings_service
+
+    token = generate_token()
+    get_app_settings_service().update(access_token=token)
+    return token
+
+
+def sign_in_link(token: str) -> str:
+    """A link that signs the web admin in (`takeTokenFromFragment`). From `FRONTEND_URL` when set;
+    otherwise the owner fills in the address, because a container cannot know the name it is
+    reached by, nor the port it was published on."""
+    from app.config import settings
+
+    base = (settings.frontend_url or "http://<this server's address>:<port, 4400 by default>").rstrip("/")
+    return f"{base}/#token={token}"
+
+
+def say(message: str) -> None:
+    """Before uvicorn configures logging: straight to the log the owner reads (`docker logs`)."""
+    print(f"familiar: {message}", file=sys.stderr, flush=True)
 
 
 def main(
@@ -87,17 +157,29 @@ def main(
     migrate: Callable[[], None] = migrate,
     run: Callable[[str, int], None] = run,
     token: Callable[[], str | None] = configured_token,
-) -> None:
+    has_tracks: Callable[[], bool] = library_has_tracks,
+    mint: Callable[[], str] = mint_token,
+) -> Start | None:
     args = parse_args(argv)
+    migrate()
+    start = None
     if not is_loopback(args.host):
-        if not token():
-            raise SystemExit(REFUSAL.format(host=args.host, port=args.port))
         from app.config import settings
 
-        if settings.advertise_port is None:
+        start = decide(token=token(), open_server=settings.open_server, has_tracks=has_tracks)
+        if start is Start.NEW:
+            say("this is a new server, so it has made itself a token (ADR-0141). Sign in to the web "
+                f"admin with this link, then pair your devices there:\n\n    {sign_in_link(mint())}\n\n"
+                "Run `python -m app.token` to see it again.")
+        elif start is Start.EXISTING_OPEN:
+            say("WARNING: this server has no token, so anyone who can reach it can use it. Create one "
+                "under Server → Access in the web admin; every client then pairs once.")
+        elif start is Start.OPEN_BY_CHOICE:
+            say("running without a token by choice (FAMILIAR_OPEN_SERVER).")
+        if start in (Start.HAS_TOKEN, Start.NEW) and args.advertise and settings.advertise_port is None:
             settings.advertise_port = args.port
-    migrate()
     run(args.host, args.port)
+    return start
 
 
 # Guarded: the analysis and scan pools use `spawn`, which re-imports the parent's main module in

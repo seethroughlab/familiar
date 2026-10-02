@@ -23,6 +23,7 @@ import type {
 import type { SyncStatus } from '../../api/library';
 import type { BackupStatus } from '../../api/s3Backup';
 import type { ArtworkCoverage } from '../../api/library';
+import type { TokenStatus } from '../../api/pairing';
 
 export type Tone = 'ok' | 'warn' | 'bad' | 'idle' | 'info';
 
@@ -44,6 +45,7 @@ export interface OverviewInputs {
   backup?: BackupStatus;
   discovery?: DiscoveryHealth;
   artwork?: ArtworkCoverage;
+  token?: TokenStatus;
   now?: number;
 }
 
@@ -142,6 +144,18 @@ function backlog(queues: PhaseQueue[] | undefined): PhaseQueue[] {
 export function attentionItems(inputs: OverviewInputs): AttentionItem[] {
   const now = inputs.now ?? Date.now();
   const items: AttentionItem[] = [];
+
+  // ADR-0141 point 3: a server with no token answers anyone who can reach it. Not when that was the
+  // choice (FAMILIAR_OPEN_SERVER, the public demo).
+  if (inputs.token && !inputs.token.configured && !inputs.token.open_by_choice) {
+    items.push({
+      tone: 'warn',
+      title: 'This server is open to anyone who can reach it',
+      detail: 'It has no token. Creating one turns sign-in on; each app and device then pairs once',
+      to: '/server/access',
+      where: 'Server › Access',
+    });
+  }
 
   // Exceptions first: things that are wrong, then things that are waiting.
   for (const service of inputs.health?.services ?? []) {

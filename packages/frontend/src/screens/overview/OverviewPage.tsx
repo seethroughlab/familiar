@@ -15,6 +15,7 @@ import { Activity, AlertTriangle, CheckCircle2, ChevronRight, RefreshCw } from '
 import { useState } from 'react';
 
 import { libraryApi, s3BackupApi, systemApi } from '../../api';
+import { pairingApi } from '../../api/pairing';
 import { queryKeys } from '../../api/queryKeys';
 import { showError } from '../../stores/toastStore';
 import { Dashboard } from '../Dashboard';
@@ -96,6 +97,7 @@ export function OverviewPage() {
   const backup = useQuery({ queryKey: queryKeys.backupStatus.all, queryFn: s3BackupApi.getStatus, staleTime: 60_000 });
   const discovery = useQuery({ queryKey: queryKeys.discoverySources.all, queryFn: systemApi.discoverySources, refetchInterval: 30_000 });
   const artwork = useQuery({ queryKey: queryKeys.library.artworkCoverage(), queryFn: () => libraryApi.getArtworkCoverage(), staleTime: 5 * 60_000 });
+  const token = useQuery({ queryKey: queryKeys.pairing.token, queryFn: pairingApi.tokenStatus, staleTime: 60_000 });
 
   const h = healthAnswer(health.data, health.isPending ? 'loading' : health.data ? 'ready' : 'error');
   const r = runningAnswer(sync.data, jobs.data, Date.now(), sync.isPending || jobs.isPending);
@@ -107,6 +109,7 @@ export function OverviewPage() {
     backup: backup.data,
     discovery: discovery.data,
     artwork: artwork.data,
+    token: token.data,
   });
   const stillLoading = [health, workers, sync, jobs, backup, discovery, artwork].some((q) => q.isPending);
   const a = attentionAnswer(items, stillLoading);

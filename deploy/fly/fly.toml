@@ -18,6 +18,8 @@ primary_region = 'sjc'
   # The demo's library is a seeded copy the reset workflow writes into /data/music, so it is
   # writable by design. Without this the server refuses to start (ADR-0136 point 5).
   FAMILIAR_ALLOW_WRITABLE_LIBRARY = '1'
+  # Open on purpose: App Store reviewers sign in with no credentials (ADR-0038, ADR-0141 point 4).
+  FAMILIAR_OPEN_SERVER = '1'
 
 [http_service]
   internal_port = 8000

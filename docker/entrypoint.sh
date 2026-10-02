@@ -9,7 +9,9 @@ echo "Updating yt-dlp..."
 gosu familiar uv pip install -U 'yt-dlp[default]' 2>&1 | tail -3 || echo "WARNING: yt-dlp update failed, using bundled version"
 
 # Initialize database on first run (only for API container, not worker)
-if [[ "$1" == "uvicorn"* ]] || [[ "$*" == *"uvicorn"* ]]; then
+# The API container: started by `python -m app.serve` (ADR-0141 point 5), or by uvicorn in an image
+# or override that predates it.
+if [[ "$*" == *"app.serve"* ]] || [[ "$1" == "uvicorn"* ]] || [[ "$*" == *"uvicorn"* ]]; then
     echo "Checking database setup..."
 
     # Ensure pgvector extension exists

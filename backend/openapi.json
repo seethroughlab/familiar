@@ -9856,6 +9856,11 @@
             "title": "Header",
             "type": "string"
           },
+          "open_by_choice": {
+            "default": false,
+            "title": "Open By Choice",
+            "type": "boolean"
+          },
           "token": {
             "title": "Token",
             "type": [

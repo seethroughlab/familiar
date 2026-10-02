@@ -16,7 +16,15 @@ docker compose -f docker-compose.prod.yml up -d
 
 > **Note:** The production compose file uses the `journald` logging driver (Linux-only). On macOS, use the [macOS guide](MACOS.md) or add the override: `docker compose -f docker-compose.prod.yml -f docker-compose.desktop.yml up -d`
 
-Access at http://localhost:4400. API keys are configured in your `.env` file — open **Settings** (gear icon) to manage your library and start a scan.
+**Sign in.** A new server makes itself a token at first start, so it isn't open to everyone on
+your network, and prints a sign-in link to its log:
+
+```bash
+docker logs familiar-api 2>&1 | grep '#token='     # or, any time: docker exec familiar-api python -m app.token
+```
+
+Open that link (put in the address you reach the server at), and the web admin is signed in; pair
+phones from **Server → Access**. The web admin is at http://localhost:4400. API keys are configured in your `.env` file — open **Settings** (gear icon) to manage your library and start a scan.
 
 **Music Library:** Set `MUSIC_LIBRARY_PATH` in `.env` to your music folder (e.g., `/srv/music`, `/volume1/music`, `~/Music`). It's mounted at `/music` inside the container.
 
@@ -75,7 +83,7 @@ On macOS you can also double-click **Update Familiar.command** in the `docker` f
    docker compose -f docker-compose.prod.yml up -d
    ```
 
-4. **Access the UI** at http://localhost:4400. API keys are set in your `.env` file — open **Settings** (gear icon) to start a library scan.
+4. **Sign in** with the link a new server prints to its log (`docker logs familiar-api 2>&1 | grep '#token='`), then use the UI at http://localhost:4400. API keys are set in your `.env` file — open **Settings** (gear icon) to start a library scan.
 
 ---
 

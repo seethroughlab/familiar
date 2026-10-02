@@ -233,6 +233,19 @@ jobs:
           docker compose -f docker/docker-compose.local.yml logs
           exit 1
 
+      # ADR-0141: this stack is a new server (no token, no tracks), so it must have minted a token,
+      # printed the owner's sign-in link to its log, and now refuse the API without that token.
+      - name: A new server starts with a token
+        working-directory: docker
+        run: |
+          docker compose -f docker-compose.local.yml logs api | grep -q '/#token=' \
+            || { echo "::error::no sign-in link in the api container's log"; docker compose -f docker-compose.local.yml logs api | tail -40; exit 1; }
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:4410/api/v1/tracks)
+          [ "$STATUS" = "401" ] || { echo "::error::/api/v1/tracks without a token answered $STATUS, not 401"; exit 1; }
+          docker compose -f docker-compose.local.yml exec -T api python -m app.token | grep -q '/#token=' \
+            || { echo "::error::python -m app.token printed no link"; exit 1; }
+          echo "minted at first start, sign-in link logged, API closed without it, app.token reprints it"
+
       - name: Verify containers are running
         working-directory: docker
         run: |
