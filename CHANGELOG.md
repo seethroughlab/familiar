@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-beta11] - 2026-10-02
+
+The first release a Familiar Server can update to on its own: a Mac running `v0.2.0-beta10`
+should offer it without a download. No server changes; no migrations; the API contract stays at v1.
+
 ### Familiar Server
 
 - **Has an icon**: the player's waveform with its colours swapped, so the two sit together in
