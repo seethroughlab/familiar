@@ -145,6 +145,22 @@ Each names the contract, test and documentation work, not just the first file to
   frontend and SDK unit tests, the contract and boundary checks, this document's own check. The
   backend suite needs a disposable database and is its own command: `cd backend && make test`.
 
+## Restarting the NAS
+
+The NAS runs the released image with three compose files. From the repository, `make restart-nas`;
+on the NAS itself, from `/opt/familiar/docker`:
+
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.gpu.yml -f docker-compose.inbox.yml up -d
+```
+
+**Not `docker compose up -d`.** With no `-f`, Compose reads the dev `docker-compose.yml`, and on
+2026-10-02 that recreated `familiar-postgres` and `familiar-redis` on `docker_default` instead of
+`docker_familiar-network`: the API could not resolve them for about 2.5 hours. No data was lost —
+the volumes belong to the project name, which both files share. Adding
+`COMPOSE_FILE=docker-compose.prod.yml:docker-compose.gpu.yml:docker-compose.inbox.yml` to the `.env`
+in that directory on the NAS makes the short command do the right thing as well.
+
 ## Security posture, stated plainly
 
 **Familiar has no login.** A server token exists ([ADR-0045](decisions/ADR-0045-familiar-authenticates-inbound-requests.md)):

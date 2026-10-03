@@ -13,12 +13,17 @@ import api from './base';
  */
 
 export interface BackupStatus {
+  /** Bucket and keys are set. Whether a schedule is on is `enabled`. */
+  configured?: boolean;
   enabled: boolean;
   bucket: string | null;
   region: string | null;
   schedule: string | null;
   is_running: boolean;
+  /** The newest run of any kind, from history, which expires 30 days after its last write. */
   last_backup: Record<string, unknown> | null;
+  /** The newest successful run, kept with no expiry. */
+  last_success?: Record<string, unknown> | null;
   progress: BackupProgress | null;
 }
 

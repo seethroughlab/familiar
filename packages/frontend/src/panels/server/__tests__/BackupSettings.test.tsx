@@ -115,6 +115,56 @@ describe('BackupSettings', () => {
   });
 });
 
+describe('BackupSettings: what the card says about the last run', () => {
+  it('anchors the switch knob to the left of its track', async () => {
+    // Absolute with no `left`, inside a <button> that centres its content, the knob started
+    // mid-track and `translate-x-6` pushed it past the right edge when on. jsdom does no layout,
+    // so this asserts the anchor rather than the pixels.
+    getSettings.mockResolvedValue({ ...CONFIGURED, s3_backup_enabled: true });
+    wrap(<BackupSettings />);
+    const knob = (await screen.findByRole('switch', { name: /scheduled backups/i })).querySelector('span');
+    expect(knob?.className).toMatch(/\babsolute\b/);
+    expect(knob?.className).toMatch(/\bleft-0\b/);
+  });
+
+  it('names the last successful backup, not "unknown"', async () => {
+    // It read `completed_at`, which no history entry has, and said "Last backup unknown" over a
+    // month of successes.
+    getStatus.mockResolvedValue({
+      enabled: true, is_running: false, progress: null,
+      last_backup: { timestamp: '2026-09-06T03:30:00', status: 'success' },
+      last_success: { timestamp: '2026-09-06T03:30:00', status: 'success' },
+    });
+    wrap(<BackupSettings />);
+    const line = await screen.findByTestId('backup-last');
+    expect(line.textContent).toMatch(/Last successful backup/);
+    expect(line.textContent).not.toMatch(/unknown/);
+  });
+
+  it('shows the error when the newest run failed', async () => {
+    getStatus.mockResolvedValue({
+      enabled: false, is_running: false, progress: null,
+      last_backup: { timestamp: '2026-10-02T22:00:00', status: 'error', error: 'AccessDenied: RestoreObject' },
+      last_success: { timestamp: '2026-09-06T03:30:00', status: 'success' },
+    });
+    wrap(<BackupSettings />);
+    expect(await screen.findByText(/Last attempt failed .*AccessDenied: RestoreObject/)).toBeTruthy();
+  });
+
+  it('a refused "Back up now" says why on the card', async () => {
+    run.mockRejectedValue(new Error('S3 backup is not configured: set S3_BACKUP_BUCKET'));
+    wrap(<BackupSettings />);
+    fireEvent.click(await screen.findByRole('button', { name: /back up now/i }));
+    expect((await screen.findByRole('alert')).textContent).toMatch(/not configured/);
+  });
+
+  it('says so when no backup has ever succeeded', async () => {
+    getStatus.mockResolvedValue({ enabled: true, is_running: false, progress: null, last_backup: null, last_success: null });
+    wrap(<BackupSettings />);
+    expect((await screen.findByTestId('backup-last')).textContent).toMatch(/No successful backup recorded/);
+  });
+});
+
 describe('BackupRestore', () => {
   it('will not restore until the bucket name is typed', async () => {
     // Guards a mis-click, not an attacker — Familiar runs on a private network.

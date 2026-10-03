@@ -140,11 +140,42 @@ Familiar can back up your entire music library and configuration to Amazon S3 Gl
    S3_BACKUP_PREFIX=familiar/   # optional, organizes files in bucket
    ```
 
-2. **Enable and configure** in Settings > Cloud Backup:
-   - Click "Validate Credentials" to verify your S3 access
-   - Enable scheduled backups (daily/weekly/monthly)
-   - Or run a manual backup immediately
+2. **Give that key only what backup needs.** Create the bucket yourself first, then attach this
+   policy to the IAM user whose key you set above — not "S3 full access". It is the policy the
+   author's own backup user runs under, and `Test bucket` fails without `s3:RestoreObject`:
 
-3. **Restore** from the same Settings panel - select a backup snapshot and restore specific components (database, settings, audio files, etc.)
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Action": ["s3:ListBucket", "s3:GetBucketLocation"],
+         "Resource": "arn:aws:s3:::your-bucket-name"
+       },
+       {
+         "Effect": "Allow",
+         "Action": [
+           "s3:GetObject", "s3:PutObject", "s3:DeleteObject",
+           "s3:AbortMultipartUpload", "s3:RestoreObject"
+         ],
+         "Resource": "arn:aws:s3:::your-bucket-name/*"
+       }
+     ]
+   }
+   ```
+
+   Familiar creates the bucket only if it is missing, and this policy deliberately does not allow
+   that: a backup key that can create buckets can create them anywhere in the account.
+
+3. **Turn it on** under **Server › Backup**:
+   - **Test bucket** checks the key reaches the bucket with the permissions above
+   - **Scheduled backups** runs daily, weekly or monthly
+   - **Back up now** runs one immediately, whether or not scheduled backups are on
+
+   The Overview warns when scheduled backups are off, when one fails, and when the last success is
+   older than the schedule allows.
+
+4. **Restore** from the same page — select a backup snapshot and restore specific components (database, settings, audio files, etc.)
 
 **Note:** Glacier Deep Archive has a 12-hour retrieval time for restores. Standard retrieval fees apply (~$0.02/GB).

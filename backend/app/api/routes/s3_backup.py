@@ -7,8 +7,9 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from app.api.exceptions import ConflictError
 from app.services.app_settings import get_app_settings_service
-from app.services.s3_backup import get_s3_backup_service
+from app.services.s3_backup import NOT_CONFIGURED, get_s3_backup_service
 
 logger = logging.getLogger(__name__)
 
@@ -46,12 +47,15 @@ class CostEstimateResponse(BaseModel):
 
 
 class BackupStatusResponse(BaseModel):
+    configured: bool = False
     enabled: bool
     bucket: str | None = None
     region: str | None = None
     schedule: str | None = None
     is_running: bool = False
     last_backup: dict[str, Any] | None = None
+    #: The newest successful backup, kept with no expiry; `last_backup` is the newest run of any kind.
+    last_success: dict[str, Any] | None = None
     progress: dict[str, Any] | None = None
 
 
@@ -167,6 +171,11 @@ async def get_backup_status() -> BackupStatusResponse:
 async def trigger_backup() -> dict[str, Any]:
     """Trigger a manual backup. Runs in background thread."""
     service = get_s3_backup_service()
+
+    # Refuse here rather than answer "started" for a run that will fail at once: that answer, and a
+    # card that showed nothing, is how a refused backup looked like a running one.
+    if not service.is_configured(service._get_settings()):
+        raise ConflictError(NOT_CONFIGURED)
 
     # Check if already running
     progress = service.get_backup_progress()
