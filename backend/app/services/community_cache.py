@@ -134,6 +134,7 @@ class CommunityCacheService:
         self.cache_url = cache_url.rstrip("/")
         self.client_id = client_id or None
         self._client: httpx.AsyncClient | None = None
+        self._client_loop: asyncio.AbstractEventLoop | None = None
         self._timeout = timeout
         # Lazy-import defaults from config only when not explicitly provided
         if embedding_version is None or features_version is None:
@@ -145,17 +146,25 @@ class CommunityCacheService:
             self._features_version = features_version
 
     async def _get_client(self) -> httpx.AsyncClient:
-        if self._client is None:
+        # One client per event loop. An analysis worker calls asyncio.run() several times per track
+        # (features lookup, detail lookup, contribution) against this one singleton, and an httpx
+        # client is bound to the loop that first used it: every call after the first failed with
+        # "Event loop is closed", which the retry loop logs and turns into a miss. Found 2026-10-02
+        # on Familiar Server, where every cache hit's detail lookup failed this way.
+        loop = asyncio.get_running_loop()
+        if self._client is None or self._client_loop is not loop:
             self._client = httpx.AsyncClient(
                 timeout=self._timeout,
                 headers={"User-Agent": "Familiar/0.1.0"},
             )
+            self._client_loop = loop
         return self._client
 
     async def close(self) -> None:
         if self._client:
             await self._client.aclose()
             self._client = None
+            self._client_loop = None
 
     async def _request_with_retry(
         self,
