@@ -19,9 +19,11 @@ def get_memory_mb() -> float:
     """Get current process memory usage in MB."""
     try:
         import resource
-        # Get memory in KB, convert to MB
-        usage = resource.getrusage(resource.RUSAGE_SELF)
-        return usage.ru_maxrss / 1024  # macOS returns bytes, Linux returns KB
+
+        # ru_maxrss is kilobytes on Linux and bytes on macOS. Dividing by 1024 on both reported
+        # Familiar Server's analysis workers at about 1.2 TB each. It is the peak so far.
+        peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        return peak / (1024 * 1024) if sys.platform == "darwin" else peak / 1024
     except Exception:
         return 0.0
 

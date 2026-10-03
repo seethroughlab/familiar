@@ -176,6 +176,12 @@ class DevelopmentFormatter(logging.Formatter):
         return msg
 
 
+#: The format a spawned child process (an analysis phase, a scan) logs with. Spawned processes do not
+#: inherit the parent's handlers, and these lines used to be bare messages: a track's minutes could
+#: not be measured from the log, because nothing in it said when each step happened.
+CHILD_LOG_FORMAT = "%(asctime)s %(levelname)s [pid %(process)d] %(message)s"
+
+
 def setup_logging() -> None:
     """Configure logging based on environment."""
     # Determine log level
