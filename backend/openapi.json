@@ -714,6 +714,19 @@
               "null"
             ]
           },
+          "images": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ArtistImageOut"
+            },
+            "title": "Images",
+            "type": "array"
+          },
+          "images_state": {
+            "default": "none",
+            "title": "Images State",
+            "type": "string"
+          },
           "lastfm_error": {
             "title": "Lastfm Error",
             "type": [
@@ -793,6 +806,87 @@
           "first_track_id"
         ],
         "title": "ArtistDetailResponse",
+        "type": "object"
+      },
+      "ArtistImageOut": {
+        "description": "One photo in an artist's gallery (ADR-0149), with what its licence asks to be shown.",
+        "properties": {
+          "author": {
+            "title": "Author",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "height": {
+            "title": "Height",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "hidden": {
+            "default": false,
+            "title": "Hidden",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "license": {
+            "title": "License",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "license_url": {
+            "title": "License Url",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "page_url": {
+            "title": "Page Url",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "thumb_url": {
+            "title": "Thumb Url",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "width": {
+            "title": "Width",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "kind",
+          "url",
+          "thumb_url"
+        ],
+        "title": "ArtistImageOut",
         "type": "object"
       },
       "ArtistListResponse": {
@@ -8711,6 +8805,18 @@
             "title": "External Features Enabled",
             "type": "boolean"
           },
+          "fanarttv_api_key": {
+            "title": "Fanarttv Api Key",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fanarttv_configured": {
+            "default": false,
+            "title": "Fanarttv Configured",
+            "type": "boolean"
+          },
           "lastfm_api_key": {
             "title": "Lastfm Api Key",
             "type": [
@@ -8900,6 +9006,13 @@
             "title": "External Features Enabled",
             "type": [
               "boolean",
+              "null"
+            ]
+          },
+          "fanarttv_api_key": {
+            "title": "Fanarttv Api Key",
+            "type": [
+              "string",
               "null"
             ]
           },
@@ -18248,6 +18361,285 @@
           }
         },
         "summary": "Get Artist Image",
+        "tags": [
+          "library"
+        ]
+      }
+    },
+    "/api/v1/library/artists/{artist_name}/images/{image_id}/hide": {
+      "post": {
+        "description": "Hide a photo from the artist's gallery. It stays hidden when the gallery is fetched again\n(ADR-0149 point 6). Hiding the main picture leaves it as the main picture until another is chosen.",
+        "operationId": "library_hide_artist_image",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artist_name",
+            "required": true,
+            "schema": {
+              "title": "Artist Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "image_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Image Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtistImageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Hide Artist Image",
+        "tags": [
+          "library"
+        ]
+      }
+    },
+    "/api/v1/library/artists/{artist_name}/images/{image_id}/main": {
+      "post": {
+        "description": "Make a photo the artist's main picture: the one lists, grids and the offline cache show.\n\nIt is written to ``Artist.image_url`` and marked chosen, so the resolver stops replacing it\n(ADR-0149 point 6). The thumbnail URL, because that is the size every reader of the column draws.",
+        "operationId": "library_make_artist_image_main",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artist_name",
+            "required": true,
+            "schema": {
+              "title": "Artist Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "image_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Image Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtistImageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Make Artist Image Main",
+        "tags": [
+          "library"
+        ]
+      }
+    },
+    "/api/v1/library/artists/{artist_name}/images/{image_id}/unhide": {
+      "post": {
+        "description": "Show a hidden photo again.",
+        "operationId": "library_unhide_artist_image",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artist_name",
+            "required": true,
+            "schema": {
+              "title": "Artist Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "image_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Image Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtistImageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Unhide Artist Image",
         "tags": [
           "library"
         ]

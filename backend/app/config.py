@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     # Watch the library and scan folders that change (ADR-0142). Off only for the test suite, which
     # starts the app many times against fixture folders.
     watch_library: bool = Field(default=True, validation_alias=AliasChoices("FAMILIAR_WATCH_LIBRARY"))
+    # Fetch artist photo galleries in the background (ADR-0149). Off only for the test suite, where an
+    # artist page opened by one test would start a real fetch that outlives it, reaches the network,
+    # and holds locks a migration test's DROP TABLE then deadlocks on.
+    artist_gallery_fetch: bool = Field(default=True, validation_alias=AliasChoices("FAMILIAR_ARTIST_GALLERY_FETCH"))
 
     # Advertise this server on the local network as `_familiar._tcp` on this port (ADR-0134 point
     # 4). Unset, nothing is advertised: in Docker's default bridge network mDNS does not reach the
@@ -138,6 +142,8 @@ class Settings(BaseSettings):
     lastfm_api_key: str | None = None
     lastfm_api_secret: str | None = None
     acoustid_api_key: str | None = None
+    # fanart.tv, for artist photos (ADR-0149). FANARTTV_API_KEY; optional.
+    fanarttv_api_key: str | None = None
 
     # Soulseek via slskd (ADR-0116). SOULSEEK_URL / SOULSEEK_API_KEY; the admin UI wins over these.
     soulseek_url: str | None = None

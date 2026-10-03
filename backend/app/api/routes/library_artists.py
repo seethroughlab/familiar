@@ -6,6 +6,7 @@ import logging
 import re
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse, StreamingResponse
@@ -17,7 +18,15 @@ from app.api.deps import CurrentProfile, DbSession
 from app.api.exceptions import NotFoundError
 from app.api.schemas.artists import SimilarArtistInfo
 from app.api.schemas.common import UTCDateTime
-from app.db.models import Artist, ArtistAlias, ProfilePlayHistory, Track, TrackAnalysis, TrackStatus
+from app.db.models import (
+    Artist,
+    ArtistAlias,
+    ArtistImage,
+    ProfilePlayHistory,
+    Track,
+    TrackAnalysis,
+    TrackStatus,
+)
 from app.services.external_albums_helpers import normalize_artist_name
 from app.utils.time import utcnow
 
@@ -292,6 +301,23 @@ class ArtistTrack(BaseModel):
     year: int | None
 
 
+class ArtistImageOut(BaseModel):
+    """One photo in an artist's gallery (ADR-0149), with what its licence asks to be shown."""
+
+    id: str
+    source: str  # 'commons' | 'fanarttv'
+    kind: str  # 'portrait' | 'photo' | 'background'
+    url: str  # about 1600px
+    thumb_url: str  # about 400px
+    width: int | None = None
+    height: int | None = None
+    author: str | None = None
+    license: str | None = None
+    license_url: str | None = None
+    page_url: str | None = None
+    hidden: bool = False
+
+
 class ArtistDetailResponse(BaseModel):
     """Detailed artist info with bio, albums, and tracks."""
 
@@ -322,6 +348,11 @@ class ArtistDetailResponse(BaseModel):
     # Cache status
     lastfm_fetched: bool = False
     lastfm_error: str | None = None
+
+    # The photo gallery (ADR-0149): visible photos, main picture first, then by rank. `images_state`
+    # says whether to show them, say "finding photos", or show nothing: `ready`, `fetching`, `none`.
+    images: list[ArtistImageOut] = []
+    images_state: str = "none"
 
 
 # ── Artist Detail ─────────────────────────────────────────────
@@ -632,6 +663,8 @@ async def get_artist_detail(
         else:
             schedule_background_resolve(detail_hints)
 
+    images, images_state = await _gallery(db, artist)
+
     return ArtistDetailResponse(
         id=str(artist.id),
         name=artist.name,
@@ -659,7 +692,89 @@ async def get_artist_detail(
         first_track_id=str(stats.first_track_id),
         lastfm_fetched=lastfm_fetched,
         lastfm_error=lastfm_error,
+        images=images,
+        images_state=images_state,
     )
+
+
+def _image_out(row: ArtistImage) -> ArtistImageOut:
+    return ArtistImageOut(
+        id=str(row.id), source=row.source, kind=row.kind, url=row.url, thumb_url=row.thumb_url,
+        width=row.width, height=row.height, author=row.author, license=row.license,
+        license_url=row.license_url, page_url=row.page_url, hidden=row.hidden,
+    )
+
+
+async def _gallery(db: DbSession, artist: Artist) -> tuple[list[ArtistImageOut], str]:
+    """The visible gallery, and its state; schedules a fetch when it is missing or stale.
+
+    Never fetches on the request path (ADR-0149 point 5): opening an artist only asks for one.
+    """
+    from app.services.artist_gallery import is_fetching, schedule_gallery_fetch
+
+    rows = (
+        await db.execute(
+            select(ArtistImage)
+            .where(ArtistImage.artist_id == artist.id, ArtistImage.hidden.is_(False))
+            .order_by(ArtistImage.rank)
+        )
+    ).scalars().all()
+    if artist.image_chosen and artist.image_url:
+        # The owner's main picture leads (point 7).
+        rows = sorted(rows, key=lambda r: r.thumb_url != artist.image_url)
+    scheduled = schedule_gallery_fetch(artist) is not None
+    if rows:
+        state = "ready"
+    elif scheduled or is_fetching(artist.id):
+        state = "fetching"
+    else:
+        state = "none"
+    return [_image_out(r) for r in rows], state
+
+
+async def _artist_image_row(db: DbSession, artist_name: str, image_id: UUID) -> tuple[Artist, ArtistImage]:
+    artist = await _resolve_artist_via_alias(db, artist_name)
+    if artist is None:
+        raise NotFoundError("Artist not found")
+    row = await db.get(ArtistImage, image_id)
+    if row is None or row.artist_id != artist.id:
+        raise NotFoundError("That photo is not in this artist's gallery")
+    return artist, row
+
+
+@router.post("/artists/{artist_name}/images/{image_id}/hide", tags=["library"], response_model=ArtistImageOut)
+async def hide_artist_image(db: DbSession, artist_name: str, image_id: UUID) -> ArtistImageOut:
+    """Hide a photo from the artist's gallery. It stays hidden when the gallery is fetched again
+    (ADR-0149 point 6). Hiding the main picture leaves it as the main picture until another is chosen."""
+    _, row = await _artist_image_row(db, artist_name, image_id)
+    row.hidden = True
+    await db.commit()
+    return _image_out(row)
+
+
+@router.post("/artists/{artist_name}/images/{image_id}/unhide", tags=["library"], response_model=ArtistImageOut)
+async def unhide_artist_image(db: DbSession, artist_name: str, image_id: UUID) -> ArtistImageOut:
+    """Show a hidden photo again."""
+    _, row = await _artist_image_row(db, artist_name, image_id)
+    row.hidden = False
+    await db.commit()
+    return _image_out(row)
+
+
+@router.post("/artists/{artist_name}/images/{image_id}/main", tags=["library"], response_model=ArtistImageOut)
+async def make_artist_image_main(db: DbSession, artist_name: str, image_id: UUID) -> ArtistImageOut:
+    """Make a photo the artist's main picture: the one lists, grids and the offline cache show.
+
+    It is written to ``Artist.image_url`` and marked chosen, so the resolver stops replacing it
+    (ADR-0149 point 6). The thumbnail URL, because that is the size every reader of the column draws.
+    """
+    artist, row = await _artist_image_row(db, artist_name, image_id)
+    artist.image_url = row.thumb_url
+    artist.image_checked_at = utcnow()
+    artist.image_chosen = True
+    row.hidden = False
+    await db.commit()
+    return _image_out(row)
 
 
 # ============================================================================

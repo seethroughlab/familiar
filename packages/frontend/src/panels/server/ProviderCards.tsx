@@ -30,6 +30,7 @@ const SOURCE_LABELS: Record<string, string> = {
   listenbrainz: 'ListenBrainz',
   lastfm: 'Last.fm',
   acoustid: 'AcoustID',
+  fanarttv: 'fanart.tv',
   bandcamp: 'Bandcamp',
   soulseek: 'Soulseek',
   community_cache_claims: 'Community cache',
@@ -46,7 +47,7 @@ const SOURCE_LABELS: Record<string, string> = {
  */
 const PROVIDERS: readonly {
   source: string;
-  key: { env: string; configuredFlag: 'lastfm_configured' | 'acoustid_configured' } | 'none';
+  key: { env: string; configuredFlag: 'lastfm_configured' | 'acoustid_configured' | 'fanarttv_configured' } | 'none';
   panel?: ReactNode;
   note?: string;
 }[] = [
@@ -54,6 +55,7 @@ const PROVIDERS: readonly {
   { source: 'musicbrainz', key: 'none' },
   { source: 'acoustid', key: { env: 'ACOUSTID_API_KEY', configuredFlag: 'acoustid_configured' }, note: 'Names recordings during analysis; the toggle is under Analysis → Configuration.' },
   { source: 'listenbrainz', key: 'none' },
+  { source: 'fanarttv', key: { env: 'FANARTTV_API_KEY', configuredFlag: 'fanarttv_configured' }, note: 'More artist photos, beside the ones from Wikimedia Commons, which need no key (ADR-0149).' },
   { source: 'bandcamp', key: 'none' },
   { source: 'soulseek', key: 'none', panel: <SoulseekSettings />, note: 'The four Soulseek tools are withheld from MCP hosts until a slskd address is saved below.' },
 ];

@@ -42,6 +42,7 @@ class SettingsResponse(BaseModel):
     lastfm_api_key: str | None
     lastfm_api_secret: str | None
     acoustid_api_key: str | None
+    fanarttv_api_key: str | None = None
 
     # Soulseek via slskd (ADR-0116). The URL is shown in full (it is an address, not a secret);
     # the key is masked like the others.
@@ -86,6 +87,7 @@ class SettingsResponse(BaseModel):
     # Computed status fields
     lastfm_configured: bool
     acoustid_configured: bool
+    fanarttv_configured: bool = False
     soulseek_configured: bool = False
     s3_backup_configured: bool
     music_library_configured: bool
@@ -98,6 +100,7 @@ class SettingsUpdateRequest(BaseModel):
     lastfm_api_key: str | None = None
     lastfm_api_secret: str | None = None
     acoustid_api_key: str | None = None
+    fanarttv_api_key: str | None = None
 
     # Soulseek via slskd (ADR-0116). Send "" to clear — None means "not in this request".
     soulseek_url: str | None = None
@@ -201,6 +204,7 @@ async def get_settings() -> SettingsResponse:
         clap_status=ClapStatus(**clap_status_data),
         lastfm_configured=service.has_lastfm_credentials(),
         acoustid_configured=service.has_acoustid_key(),
+        fanarttv_configured=service.has_fanarttv_key(),
         soulseek_configured=service.has_soulseek_configured(),
         s3_backup_configured=service.has_s3_credentials(),
         music_library_configured=service.has_music_library_configured(),
@@ -257,6 +261,7 @@ async def update_settings(request: SettingsUpdateRequest) -> SettingsResponse:
         clap_status=ClapStatus(**clap_status_data),
         lastfm_configured=service.has_lastfm_credentials(),
         acoustid_configured=service.has_acoustid_key(),
+        fanarttv_configured=service.has_fanarttv_key(),
         soulseek_configured=service.has_soulseek_configured(),
         s3_backup_configured=service.has_s3_credentials(),
         music_library_configured=service.has_music_library_configured(),
