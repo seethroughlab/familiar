@@ -147,6 +147,17 @@ test.describe('install platform chooser', () => {
     await expect(page.locator('#install .note')).not.toContainText('per track');
   });
 
+  test('the FAQ says what the install section says', async ({ page }) => {
+    // Found 2026-10-02: the FAQ still promised "1 second per track", sent "Listen from anywhere"
+    // to #install, named two removed views, and described a first launch that asks for an address.
+    await page.goto('faq.html');
+    const faq = page.locator('main');
+    for (const stale of ['per track', 'Mood Grid', '3D Explorer', 'Listen from anywhere']) {
+      await expect(faq).not.toContainText(stale);
+    }
+    await expect(page.locator('a', { hasText: 'Listening away from home' })).toHaveAttribute('href', './#remote');
+  });
+
   test('the no-login paragraph is on the page', async ({ page }) => {
     await page.goto('index.html');
     await expect(page.locator('#remote .note')).toContainText('Familiar has no login');

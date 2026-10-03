@@ -314,23 +314,12 @@ docker compose -f docker-compose.prod.yml -f docker-compose.desktop.yml up -d</c
     <strong>Analysis takes time</strong> — on a large library, days rather than hours, and on a Mac it pauses while you are on battery. You can listen while it works, and the community cache skips music that has already been analysed elsewhere.
   </div>
 
-  <details class="install-alt">
-    <summary>Build from source instead</summary>
-<pre><code>git clone https://github.com/seethroughlab/familiar.git
-cd familiar/docker
-cp .env.example .env
-docker compose -f docker-compose.prod.yml build</code></pre>
-    <p>Useful when you're developing against the backend. Note that <code>./start.sh</code> does <em>not</em> build — it pulls the published image, detects macOS and adds the logging override, then health-checks the stack.</p>
-  </details>
 
-  <h3>Detailed guides</h3>
+  <h3>The long form</h3>
   <ul class="doc-links">
-    <li><a href="https://github.com/seethroughlab/familiar/blob/main/docs/FAMILIAR-SERVER.md" target="_blank" rel="noopener">Familiar Server</a><span class="desc">The Mac app: no Docker, no terminal</span></li>
-    <li><a href="https://github.com/seethroughlab/familiar/blob/main/docs/INSTALLATION.md" target="_blank" rel="noopener">Installation Guide</a><span class="desc">Docker, OpenMediaVault, Synology, dev setup</span></li>
-    <li><a href="https://github.com/seethroughlab/familiar/blob/main/docs/MACOS.md" target="_blank" rel="noopener">macOS Guide</a><span class="desc">Docker Desktop on a Mac instead, library paths</span></li>
-    <li><a href="https://github.com/seethroughlab/familiar/blob/main/docs/CONFIGURATION.md" target="_blank" rel="noopener">Configuration</a><span class="desc">Env vars, API keys, Tailscale HTTPS, backup</span></li>
-    <li><a href="https://github.com/seethroughlab/familiar/blob/main/docs/LIBRARY_BROWSERS.md" target="_blank" rel="noopener">Library Browsers</a><span class="desc">Build custom 2D/3D visualizations</span></li>
-    <li><a href="https://github.com/seethroughlab/familiar/blob/main/docs/REST-API.md" target="_blank" rel="noopener">REST API</a><span class="desc">Backend API reference</span></li>
+    <li><a href="https://github.com/seethroughlab/familiar/blob/main/docs/FAMILIAR-SERVER.md" target="_blank" rel="noopener">Familiar Server</a><span class="desc">The Mac app: updates, battery, where its data lives</span></li>
+    <li><a href="https://github.com/seethroughlab/familiar/blob/main/docs/INSTALLATION.md" target="_blank" rel="noopener">Installation Guide</a><span class="desc">Docker on a NAS, Linux or Windows: settings, upgrading, troubleshooting</span></li>
+    <li><a href="https://github.com/seethroughlab/familiar/blob/main/docs/MACOS.md" target="_blank" rel="noopener">macOS with Docker</a><span class="desc">For a Mac that runs Docker instead of Familiar Server</span></li>
   </ul>
 </section>
 
@@ -388,7 +377,7 @@ docker compose -f docker-compose.prod.yml build</code></pre>
 </section>
 
 <footer>
-  <p>MIT-licensed · <a href="https://github.com/seethroughlab/familiar" target="_blank" rel="noopener">seethroughlab/familiar</a> · <a href="./faq.html">FAQ</a> · <a href="./privacy.html">Privacy</a></p>
+  <p>MIT-licensed · <a href="https://github.com/seethroughlab/familiar" target="_blank" rel="noopener">seethroughlab/familiar</a> · <a href="https://github.com/seethroughlab/familiar/tree/main/docs" target="_blank" rel="noopener">Docs</a> · <a href="./faq.html">FAQ</a> · <a href="./privacy.html">Privacy</a></p>
 </footer>
 
 </main>

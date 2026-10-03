@@ -634,50 +634,6 @@ footer a { color: var(--text-secondary); }
 
 
 
-/* --- Install alt details --- */
-
-.install-alt {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  padding: 14px 18px;
-  margin: 12px 0;
-}
-
-.install-alt summary {
-  cursor: pointer;
-  color: var(--text-primary);
-  font-weight: 500;
-  font-size: 14px;
-  list-style: none;
-  position: relative;
-  padding-left: 22px;
-}
-
-.install-alt summary::-webkit-details-marker { display: none; }
-
-.install-alt summary::before {
-  content: "+";
-  position: absolute;
-  left: 0;
-  top: -1px;
-  width: 16px;
-  height: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--accent-purple);
-  font-weight: 700;
-  font-size: 16px;
-  transition: transform 0.15s;
-}
-
-.install-alt[open] summary::before { transform: rotate(45deg); }
-
-.install-alt p { margin: 10px 0 0; color: var(--text-secondary); font-size: 14px; }
-
-.install-alt pre { margin-top: 10px; }
-
 /* --- Remote access --- */
 
 
