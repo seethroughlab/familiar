@@ -1,8 +1,11 @@
 # ADR-0144: A Community Cache Hit Is Trusted, and Checked by Sample
 
-Status: proposed
+Status: accepted
 
 Date: 2026-10-02
+
+Implementation:
+- **Accepted 2026-10-02**, as written. Not yet built.
 
 Extends [ADR-0119](ADR-0119-the-corpus-is-asked-by-recording-before-it-is-asked-by-hash.md) and
 [ADR-0138](ADR-0138-a-desktop-server-yields-to-its-owner.md)
