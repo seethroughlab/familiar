@@ -206,7 +206,8 @@ def library_has_audio(path: Path, budget_seconds: float = 3.0) -> bool | None:
     # os.scandir, not os.walk: os.walk lstat()s every subfolder before descending into any of them,
     # 2,875 round trips at the top of that share, 22 s before it opened a single album. A listing
     # already says which entries are folders.
-    folders = [path]
+    root = str(path)
+    folders = [root]
     while folders:
         if time.monotonic() > deadline:
             return None
@@ -219,7 +220,7 @@ def library_has_audio(path: Path, budget_seconds: float = 3.0) -> bool | None:
                     if entry.is_dir(follow_symlinks=False):
                         folders.append(entry.path)
         except OSError:
-            if folder == path:
+            if folder == root:
                 raise  # the library itself; a subfolder that refuses is skipped
     return False
 
