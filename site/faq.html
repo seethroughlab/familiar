@@ -47,11 +47,11 @@
     </details>
     <details>
       <summary>Do I need an API key?</summary>
-      <p>No. Familiar holds no API key and calls no model. If you want to ask questions in plain language you connect your own MCP host — Claude Desktop, say — and whatever that costs is between you and them. Everything else, including search, Mood Grid, Music Map and the 3D Explorer, is local.</p>
+      <p>No. Familiar holds no API key and calls no model. If you want to ask questions in plain language you connect your own MCP host — Claude Desktop, say — and whatever that costs is between you and them. Everything else, including search and the Music Map, is local.</p>
     </details>
     <details>
       <summary>What hardware do I need?</summary>
-      <p>See the <a href="./#install">Requirements</a> callout above. A small NAS works — the author runs a 23k-track library on an OpenMediaVault box. Analysis is the heaviest workload; once a track is analyzed it doesn't need to be re-analyzed.</p>
+      <p>A Mac with Apple Silicon, running Familiar Server, or any machine that runs Docker — <a href="./#install">Install</a> has both. A small NAS works: the author runs a 23k-track library on an OpenMediaVault box. Analysis is the heaviest workload, and once a track is analysed it is not analysed again.</p>
     </details>
     <details>
       <summary>Does my music or listening data leave my network?</summary>
@@ -63,7 +63,7 @@
     </details>
     <details>
       <summary>How long does analysis take?</summary>
-      <p>Roughly 1 second per track on modern hardware, so a 20,000-track library is around 6 hours. The community cache short-circuits tracks that have been analyzed elsewhere, which can reduce a cold-start scan to minutes for popular music.</p>
+      <p>On a large library, days rather than hours, and on a Mac it pauses while you are on battery. You can listen while it works. The opt-in community cache skips tracks that have already been analysed elsewhere.</p>
     </details>
     <details>
       <summary>What are the alternatives to Tailscale?</summary>
@@ -71,11 +71,11 @@
     </details>
     <details>
       <summary>Can I listen away from home?</summary>
-      <p>Yes — see <a href="./#install">Listen from anywhere</a>. Tailscale plus HTTPS is the easiest path: install the iOS app, point it at your server's Tailscale hostname in Settings, and it works on cellular like any other music app.</p>
+      <p>Yes — see <a href="./#remote">Listening away from home</a>. Tailscale is the easiest way: it puts your phone and your server on one private network, so the app reaches the server on cellular as it does at home.</p>
     </details>
     <details>
       <summary>Is there an iOS app?</summary>
-      <p>Yes, and it is where listening on a phone is meant to happen — <a href="https://apps.apple.com/us/app/familiar-player/id6759879772" target="_blank" rel="noopener">Familiar Player</a> is on the App Store, with a Mac app alongside it. It asks for your server's address the first time you open it, so you need Familiar running somewhere before the app is useful. A Tailscale HTTPS address works well and is what the placeholder shows. (The Mac app starts with a demo address already filled in — that is there so Apple's reviewers have something to connect to, and you should replace it with your own.)</p>
+      <p>Yes, and it is where listening on a phone is meant to happen — <a href="https://apps.apple.com/us/app/familiar-player/id6759879772" target="_blank" rel="noopener">Familiar Player</a> is on the App Store, with a Mac app alongside it. It plays from a Familiar server, so you need one running before the app is useful — <a href="./#install">Install</a> covers the server, then how each player connects to it.</p>
     </details>
   </div>
 </section>
@@ -90,7 +90,7 @@
 </section>
 
 <footer>
-  <p>MIT-licensed · <a href="https://github.com/seethroughlab/familiar" target="_blank" rel="noopener">seethroughlab/familiar</a> · <a href="./faq.html">FAQ</a> · <a href="./privacy.html">Privacy</a></p>
+  <p>MIT-licensed · <a href="https://github.com/seethroughlab/familiar" target="_blank" rel="noopener">seethroughlab/familiar</a> · <a href="https://github.com/seethroughlab/familiar/tree/main/docs" target="_blank" rel="noopener">Docs</a> · <a href="./faq.html">FAQ</a> · <a href="./privacy.html">Privacy</a></p>
 </footer>
 
 </main>

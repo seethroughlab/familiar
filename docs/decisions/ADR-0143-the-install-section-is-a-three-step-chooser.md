@@ -5,7 +5,34 @@ Status: accepted
 Date: 2026-10-02
 
 Implementation:
-- **Accepted 2026-10-02**, as written. Not yet built.
+- **Accepted 2026-10-02**, as written.
+- **Built 2026-10-02, points 1–7; point 8 holds step 3 back as written.**
+  - `site/index.html` `#install`: step 1 is a tab strip (Mac, Synology, OpenMediaVault, Linux &
+    NAS, Windows); step 2 holds the five installs; step 3 is a second strip (iPhone & iPad, Mac).
+    Every server path ends signed in: **Open Admin** on the Mac, the `#token=` line elsewhere.
+  - `site/assets/install.js` generalises ADR-0095's one chooser to two, writes the pair to the URL
+    only when the reader chooses (`replaceState`), reads it on load and on `hashchange`, and ignores
+    an unknown value. Text true for one server is `.when-server` / `.unless-server`: "Open in
+    Familiar" shows only for a Mac server, the 8 GB memory note only for the Docker ones. With no
+    script, both show with their "If your server is…" / "On a NAS or PC…" wording.
+  - **Point 1's "unchosen" step 1 is not built:** with no choice in the URL the Mac is selected, as
+    ADR-0095's first tab was. A reader still sees one complete path rather than an empty step 2.
+  - **The App Store links left the rest of the page** (2026-10-02, at Jeff's review): the hero's two
+    badges and the closing section's two app links went, and Apple's badges moved into step 3. The
+    page's only call to action outside `#install` is Install, as ADR-0055 point 11 has it.
+    `site/e2e/app-links.spec.ts` now asserts there is no App Store link outside `#install`; it
+    asserted the opposite, that both sat in the hero.
+  - `docs/FAMILIAR-SERVER.md` is new: the Mac path's one canonical document (ADR-0095 point 3),
+    which had none.
+  - `site/e2e/toggle.spec.ts`: both choosers, the link round trip, an unknown value, every path
+    signed in, no Docker on the Mac path, no per-track figure. Eighteen tests pass.
+  - **Point 6's word budget was already broken, and still is.** Visible words in `<main>` on one
+    path, counted in Chromium: **1,230 before, 1,059 after** — the install section went from 433 to
+    262. ADR-0095 point 9's 700 is not met by the page as a whole, before or since; that is a
+    finding for the page, not something this section can fix alone.
+  - `docs/SITE-CLAIMS.md`: the rows point 7 names, with what was and was not run. **"Familiar has
+    no login" is recorded false and is still on the page**, in `#remote`, pending ADR-0096's
+    revision.
 
 Supersedes point 2 of [ADR-0095](ADR-0095-the-install-section-is-platform-first.md), and extends
 [ADR-0131](ADR-0131-the-server-is-its-own-app.md)

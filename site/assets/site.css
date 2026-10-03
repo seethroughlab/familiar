@@ -340,19 +340,9 @@ a:hover { text-decoration: underline; }
 }
 
 /* --- The two apps ---
-   Named links rather than the single "Download on the App Store" badge these replace. One badge
-   could only point at one listing, and the Mac app was the half it hid.
-
-   Sized below `.hero-cta`'s primary button on purpose: ADR-0055 point 11 keeps Install as the
-   call to action, because an app without a server behind it stops at a setup screen. */
-
-.hero-apps { margin-top: 22px; }
-
-.hero-apps-label {
-  margin: 0 0 8px;
-  font-size: 13px;
-  color: var(--text-muted);
-}
+   Apple's badges, one per listing, in the install section's step 3 (ADR-0143), where the reader
+   has already chosen a server. They were in the hero until 2026-10-02 and competed with Install,
+   the one call to action ADR-0055 point 11 asks for. */
 
 /* 12px is Apple's minimum clear space around a 40px badge (a quarter of its height); the gap is
    the space *between* the two, so it has to be at least that. */
@@ -644,50 +634,6 @@ footer a { color: var(--text-secondary); }
 
 
 
-/* --- Install alt details --- */
-
-.install-alt {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  padding: 14px 18px;
-  margin: 12px 0;
-}
-
-.install-alt summary {
-  cursor: pointer;
-  color: var(--text-primary);
-  font-weight: 500;
-  font-size: 14px;
-  list-style: none;
-  position: relative;
-  padding-left: 22px;
-}
-
-.install-alt summary::-webkit-details-marker { display: none; }
-
-.install-alt summary::before {
-  content: "+";
-  position: absolute;
-  left: 0;
-  top: -1px;
-  width: 16px;
-  height: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--accent-purple);
-  font-weight: 700;
-  font-size: 16px;
-  transition: transform 0.15s;
-}
-
-.install-alt[open] summary::before { transform: rotate(45deg); }
-
-.install-alt p { margin: 10px 0 0; color: var(--text-secondary); font-size: 14px; }
-
-.install-alt pre { margin-top: 10px; }
-
 /* --- Remote access --- */
 
 
@@ -835,6 +781,10 @@ footer a { color: var(--text-secondary); }
    so nobody clicks a pill that cannot switch anything. */
 .platform-tabs { display: none; }
 .js-platforms .platform-tabs { display: flex; }
+/* ADR-0143: text that stands in for a chooser when there is no script, and text true for one
+   server only (shown with its "If your server is…" wording when nothing can hide it). */
+.js-platforms .nojs-only { display: none; }
+.when-server[hidden], .unless-server[hidden] { display: none; }
 
 .platform-tabs button {
   font: inherit;
