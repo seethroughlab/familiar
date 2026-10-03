@@ -68,44 +68,18 @@
          panel, which is where they work. The requirements line stays, the way Fork keeps its OS
          requirements beside the download button. -->
     <div class="hero-install">
-      <p class="hero-requirements">Docker&nbsp;24+ · 2&nbsp;GB RAM · x86_64 or ARM64 · MIT licensed</p>
+      <p class="hero-requirements">A Mac with Apple Silicon, or any machine with Docker · MIT licensed</p>
       <p class="hero-cta"><a href="#install" class="primary">Install Familiar</a> <a href="#features" class="hero-cta-secondary">See what it does</a></p>
-      <p class="hero-cta-note">macOS, Windows, Synology, OpenMediaVault or Linux — about ten minutes</p>
+      <p class="hero-cta-note">Mac, Synology, OpenMediaVault, Linux or Windows — about ten minutes</p>
       <!-- The demo link was here under ADR-0039 point 8 and is deliberately gone. ADR-0038 built
            that instance because "Apple App Store review requires a working backend server with test
            data" — it is a compliance fixture, and pointing a visitor at it implied you could try
            Familiar without your own server. You cannot: the app's first screen asks for an address. -->
     </div>
-    <!-- Both apps, named, rather than one badge that hides half of what exists. ADR-0055 point 11
-         still holds — Install is the primary call to action above and these are deliberately not
-         styled to compete with it — but "one call to action" had come to mean the Mac app was
-         mentioned nowhere on the page, so a visitor who owns a Mac could not learn it exists.
-
-         The requirement line is not decoration. The app's first screen asks for a server address,
-         so arriving at the App Store from here without a server is the dead end the comment above
-         describes. The closing CTA carries the same sentence for the same reason. -->
-    <div class="hero-apps">
-      <p class="hero-apps-label">Already running Familiar? Get the apps</p>
-      <!-- Apple's own badges, both of them, straight from the marketing toolbox: the iOS one is
-           `Download_on_the_App_Store_Badge_US-UK_RGB_blk_4SVG_092917` and the Mac one is
-           `Download_on_the_Mac_App_Store_Badge_US-UK_RGB_blk_092917`. Apple asks that its badges be
-           used unmodified where you link to a listing, and they are the form a visitor recognises
-           without reading. Both are 40px tall natively, so they align without being rescaled. -->
-      <div class="app-links">
-        <a href="https://apps.apple.com/us/app/familiar-player/id6759879772?platform=mac"
-           target="_blank" rel="noopener" class="app-badge">
-          <img src="./assets/mac-app-store-badge.svg" alt="Download on the Mac App Store"
-               width="156" height="40">
-        </a>
-        <!-- Canonical URL rather than ?platform=iphone, which 301s to exactly this. -->
-        <a href="https://apps.apple.com/us/app/familiar-player/id6759879772"
-           target="_blank" rel="noopener" class="app-badge">
-          <img src="./assets/app-store-badge.svg" alt="Download on the App Store"
-               width="120" height="40">
-        </a>
-      </div>
-      <p class="app-links-note">Both need a Familiar server to connect to. The Mac app needs macOS&nbsp;14.4 or later.</p>
-    </div>
+    <!-- The App Store badges were here, under "Already running Familiar? Get the apps", and are
+         deliberately gone (2026-10-02). ADR-0143's step 3 offers each player where the reader has
+         chosen a server, which is what the note beside them was trying to say; a second set here
+         competed with Install, the one call to action ADR-0055 point 11 asks for. -->
     </div>
   </div>
 </header>
@@ -322,11 +296,15 @@ docker compose -f docker-compose.prod.yml -f docker-compose.desktop.yml up -d</c
     <div class="platforms" id="clients">
       <div class="platform-panel" id="c-iphone" role="tabpanel" aria-labelledby="tab-c-iphone">
         <h4 class="platform-heading">iPhone &amp; iPad</h4>
-        <p>Get <a href="https://apps.apple.com/us/app/familiar-player/id6759879772" target="_blank" rel="noopener">Familiar from the App Store</a>.</p>
+        <!-- Apple's own badges, unmodified, at their native 40px: Apple asks that they be used as
+             supplied where you link to a listing. Moved here from the hero on 2026-10-02. -->
+        <p class="app-links"><a href="https://apps.apple.com/us/app/familiar-player/id6759879772" target="_blank" rel="noopener" class="app-badge"><img src="./assets/app-store-badge.svg" alt="Download on the App Store" width="120" height="40"></a></p>
       </div>
       <div class="platform-panel" id="c-mac" role="tabpanel" aria-labelledby="tab-c-mac">
         <h4 class="platform-heading">Mac</h4>
-        <p>Get <a href="https://apps.apple.com/us/app/familiar-player/id6759879772?platform=mac" target="_blank" rel="noopener">Familiar from the Mac App Store</a>.</p>
+        <!-- `?platform=mac` is load-bearing: without it Apple serves the iOS listing. -->
+        <p class="app-links"><a href="https://apps.apple.com/us/app/familiar-player/id6759879772?platform=mac" target="_blank" rel="noopener" class="app-badge"><img src="./assets/mac-app-store-badge.svg" alt="Download on the Mac App Store" width="156" height="40"></a></p>
+        <p class="app-links-note">The Mac player needs macOS&nbsp;14.4 or later.</p>
         <p class="when-server" data-server="mac"><strong>If your server is Familiar Server on this Mac</strong>, choose <strong>Open in Familiar</strong> from its menu, and the player connects to it.</p>
       </div>
     </div>
@@ -398,15 +376,13 @@ docker compose -f docker-compose.prod.yml build</code></pre>
   <div class="section-head">
     <div>
       <h2>Get started</h2>
-      <p>One <code>compose up</code> against the music you already own.</p>
+      <p>One server, on the music you already own.</p>
     </div>
     <img class="section-art" src="./assets/marks/cat-curled.webp" alt="" aria-hidden="true"
          loading="lazy" width="679" height="515">
   </div>
   <div class="closing-cta-actions">
     <a href="#install" class="primary">Install the server</a>
-    <a href="https://apps.apple.com/us/app/familiar-player/id6759879772?platform=mac" target="_blank" rel="noopener">Mac app</a>
-    <a href="https://apps.apple.com/us/app/familiar-player/id6759879772" target="_blank" rel="noopener">iPhone &amp; iPad app</a>
     <a href="https://github.com/seethroughlab/familiar/issues" target="_blank" rel="noopener">Report a bug</a>
   </div>
 </section>

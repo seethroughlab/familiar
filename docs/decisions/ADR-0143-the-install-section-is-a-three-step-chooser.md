@@ -17,6 +17,11 @@ Implementation:
     script, both show with their "If your server is…" / "On a NAS or PC…" wording.
   - **Point 1's "unchosen" step 1 is not built:** with no choice in the URL the Mac is selected, as
     ADR-0095's first tab was. A reader still sees one complete path rather than an empty step 2.
+  - **The App Store links left the rest of the page** (2026-10-02, at Jeff's review): the hero's two
+    badges and the closing section's two app links went, and Apple's badges moved into step 3. The
+    page's only call to action outside `#install` is Install, as ADR-0055 point 11 has it.
+    `site/e2e/app-links.spec.ts` now asserts there is no App Store link outside `#install`; it
+    asserted the opposite, that both sat in the hero.
   - `docs/FAMILIAR-SERVER.md` is new: the Mac path's one canonical document (ADR-0095 point 3),
     which had none.
   - `site/e2e/toggle.spec.ts`: both choosers, the link round trip, an unknown value, every path

@@ -115,7 +115,7 @@ test.describe('install platform chooser', () => {
 
     await page.getByRole('tab', { name: 'Synology' }).click();
     await expect(page.locator('#c-mac .when-server')).toBeHidden();
-    await expect(page.locator('#c-mac')).toContainText('Mac App Store');
+    await expect(page.locator('#c-mac a[href*="platform=mac"]')).toBeVisible();
   });
 
   test('the chosen pair is in the link, and a link opens on it', async ({ page }) => {

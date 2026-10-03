@@ -340,19 +340,9 @@ a:hover { text-decoration: underline; }
 }
 
 /* --- The two apps ---
-   Named links rather than the single "Download on the App Store" badge these replace. One badge
-   could only point at one listing, and the Mac app was the half it hid.
-
-   Sized below `.hero-cta`'s primary button on purpose: ADR-0055 point 11 keeps Install as the
-   call to action, because an app without a server behind it stops at a setup screen. */
-
-.hero-apps { margin-top: 22px; }
-
-.hero-apps-label {
-  margin: 0 0 8px;
-  font-size: 13px;
-  color: var(--text-muted);
-}
+   Apple's badges, one per listing, in the install section's step 3 (ADR-0143), where the reader
+   has already chosen a server. They were in the hero until 2026-10-02 and competed with Install,
+   the one call to action ADR-0055 point 11 asks for. */
 
 /* 12px is Apple's minimum clear space around a 40px badge (a quarter of its height); the gap is
    the space *between* the two, so it has to be at least that. */
