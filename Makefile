@@ -1,7 +1,7 @@
 # Familiar - Development Makefile
 # For local development and quick deploys to NAS
 
-.PHONY: help dev dev-remote build deploy-dev deploy-frontend deploy-backend release-testflight deploy-device smoke-test-docker
+.PHONY: help dev dev-remote build deploy-dev restart-nas deploy-frontend deploy-backend release-testflight deploy-device smoke-test-docker
 
 help:
 	@echo "Familiar Development Commands"
@@ -12,6 +12,7 @@ help:
 	@echo ""
 	@echo "Deploy to NAS:"
 	@echo "  make deploy-dev      - Build & deploy everything (~30s)"
+	@echo "  make restart-nas     - Restart the NAS stack with all three compose files"
 	@echo "  make deploy-frontend - Deploy frontend only"
 	@echo "  make deploy-backend  - Deploy backend only"
 	@echo ""
@@ -47,6 +48,15 @@ build:
 # Quick deploy to NAS (build + rsync + restart)
 deploy-dev:
 	./scripts/deploy-dev.sh
+
+# Restart the NAS stack the way it runs: all three compose files. A bare `docker compose up -d` in
+# /opt/familiar/docker reads the dev `docker-compose.yml` instead, and on 2026-10-02 that recreated
+# familiar-postgres and familiar-redis on `docker_default` rather than `docker_familiar-network`;
+# the API could not resolve them for about 2.5 hours. Setting COMPOSE_FILE in the NAS's
+# docker/.env makes the bare command safe too (docs/START-HERE.md).
+NAS_COMPOSE_FILES = -f docker-compose.prod.yml -f docker-compose.gpu.yml -f docker-compose.inbox.yml
+restart-nas:
+	ssh jeff@$${NAS_HOST:-openmediavault} "cd /opt/familiar/docker && docker compose $(NAS_COMPOSE_FILES) up -d"
 
 # Deploy frontend only
 deploy-frontend:

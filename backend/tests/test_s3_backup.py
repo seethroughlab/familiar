@@ -700,3 +700,59 @@ async def test_a_successful_run_writes_no_failure(fake_redis, s3_settings):
         await routes._run_and_record(lambda: {"status": "success", "files_uploaded": 3}, "backup")
 
     assert [h for h in svc.get_backup_history() if h.get("status") == "error"] == []
+
+
+# --- found 2026-10-02: backups stopped on 2026-09-06 and nothing noticed ------------------------
+
+
+@mock_aws
+def test_back_up_now_runs_with_scheduling_off(fake_redis, s3_settings, library, fake_pg):
+    """The switch is "Scheduled backups". With it off, "Back up now" answered "S3 backup not
+    configured" while the bucket and keys were configured, and backed up nothing."""
+    client = boto3.client("s3", region_name=REGION)
+    _bucket(client)
+    s3mod.get_app_settings_service().get().s3_backup_enabled = False
+
+    result = _service().run_backup()
+
+    assert result.get("status") == "success", result
+
+
+async def test_the_run_endpoint_refuses_without_credentials(fake_redis, s3_settings):
+    """It answered "started" for a run that failed at once, and the card showed nothing."""
+    from app.api.exceptions import ConflictError
+    from app.api.routes import s3_backup as routes
+
+    s3_settings["s3_backup_bucket"] = None
+    with patch.object(routes, "get_s3_backup_service", return_value=_service()):
+        with pytest.raises(ConflictError) as refused:
+            await routes.trigger_backup()
+    assert "S3_BACKUP_BUCKET" in refused.value.message
+
+
+@mock_aws
+def test_the_last_success_outlives_the_history(fake_redis, s3_settings, library, fake_pg):
+    """History expires 30 days after its last write, so a month with backups off erased the last
+    success, and every Overview rule that reads it went quiet."""
+    client = boto3.client("s3", region_name=REGION)
+    _bucket(client)
+    svc = _service()
+    assert svc.run_backup().get("status") == "success"
+
+    fake_redis.delete(s3mod.REDIS_BACKUP_HISTORY)  # what the TTL does after 30 quiet days
+    status = svc.get_status()
+
+    assert status["last_backup"] is None
+    assert status["last_success"] and status["last_success"]["status"] == "success"
+    assert status["configured"] is True
+
+
+def test_a_server_from_before_the_key_finds_its_last_success_in_history(fake_redis, s3_settings):
+    svc = _service()
+    svc._save_history_entry({"timestamp": "2026-09-06T03:30:00", "status": "success"})
+    svc._save_history_entry({"timestamp": "2026-10-02T22:00:00", "status": "error", "error": "x"})
+
+    status = svc.get_status()
+
+    assert status["last_backup"]["status"] == "error"
+    assert status["last_success"]["timestamp"] == "2026-09-06T03:30:00"

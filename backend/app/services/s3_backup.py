@@ -32,6 +32,15 @@ logger = logging.getLogger(__name__)
 REDIS_BACKUP_PROGRESS = "familiar:s3backup:progress"
 REDIS_BACKUP_LOCK = "familiar:s3backup:lock"
 REDIS_BACKUP_HISTORY = "familiar:s3backup:history"
+# The last successful backup, kept with no expiry. History expires 30 days after its last write, so
+# a month with backups switched off erased every trace of the last success, and the Overview's
+# rules, which read it, went quiet exactly when they mattered (found 2026-10-02, after backups had
+# stopped unnoticed on 2026-09-06).
+REDIS_BACKUP_LAST_SUCCESS = "familiar:s3backup:last_success"
+NOT_CONFIGURED = (
+    "S3 backup is not configured: set S3_BACKUP_BUCKET, S3_BACKUP_ACCESS_KEY_ID and "
+    "S3_BACKUP_SECRET_ACCESS_KEY"
+)
 REDIS_RESTORE_STATE = "familiar:s3backup:restore"
 
 # S3 pricing (us-east-1, as of 2024)
@@ -126,6 +135,11 @@ class S3BackupService:
             "prefix": svc.get_effective("s3_backup_prefix") or "",
             "schedule": s.s3_backup_schedule,
         }
+
+    @staticmethod
+    def is_configured(cfg: dict[str, Any]) -> bool:
+        """Bucket and credentials are set; whether a schedule is on is a separate question."""
+        return bool(cfg["bucket"] and cfg["access_key_id"] and cfg["secret_access_key"])
 
     def _get_client(self, cfg: dict[str, Any] | None = None):
         """Get a boto3 S3 client from current settings."""
@@ -403,8 +417,12 @@ class S3BackupService:
         from sqlalchemy import create_engine, text
 
         cfg = self._get_settings()
-        if not cfg["enabled"] or not cfg["bucket"] or not cfg["access_key_id"]:
-            return {"status": "error", "error": "S3 backup not configured"}
+        # Credentials only. Whether backups run on a schedule is the scheduler's question
+        # (background/backup.py checks s3_backup_enabled before calling this); a manual "Back up
+        # now" with scheduling off is a backup someone asked for. This used to refuse it, as
+        # "S3 backup not configured", while the bucket and keys were configured.
+        if not self.is_configured(cfg):
+            return {"status": "error", "error": NOT_CONFIGURED}
 
         redis = get_resilient_redis()
 
@@ -584,16 +602,19 @@ class S3BackupService:
             progress.update(phase="complete", status="complete", current_file=None)
 
             # Save to history
-            self._save_history_entry(
-                {
-                    "timestamp": utcnow().isoformat(),
-                    "duration_seconds": round(duration, 1),
-                    "files_uploaded": final["files_uploaded"],
-                    "files_skipped": final["files_skipped"],
-                    "bytes_uploaded": final["bytes_uploaded"],
-                    "status": "success",
-                }
-            )
+            entry = {
+                "timestamp": utcnow().isoformat(),
+                "duration_seconds": round(duration, 1),
+                "files_uploaded": final["files_uploaded"],
+                "files_skipped": final["files_skipped"],
+                "bytes_uploaded": final["bytes_uploaded"],
+                "status": "success",
+            }
+            self._save_history_entry(entry)
+            try:
+                redis.set(REDIS_BACKUP_LAST_SUCCESS, json.dumps(entry))
+            except Exception as e:
+                logger.warning(f"Failed to record the last successful backup: {e}")
 
             return {
                 "status": "success",
@@ -916,14 +937,25 @@ class S3BackupService:
             is_running = progress.get("status") == "running"
 
         last_backup = history[0] if history else None
+        last_success = None
+        try:
+            raw = get_resilient_redis().get(REDIS_BACKUP_LAST_SUCCESS)
+            last_success = json.loads(raw) if raw else None
+        except Exception:
+            pass
+        if last_success is None:
+            # Servers that backed up before this key existed: the newest success still in history.
+            last_success = next((h for h in history if h.get("status") == "success"), None)
 
         return {
+            "configured": self.is_configured(cfg),
             "enabled": cfg["enabled"],
             "bucket": cfg["bucket"],
             "region": cfg["region"],
             "schedule": cfg["schedule"],
             "is_running": is_running,
             "last_backup": last_backup,
+            "last_success": last_success,
             "progress": progress if is_running else None,
         }
 

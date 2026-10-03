@@ -29,12 +29,26 @@ import {
 
 import { appSettingsApi, s3BackupApi } from '../../api';
 import { queryKeys } from '../../api/queryKeys';
+import { getUserFriendlyMessage } from '../../utils/errorNotifications';
 
 const SCHEDULES = [
   { value: 'daily', label: 'Daily', hint: '03:30' },
   { value: 'weekly', label: 'Weekly', hint: 'Sundays, 03:30' },
   { value: 'monthly', label: 'Monthly', hint: '1st, 03:30' },
 ];
+
+type Run = { timestamp?: string; status?: string; error?: string } | null | undefined;
+
+/** History timestamps are naive UTC (`utcnow().isoformat()`); without a zone a browser reads them as local. */
+function asUtc(ts: string): Date {
+  return new Date(/[zZ]|[+-]\d\d:\d\d$/.test(ts) ? ts : `${ts}Z`);
+}
+
+function when(ts: string | undefined): string {
+  if (!ts) return 'at an unknown time';
+  const d = asUtc(ts);
+  return Number.isNaN(d.getTime()) ? 'at an unknown time' : d.toLocaleString();
+}
 
 function formatBytes(n: number): string {
   if (!n) return '0 B';
@@ -46,6 +60,7 @@ function formatBytes(n: number): string {
 export function BackupSettings() {
   const queryClient = useQueryClient();
   const [validation, setValidation] = useState<string | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
 
   const { data: settings, isLoading } = useQuery({
     queryKey: queryKeys.appSettings.all,
@@ -88,7 +103,10 @@ export function BackupSettings() {
 
   const runNow = useMutation({
     mutationFn: s3BackupApi.run,
+    onMutate: () => setRunError(null),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.s3Backup.all }),
+    // A refusal used to be invisible: the endpoint answered "started" and the card said nothing.
+    onError: (e: unknown) => setRunError(getUserFriendlyMessage(e)),
   });
 
   const cancel = useMutation({
@@ -148,7 +166,7 @@ export function BackupSettings() {
               }`}
             >
               <span
-                className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                className={`absolute left-0 top-1 w-4 h-4 rounded-full bg-white transition-transform ${
                   enabled ? 'translate-x-6' : 'translate-x-1'
                 }`}
               />
@@ -185,11 +203,32 @@ export function BackupSettings() {
             </div>
           )}
 
-          {status?.last_backup && !status.is_running && (
-            <p className="text-xs text-zinc-500">
-              Last backup {String(status.last_backup.completed_at ?? 'unknown')}
-            </p>
-          )}
+          {/* "Last backup unknown" for a month of successes: this read `completed_at`, which no
+              history entry has (they record `timestamp`), and showed the newest run of any kind. */}
+          {status && !status.is_running && (() => {
+            const success = status.last_success as Run;
+            const last = status.last_backup as Run;
+            const failedSince =
+              last?.status && last.status !== 'success' &&
+              (!success?.timestamp || (last.timestamp ?? '') > success.timestamp);
+            return (
+              <div className="text-xs space-y-1" data-testid="backup-last">
+                <p className="text-zinc-500">
+                  {success?.timestamp
+                    ? `Last successful backup ${when(success.timestamp)}`
+                    : 'No successful backup recorded'}
+                </p>
+                {failedSince && (
+                  <p className="flex items-start gap-1 text-danger">
+                    <XCircle className="w-3.5 h-3.5 mt-px flex-shrink-0" />
+                    <span>
+                      Last attempt failed {when(last?.timestamp)}: {last?.error ?? last?.status}
+                    </span>
+                  </p>
+                )}
+              </div>
+            );
+          })()}
 
           {status?.is_running && status.progress && (
             <div className="text-xs text-zinc-400">
@@ -230,6 +269,13 @@ export function BackupSettings() {
               {validate.isPending ? 'Checking…' : 'Test bucket'}
             </button>
           </div>
+
+          {runError && (
+            <div className="flex items-start gap-2 text-xs" role="alert">
+              <XCircle className="w-4 h-4 text-danger flex-shrink-0" />
+              <span className="text-zinc-400">{runError}</span>
+            </div>
+          )}
 
           {validation && (
             <div className="flex items-start gap-2 text-xs">

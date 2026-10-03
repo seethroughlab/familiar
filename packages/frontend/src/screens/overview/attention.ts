@@ -187,17 +187,42 @@ export function attentionItems(inputs: OverviewInputs): AttentionItem[] {
     items.push({ tone: 'warn', title: 'Library sync may be stalled', detail: running.sub, to: '/library', where: 'Library › Sync' });
   }
 
+  // Backups. Found 2026-10-02: they had stopped on 2026-09-06 and nothing said so for four weeks.
+  // "Backups are off" was only `info`; a monthly schedule had no overdue check; ages were taken
+  // from the newest run of any kind; and history expires 30 days after its last write, so a month
+  // off emptied it and every rule here went quiet. The last success now has its own key.
   const b = inputs.backup;
-  const last = b?.last_backup as { timestamp?: string; status?: string } | null | undefined;
-  if (last?.status && last.status !== 'success') {
-    items.push({ tone: 'bad', title: 'The last backup failed', detail: `S3 backup ended with status "${last.status}"`, to: '/server/backup', where: 'Server › Backup' });
-  } else if (b) {
-    const age = ageMs(last?.timestamp, now);
-    const period = b.schedule === 'daily' ? DAY : b.schedule === 'weekly' ? 7 * DAY : null;
-    if (b.enabled && period && age !== null && age > period * 1.5) {
-      items.push({ tone: 'warn', title: `Last backup was ${days(age)} days ago`, detail: `The schedule is ${b.schedule}; a backup is overdue`, to: '/server/backup', where: 'Server › Backup' });
-    } else if (!b.enabled && age !== null) {
-      items.push({ tone: 'info', title: 'Backups are off', detail: `Last backup ${days(age)} days ago; S3 is configured but the schedule is disabled`, to: '/server/backup', where: 'Server › Backup' });
+  if (b && (b.configured ?? Boolean(b.bucket))) {
+    type Run = { timestamp?: string; status?: string; error?: string } | null | undefined;
+    const last = b.last_backup as Run;
+    const success = (b.last_success ?? (last?.status === 'success' ? last : null)) as Run;
+    const failedSince =
+      !!last?.status && last.status !== 'success' &&
+      (!success?.timestamp || (last.timestamp ?? '') > success.timestamp);
+    const age = ageMs(success?.timestamp, now);
+    const where = { to: '/server/backup', where: 'Server › Backup' } as const;
+
+    if (failedSince) {
+      items.push({ tone: 'bad', title: 'The last backup failed', detail: last?.error ?? `S3 backup ended with status "${last?.status}"`, ...where });
+    }
+    if (!b.enabled) {
+      items.push({
+        tone: 'warn',
+        title: 'Backups are off',
+        detail: age !== null
+          ? `The last successful backup was ${days(age)} days ago; S3 is configured but scheduled backups are disabled`
+          : 'S3 is configured but scheduled backups are disabled, and no backup has succeeded',
+        ...where,
+      });
+    } else if (age === null) {
+      if (!failedSince) {
+        items.push({ tone: 'warn', title: 'No successful backup recorded', detail: 'Scheduled backups are on, but none has succeeded yet', ...where });
+      }
+    } else {
+      const period = b.schedule === 'daily' ? DAY : b.schedule === 'weekly' ? 7 * DAY : b.schedule === 'monthly' ? 31 * DAY : null;
+      if (period && age > period * 1.5) {
+        items.push({ tone: 'warn', title: `Last backup was ${days(age)} days ago`, detail: `The schedule is ${b.schedule}; a backup is overdue`, ...where });
+      }
     }
   }
 

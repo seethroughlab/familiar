@@ -57,17 +57,17 @@ const idleNas = {
 };
 
 describe('the idle NAS', () => {
-  it('is healthy, nothing running, with the backlog, the artwork gap and the switched-off backup as pending work', () => {
+  it('is healthy, nothing running, with the backlog and the artwork gap pending, and the switched-off backup a warning', () => {
     expect(healthAnswer(idleNas.health)).toMatchObject({ tone: 'ok', head: 'Healthy', sub: '5 of 5 services · v0.2.0-alpha4' });
     expect(runningAnswer(idleNas.sync, idleNas.jobs, NOW)).toMatchObject({ tone: 'idle', head: 'Nothing running' });
 
     const items = attentionItems(idleNas);
     expect(items.map((i) => [i.tone, i.title])).toEqual([
-      ['info', 'Backups are off'],
+      ['warn', 'Backups are off'],
       ['info', 'Analysis backlog'],
       ['info', '364 albums without artwork'],
     ]);
-    expect(attentionAnswer(items)).toMatchObject({ tone: 'info', head: '3 need attention', sub: '3 pending' });
+    expect(attentionAnswer(items).tone).toBe('warn');
   });
 
   it('reads the backlog from the phase queues, not from library/stats, and names each phase', () => {
@@ -78,6 +78,45 @@ describe('the idle NAS', () => {
 
   it('a working provider that once failed is not attention; off and unmonitored are not attention', () => {
     expect(attentionItems(idleNas).filter((i) => i.to === '/server/providers')).toEqual([]);
+  });
+});
+
+describe('backups that quietly stopped (2026-10-02)', () => {
+  const run = (offsetDays: number, status = 'success', error?: string) => ({
+    timestamp: new Date(NOW - offsetDays * DAY).toISOString(), status, ...(error ? { error } : {}),
+  });
+
+  it('switched off is a warning, naming the last success', () => {
+    // Backups stopped on 2026-09-06 and this was an `info` line among pending work for four weeks.
+    const items = attentionItems({ ...idleNas, backup: { ...idleNas.backup, enabled: false, last_backup: run(27), last_success: run(27) } });
+    expect(items.find((i) => i.title === 'Backups are off')).toMatchObject({ tone: 'warn', detail: expect.stringContaining('27 days ago') });
+  });
+
+  it('still says so once history has expired', () => {
+    // History expires 30 days after its last write, and every rule went quiet with it.
+    const items = attentionItems({ ...idleNas, backup: { ...idleNas.backup, enabled: false, last_backup: null, last_success: run(40) } });
+    expect(items.find((i) => i.title === 'Backups are off')?.detail).toContain('40 days ago');
+  });
+
+  it('a monthly schedule can be overdue too', () => {
+    const items = attentionItems({ ...idleNas, backup: { ...idleNas.backup, enabled: true, schedule: 'monthly', last_backup: run(50), last_success: run(50) } });
+    expect(items.find((i) => i.title.startsWith('Last backup was'))).toMatchObject({ tone: 'warn', title: 'Last backup was 50 days ago' });
+  });
+
+  it('a failure shows its error, and the age is measured from the last success', () => {
+    const items = attentionItems({ ...idleNas, backup: { ...idleNas.backup, enabled: true, schedule: 'weekly', last_backup: run(1, 'error', 'AccessDenied: RestoreObject'), last_success: run(20) } });
+    expect(items.find((i) => i.title === 'The last backup failed')?.detail).toBe('AccessDenied: RestoreObject');
+    expect(items.find((i) => i.title.startsWith('Last backup was'))?.title).toBe('Last backup was 20 days ago');
+  });
+
+  it('on, configured, and never succeeded is a warning', () => {
+    const items = attentionItems({ ...idleNas, backup: { ...idleNas.backup, enabled: true, last_backup: null, last_success: null } });
+    expect(items.find((i) => i.title === 'No successful backup recorded')?.tone).toBe('warn');
+  });
+
+  it('a server with no S3 configured is not nagged', () => {
+    const items = attentionItems({ ...idleNas, backup: { ...idleNas.backup, configured: false, bucket: null, enabled: false } });
+    expect(items.filter((i) => i.to === '/server/backup')).toEqual([]);
   });
 });
 

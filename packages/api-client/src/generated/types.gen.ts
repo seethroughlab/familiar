@@ -1137,6 +1137,10 @@ export type BackupStatusResponse = {
      */
     bucket?: string | null;
     /**
+     * Configured
+     */
+    configured?: boolean;
+    /**
      * Enabled
      */
     enabled: boolean;
@@ -1148,6 +1152,12 @@ export type BackupStatusResponse = {
      * Last Backup
      */
     last_backup?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Last Success
+     */
+    last_success?: {
         [key: string]: unknown;
     } | null;
     /**
