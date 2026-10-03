@@ -306,6 +306,10 @@ jobs:
         with:
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-') }}
+          # Never "Latest" at creation: the .dmg arrives later, from the familiar-server job, and
+          # releases/latest/download/Familiar-Server.dmg must always name a file that exists. That
+          # job marks the release latest once the .dmg is attached (ADR-0148 point 2).
+          make_latest: false
           # Fetched by servers that run outside Docker, from the release matching their own
           # version, and accepted only if they match the backend's pinned hashes (ADR-0132).
           files: |
@@ -382,10 +386,24 @@ jobs:
       - name: Package and notarize
         run: desktop/macos/scripts/package.sh "$TAG"
 
+      # Twice: under its version, and as Familiar-Server.dmg, the one name the site and the docs can
+      # link for "the current Familiar Server" (ADR-0148 point 1).
       - name: Attach to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$TAG" "desktop/macos/build/Familiar-Server-${TAG#v}.dmg" --clobber
+        run: |
+          cp "desktop/macos/build/Familiar-Server-${TAG#v}.dmg" desktop/macos/build/Familiar-Server.dmg
+          gh release upload "$TAG" \
+            "desktop/macos/build/Familiar-Server-${TAG#v}.dmg" \
+            desktop/macos/build/Familiar-Server.dmg --clobber
+
+      # Only now: until the .dmg is attached, the previous release stays latest, so
+      # releases/latest/download/Familiar-Server.dmg never 404s, and a failed build here leaves the
+      # last good one in place (ADR-0148 point 2). Not a prerelease, or GitHub's "latest" skips it.
+      - name: Mark the release latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "$TAG" --prerelease=false --latest
 
       # After the upload: the feed must never name a file that is not there yet. Every installed
       # Familiar Server reads this branch (ADR-0135 point 3), so a key that does not match the one
