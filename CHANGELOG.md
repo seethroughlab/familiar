@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-beta13] - 2026-10-02
+
+No migrations; the API contract stays at v1.
+
+### Familiar Server
+
+- **Starts on a large network share.** Startup's check for audio in the library searched the whole
+  library once per audio format until one matched. On a NAS share over SMB (8,808 folders) that
+  outlasted Familiar Server's three-minute limit, and the app restarted the server forever:
+  `v0.2.0-beta12` never came up there. The check is now one pass, stops at the first audio file or
+  after three seconds, and does not warn when it cannot tell. On that share: under a second.
+
+### Analysis
+
+- A worker's log lines carry the time and process id, so a track's minutes can be measured from
+  the log. `[MEMORY]` reports megabytes on macOS; it reported each worker at about 1.2 TB.
+
 ## [0.2.0-beta12] - 2026-10-02
 
 No migrations; the API contract stays at v1.
