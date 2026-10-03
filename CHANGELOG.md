@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-beta14] - 2026-10-03
+
+No migrations; the API contract stays at v1 (two additive fields on the backup status).
+
+### Familiar Server
+
+- **A stable download link.** `releases/latest/download/Familiar-Server.dmg` now always serves the
+  current build: the `.dmg` is also attached under that name, and a release is marked latest only
+  once it is (ADR-0148).
+
+### Analysis
+
+- **The community cache answers every call a worker makes**, not only the first. The rest failed
+  with "Event loop is closed": every cache hit's section-analysis lookup, and, on a server that
+  contributes, the contribution after a lookup.
+
+### Backups
+
+- **"Back up now" works with scheduled backups off**, and refuses with what to set when credentials
+  are missing, instead of answering "started" and doing nothing.
+- **The card names the last successful backup** (it said "Last backup unknown" over a month of
+  successes) and shows the newest run's error when that run failed.
+- **The Overview says when backups stop:** switched off is a warning, a monthly schedule can be
+  overdue, a failure shows its error, and the last success is kept with no expiry, so a month off no
+  longer silences every rule.
+- `docs/CONFIGURATION.md` gives the minimal IAM policy instead of "S3 full access";
+  `make restart-nas` restarts the NAS with all three compose files.
+
+### Website
+
+- **Install is three steps**: where your server runs, installing it, where you listen (ADR-0143).
+  The Mac path is Familiar Server, every path ends signed in, and the App Store links live in the
+  last step.
+- **"Listening away from home" says what sign-in covers** — the library, not the music — rather than
+  that there is no login (ADR-0145).
+- The FAQ agrees with the install section, and decisions were taken to lead the site with the Mac and
+  to plan Windows and Android (ADR-0146, ADR-0147).
+
 ## [0.2.0-beta13] - 2026-10-02
 
 No migrations; the API contract stays at v1.
