@@ -79,17 +79,19 @@ installs on a given platform.
 | Installs on Windows | true | **Run end to end on Windows 11 Pro, 2026-08-30.** The panel's three commands verbatim: `compose-exit=0`, all three containers healthy, `/api/v1/health` and the UI both **HTTP 200**, and `docker exec familiar-api ls /music` listing the real contents of `C:\Users\jeff\Music`. The bind mount — the failure this platform was most likely to have — works |
 | `./start.sh` builds the image locally | **false — corrected on the page** | It does not build. `start.sh:84` runs `docker compose -f docker-compose.prod.yml`, which pulls `ghcr.io/seethroughlab/familiar:latest`, and there is no `--build` anywhere in the script. The "Build from source" block now shows an explicit `compose build` and says what `start.sh` actually does |
 | Windows needs `docker-compose.desktop.yml` | true | That file only swaps `journald` for `json-file`, and journald is Linux-only. Docker Desktop runs a Linux VM on macOS and Windows alike, so the override applies to both. It was `docker-compose.macos.yml` until 2026-08-29; the rename is why the Windows panel no longer has to explain itself |
-| Familiar has no login | **false for every new server since ADR-0141 — still on the page** | A new server mints a token at first start and answers its API with 401 until signed in; an existing tokenless server keeps serving. The `#remote` section still says this. ADR-0143 left it to a revision of ADR-0096, named as its follow-up. **Revisit this row first.** Original evidence: ADR-0045 accepted and unimplemented, no token in `deps.py`, `config.py` or `main.py` |
-| A reverse proxy without authentication does not protect it | true | Follows from the row above: there is nothing behind the proxy to authenticate against |
+| ~~Familiar has no login~~ | **removed 2026-10-03 (ADR-0145)** | False for every server set up since ADR-0141, which starts with a token. Replaced by the row below |
+| Sign-in covers the library, not the music; the server speaks plain HTTP; a server from before October 2026 may have no sign-in | true | `backend/app/api/auth.py`: `PROTECTED_PREFIXES` gates `/api/` and `/mcp`; `MEDIA_ROUTES` exempts `GET`/`HEAD` on streams, artwork, artist images, video streams and posters, and avatars. No TLS in `app/serve.py`, `docker/Dockerfile` or `ServerLaunch.swift`. ADR-0141 point 3 keeps a tokenless older server serving. **Expiry (ADR-0145 point 6):** revisit if media is gated or the server terminates TLS |
+| A reverse proxy does not make Familiar safe to publish | true | With HTTPS it keeps the token private in transit, but `MEDIA_ROUTES` needs no token; a proxy that adds its own login gates the media too, which the Apple players and speakers (WiiM, Sonos) cannot answer — the reason media is exempt (ADR-0045, recorded in `auth.py`) |
 | Tailscale gives a private network, HTTPS and no router configuration | **unverifiable** | Tailscale's own documented behaviour, not checkable here. ADR-0096 point 5 is why the page says nothing about their pricing, plans or limits — `ADR-0055` point 2 was burned once already by claims about somebody else's product |
 
 | Windows needs `docker-compose.desktop.yml` | true | **Measured, not inferred.** `docker run --rm --log-driver=journald hello-world` on Windows Docker Desktop fails with *"failed to initialize logging driver: journald"*, exit **125**; the same run with `--log-driver=json-file` prints "Hello from Docker!". Without the override the install fails |
 | The first run downloads about 7&nbsp;GB | true | Measured on the Windows install: `ghcr.io/seethroughlab/familiar:latest` **6.09 GB**, `pgvector/pgvector:pg16` 621 MB, `redis:7-alpine` 58 MB. The page said "about 4 GB" until 2026-08-30, a figure taken from `MACOS_BEGINNER.md` rather than from a pull |
 | `docs/WINDOWS.md`'s "Critical" issues block a Windows install | **false** | They do not, and two of them audit code that no longer exists: `BLOCKED_PATHS` appears nowhere in `backend/`, and there is no filesystem-browse endpoint. The document is dated 2026-01-14 and marked "Documented for future implementation". It is not linked from the site; see the ADR-0095 follow-up |
 
-**Expiry (ADR-0096 point 6).** The last three rows depend on Familiar having no authentication. When
-ADR-0045 ships, the "Listening away from home" section and these rows are revisited — a scheduled
-edit, not a later discovery.
+**Expiry (ADR-0145 point 6, replacing ADR-0096 point 6, which fired when ADR-0141 shipped the
+token).** The sign-in and reverse-proxy rows depend on the media exemption and on the server
+speaking plain HTTP. If either changes, the "Listening away from home" section and these rows are
+revisited — a scheduled edit, not a later discovery.
 
 ## Removed, with the reason
 

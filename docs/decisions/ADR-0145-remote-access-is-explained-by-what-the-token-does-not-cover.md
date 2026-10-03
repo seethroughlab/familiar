@@ -6,6 +6,13 @@ Date: 2026-10-03
 
 Implementation:
 - **Accepted 2026-10-03**, as written.
+- **Built 2026-10-03.** `site/index.html` `#remote`: the note leads with "Sign-in covers the library,
+  not the music", the three facts, and the recommendation; Tailscale's paragraph gains the encrypted
+  connection and stops at the server's `ts.net` address; the reverse-proxy warning is restated; the
+  ADR-0045 footnote is gone. `docs/SITE-CLAIMS.md`: the no-login row removed, a sign-in row with
+  this ADR's expiry, the reverse-proxy row restated. `site/e2e/toggle.spec.ts` asserts the new
+  sentence, that "Familiar has no login" is nowhere in `<main>`, and that the section says nothing
+  about what an app is told.
 
 Supersedes points 2 and 6 of [ADR-0096](ADR-0096-remote-access-is-explained-not-instructed.md), and
 extends [ADR-0141](ADR-0141-every-new-server-starts-with-a-token.md) and
