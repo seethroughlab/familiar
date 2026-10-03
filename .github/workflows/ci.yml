@@ -116,6 +116,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build and test
         run: swift build && swift test
+      # The Sparkle feed's release notes (scripts/appcast.py), run by the release job and nowhere
+      # else, so a mistake would otherwise first show in every installed copy's update dialog.
+      - name: Appcast release notes
+        run: python3 scripts/test_appcast.py
 
   macos-compose-integration:
     name: macOS Compose Integration

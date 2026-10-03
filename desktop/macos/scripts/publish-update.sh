@@ -63,8 +63,11 @@ else
   git -C "$REPO" worktree add -q --detach "$FEED"
   git -C "$FEED" switch -q --orphan appcast-new
 fi
+# --notes: each entry's notes are its CHANGELOG.md section, not a link to the release page, which
+# Sparkle's notes pane showed as GitHub's header (appcast.py's docstring).
 python3 "$HERE/scripts/appcast.py" "$FEED/appcast.xml" \
-  --tag "$TAG" --build "$BUILD" --length "$LENGTH" --signature "$SIGNATURE"
+  --tag "$TAG" --build "$BUILD" --length "$LENGTH" --signature "$SIGNATURE" \
+  --notes "$REPO/CHANGELOG.md"
 if [ -n "${DRY_RUN:-}" ]; then cat "$FEED/appcast.xml"; echo "==> dry run: not pushed"; exit 0; fi
 git -C "$FEED" add appcast.xml
 git -C "$FEED" -c user.name="Familiar release" -c user.email="releases@seethroughlab.com" \
