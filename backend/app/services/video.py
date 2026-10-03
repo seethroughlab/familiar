@@ -136,9 +136,17 @@ class VideoService:
         """
         try:
             # Use yt-dlp to search YouTube
+            # --flat-playlist: list the results without extracting each one. A full extraction
+            # resolves every result's formats, which a list of titles never uses, and took 9.2 s
+            # for five results on the NAS against 2.1 s flat (2026-10-03). It mattered because
+            # the Apple client gives up on a silent server after 10 s (`FamiliarClient`'s
+            # `timeoutIntervalForRequest`): two searches for a video that exists took 10.8 s and
+            # 11.2 s, both answered 200 to a client that had already left, and no download was
+            # ever started. The download step extracts the one video chosen, as before.
             cmd = [
                 "yt-dlp",
                 *self._base_ytdlp_args(),
+                "--flat-playlist",
                 "--dump-json",
                 "--no-playlist",
                 f"ytsearch{limit}:{query}"
@@ -208,7 +216,9 @@ class VideoService:
                         video_id=data.get('id') or '',
                         title=data.get('title') or '',
                         channel=data.get('channel') or data.get('uploader') or '',
-                        duration=data.get('duration', 0) or 0,
+                        # A flat entry's duration can be fractional (249.0, 248.7); the API
+                        # declares whole seconds.
+                        duration=round(float(data.get('duration') or 0)),
                         description=data.get('description') or '',
                         thumbnail_url=thumbnail_url,
                         url=f"https://www.youtube.com/watch?v={data.get('id', '')}"

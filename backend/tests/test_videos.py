@@ -453,6 +453,44 @@ class TestSearchFailureIsNotAnEmptyResult:
         assert results[0].channel == ""  # null, not None: every reader treats it as text
 
     @pytest.mark.asyncio
+    async def test_search_lists_results_without_extracting_each_one(self, monkeypatch):
+        """Found 2026-10-03: a full extraction took 9–11 s for five results, past the Apple
+        client's 10-second timeout, so a search for a video that exists answered a client that had
+        already given up, and nothing was ever downloaded. Flat listing took 2.1 s."""
+        from app.services.video import VideoService
+
+        seen: list[tuple] = []
+        flat = (b'{"id": "1BhJBoSILk4", "title": "Haute & Freddy - Dance The Pain Away (Official '
+                b'Music Video)", "channel": "Haute & Freddy", "duration": 248.7, "thumbnail": null, '
+                b'"thumbnails": [{"url": "https://i.ytimg.com/vi/1BhJBoSILk4/hq720.jpg"}]}\n')
+
+        async def fake_exec(*args, **kwargs):
+            seen.append(args)
+
+            class Proc:
+                returncode = 0
+
+                async def communicate(self):
+                    return flat, b""
+
+                def kill(self):
+                    pass
+
+                async def wait(self):
+                    pass
+
+            return Proc()
+
+        monkeypatch.setattr("asyncio.create_subprocess_exec", fake_exec)
+        results = await VideoService().search("Haute & Freddy Dance the Pain Away")
+
+        assert "--flat-playlist" in seen[0]
+        assert results[0].video_id == "1BhJBoSILk4"
+        assert results[0].duration == 249  # whole seconds, as the API declares
+        assert results[0].thumbnail_url.endswith("hq720.jpg")
+        assert results[0].url == "https://www.youtube.com/watch?v=1BhJBoSILk4"
+
+    @pytest.mark.asyncio
     async def test_a_genuinely_empty_search_still_returns_empty(self, monkeypatch):
         """The other half: success with no matches is an empty list, not an error."""
         from app.services.video import VideoService
