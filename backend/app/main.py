@@ -192,6 +192,38 @@ def create_error_response(
     return JSONResponse(status_code=status_code, content=content, headers=headers)
 
 
+def library_has_audio(path: Path, budget_seconds: float = 3.0) -> bool | None:
+    """Whether the library holds an audio file: True, False, or None when the budget ran out first.
+
+    One walk, every extension at once, stopping at the first audio file or the budget. It used to be
+    one full `rglob` per extension with no match, which on a NAS share over SMB walked 8,808 folders
+    at ~32 s per 300 several times over, and Familiar Server restarted the server every three
+    minutes before startup finished (2026-10-02). This is a hint for a misconfigured path, so not
+    knowing is not a reason to warn.
+    """
+    deadline = time.monotonic() + budget_seconds
+    extensions = tuple(AUDIO_EXTENSIONS)
+    # os.scandir, not os.walk: os.walk lstat()s every subfolder before descending into any of them,
+    # 2,875 round trips at the top of that share, 22 s before it opened a single album. A listing
+    # already says which entries are folders.
+    folders = [path]
+    while folders:
+        if time.monotonic() > deadline:
+            return None
+        folder = folders.pop()
+        try:
+            with os.scandir(folder) as entries:
+                for entry in entries:
+                    if entry.name.lower().endswith(extensions):
+                        return True
+                    if entry.is_dir(follow_symlinks=False):
+                        folders.append(entry.path)
+        except OSError:
+            if folder == path:
+                raise  # the library itself; a subfolder that refuses is skipped
+    return False
+
+
 def validate_library_path() -> None:
     """Validate library path on startup and log warnings for issues."""
     path = MUSIC_LIBRARY_PATH
@@ -209,12 +241,7 @@ def validate_library_path() -> None:
 
     # Check if directory has any audio files (quick check)
     try:
-        has_audio = False
-        for ext in AUDIO_EXTENSIONS:
-            if any(path.rglob(f"*{ext}")):
-                has_audio = True
-                break
-        if not has_audio:
+        if library_has_audio(path) is False:
             logging.warning(
                 f"⚠️  Library path appears empty (no audio files): {path}. "
                 "Check that MUSIC_LIBRARY_PATH points to your music folder"
