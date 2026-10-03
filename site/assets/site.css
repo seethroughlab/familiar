@@ -835,6 +835,10 @@ footer a { color: var(--text-secondary); }
    so nobody clicks a pill that cannot switch anything. */
 .platform-tabs { display: none; }
 .js-platforms .platform-tabs { display: flex; }
+/* ADR-0143: text that stands in for a chooser when there is no script, and text true for one
+   server only (shown with its "If your server is…" wording when nothing can hide it). */
+.js-platforms .nojs-only { display: none; }
+.when-server[hidden], .unless-server[hidden] { display: none; }
 
 .platform-tabs button {
   font: inherit;

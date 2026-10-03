@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * The marketing site's platform chooser (ADR-0095).
+ * The marketing site's install choosers (ADR-0095, then ADR-0143): where the server runs, and
+ * where you listen.
  *
  * `site/` is static HTML with no build step and no dev server, so this loads the file directly.
  * It lives here rather than in `packages/web/e2e/` for one reason: that suite's `globalSetup` POSTs
@@ -16,20 +17,22 @@ import { test, expect } from '@playwright/test';
  * panels and then fails to render one is exactly that defect with a new face. Nothing else checks
  * it: the page looks correct in a browser precisely because the script *did* run.
  */
-const PLATFORMS = ['macOS', 'Windows', 'Synology', 'OpenMediaVault', 'Linux & NAS'];
+// ADR-0143 point 2: the Mac first, the NAS choices equal to it.
+const PLATFORMS = ['Mac', 'Synology', 'OpenMediaVault', 'Linux & NAS', 'Windows'];
+const SERVER_PANELS = ['#p-macos', '#p-synology', '#p-omv', '#p-linux', '#p-windows'];
 
 test.describe('install platform chooser', () => {
   test('shows one platform at a time, and the pills switch it', async ({ page }) => {
     await page.goto('index.html');
 
-    await expect(page.locator('.platform-panel')).toHaveCount(PLATFORMS.length);
-    await expect(page.locator('.platform-panel:visible')).toHaveCount(1);
+    await expect(page.locator('#platforms .platform-panel')).toHaveCount(PLATFORMS.length);
+    await expect(page.locator('#platforms .platform-panel:visible')).toHaveCount(1);
     await expect(page.locator('#p-macos')).toBeVisible();
 
     await page.getByRole('tab', { name: 'Synology' }).click();
     await expect(page.locator('#p-synology')).toBeVisible();
     await expect(page.locator('#p-macos')).toBeHidden();
-    await expect(page.locator('.platform-panel:visible')).toHaveCount(1);
+    await expect(page.locator('#platforms .platform-panel:visible')).toHaveCount(1);
 
     // Arrow keys move within the strip, which is what `role="tablist"` promises. Asserting the
     // *neighbour* rather than a fixed panel: this caught the OpenMediaVault pill being inserted
@@ -43,12 +46,16 @@ test.describe('install platform chooser', () => {
     const page = await context.newPage();
     await page.goto('index.html');
 
-    await expect(page.locator('.platform-panel:visible')).toHaveCount(PLATFORMS.length);
+    await expect(page.locator('#platforms .platform-panel:visible')).toHaveCount(PLATFORMS.length);
     for (const name of PLATFORMS) {
-      await expect(page.locator('.platform-heading', { hasText: name })).toBeVisible();
+      await expect(page.locator('#platforms .platform-heading', { hasText: name })).toBeVisible();
     }
+    // Both players too, and the line that is true for one server only, with its "If" wording.
+    await expect(page.locator('#clients .platform-panel:visible')).toHaveCount(2);
+    await expect(page.locator('.when-server[data-server="mac"]')).toBeVisible();
+    await expect(page.locator('.when-server[data-server="mac"]')).toContainText('If your server is Familiar Server');
     // And no pill strip, because nothing could act on it (ADR-0095 point 6).
-    await expect(page.locator('.platform-tabs')).toBeHidden();
+    await expect(page.locator('.platform-tabs:visible')).toHaveCount(0);
 
     await context.close();
   });
@@ -73,6 +80,71 @@ test.describe('install platform chooser', () => {
     await page.getByRole('tab', { name: 'Windows' }).click();
     await expect(page.locator('#p-windows')).toContainText('docker-compose.desktop.yml');
     await expect(page.locator('#p-windows .platform-caveat')).toHaveCount(0);
+  });
+
+  test('every server path ends signed in', async ({ page }) => {
+    // ADR-0143 point 4. Since ADR-0141 a new server answers its API with 401 until signed in, so
+    // a path that stops at "open it in a browser" stops one step short of working.
+    await page.goto('index.html');
+    await expect(page.locator('#p-macos')).toContainText('Open Admin');
+    for (const panel of ['#p-synology', '#p-omv', '#p-linux', '#p-windows']) {
+      await expect(page.locator(panel)).toContainText('#token=');
+    }
+    await expect(page.locator('#install')).not.toContainText('needs no account');
+  });
+
+  test('the Mac path is Familiar Server, with no Docker and no command', async ({ page }) => {
+    // ADR-0143 point 3. Docker on a Mac is in docs/INSTALLATION.md, not on the page.
+    await page.goto('index.html');
+    await expect(page.locator('#p-macos')).toContainText('Familiar Server');
+    await expect(page.locator('#p-macos')).not.toContainText('Docker Desktop');
+    await expect(page.locator('#p-macos pre')).toHaveCount(0);
+    // The memory note is for Docker machines; Familiar Server has no such switch.
+    await expect(page.locator('.unless-server[data-server="mac"]')).toBeHidden();
+    await page.getByRole('tab', { name: 'Linux & NAS' }).click();
+    await expect(page.locator('.unless-server[data-server="mac"]')).toBeVisible();
+  });
+
+  test('the listening step follows the server chosen in the first', async ({ page }) => {
+    // ADR-0143 point 5: "Open in Familiar" is true only when the server is Familiar Server on the
+    // same Mac, so it must disappear when another server is chosen.
+    await page.goto('index.html');
+    await page.locator('[data-chooser="client"]').getByRole('tab', { name: 'Mac' }).click();
+    await expect(page.locator('#c-mac')).toBeVisible();
+    await expect(page.locator('#c-mac .when-server')).toBeVisible();
+
+    await page.getByRole('tab', { name: 'Synology' }).click();
+    await expect(page.locator('#c-mac .when-server')).toBeHidden();
+    await expect(page.locator('#c-mac')).toContainText('Mac App Store');
+  });
+
+  test('the chosen pair is in the link, and a link opens on it', async ({ page }) => {
+    // ADR-0143 point 1: a coworker sent the link lands on their own path.
+    await page.goto('index.html');
+    await page.getByRole('tab', { name: 'OpenMediaVault' }).click();
+    await page.getByRole('tab', { name: 'iPhone & iPad' }).click();
+    expect(new URL(page.url()).hash).toBe('#install?server=omv&client=iphone');
+
+    await page.goto('index.html#install?server=windows&client=mac');
+    await expect(page.locator('#p-windows')).toBeVisible();
+    await expect(page.locator('#c-mac')).toBeVisible();
+    await expect(page.locator('#c-mac .when-server')).toBeHidden();
+  });
+
+  test('a link with a value the page does not know is not an error', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto('index.html#install?server=freebsd&client=watch');
+    await expect(page.locator('#p-macos')).toBeVisible();
+    await expect(page.locator('#c-iphone')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
+  test('the analysis note makes no per-track promise', async ({ page }) => {
+    // ADR-0143 point 7. "Roughly 1 second per track" was measured nowhere; on Familiar Server on
+    // 2026-10-02 a track took minutes.
+    await page.goto('index.html');
+    await expect(page.locator('#install .note')).not.toContainText('per track');
   });
 
   test('the no-login paragraph is on the page', async ({ page }) => {
