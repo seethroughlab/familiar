@@ -169,7 +169,10 @@ def run_analysis(track_id: str) -> dict[str, Any]:
     Returns a summary dict with status.
     """
     import logging
-    logging.basicConfig(level=logging.INFO, format="%(message)s", force=True)
+
+    from app.logging_config import CHILD_LOG_FORMAT
+
+    logging.basicConfig(level=logging.INFO, format=CHILD_LOG_FORMAT, force=True)
 
     from sqlalchemy import select
 
@@ -290,7 +293,10 @@ def run_backfill(track_id: str) -> dict[str, Any]:
     For tracks that already have Phase 1 features but no analysis_detail.
     """
     import logging
-    logging.basicConfig(level=logging.INFO, format="%(message)s", force=True)
+
+    from app.logging_config import CHILD_LOG_FORMAT
+
+    logging.basicConfig(level=logging.INFO, format=CHILD_LOG_FORMAT, force=True)
 
     from sqlalchemy import select
 
@@ -366,7 +372,10 @@ def run_track_melodic(track_id: str) -> dict[str, Any]:
     Runs basic-pitch MIDI transcription + melodic feature extraction.
     """
     import logging
-    logging.basicConfig(level=logging.INFO, format="%(message)s", force=True)
+
+    from app.logging_config import CHILD_LOG_FORMAT
+
+    logging.basicConfig(level=logging.INFO, format=CHILD_LOG_FORMAT, force=True)
 
     from sqlalchemy import select
 

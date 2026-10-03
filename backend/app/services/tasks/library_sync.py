@@ -195,7 +195,9 @@ def _run_scan_in_process(
     """
     import logging
 
-    logging.basicConfig(level=logging.INFO, format="%(message)s", force=True)
+    from app.logging_config import CHILD_LOG_FORMAT
+
+    logging.basicConfig(level=logging.INFO, format=CHILD_LOG_FORMAT, force=True)
 
     return asyncio.run(_async_scan_worker(library_paths_str, reread_unchanged, started_at, initial_import))
 
@@ -952,7 +954,9 @@ def _run_folder_scan_in_process(
     stay off the event loop that serves streams."""
     import logging
 
-    logging.basicConfig(level=logging.INFO, format="%(message)s", force=True)
+    from app.logging_config import CHILD_LOG_FORMAT
+
+    logging.basicConfig(level=logging.INFO, format=CHILD_LOG_FORMAT, force=True)
     return asyncio.run(_async_folder_scan(library_paths_str, folders_str, initial_import))
 
 

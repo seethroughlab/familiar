@@ -63,9 +63,12 @@ def run_track_features(track_id: str) -> dict[str, Any]:
     # Configure logging for subprocess (spawned processes don't inherit parent's config)
     import asyncio
     import logging
+
+    from app.logging_config import CHILD_LOG_FORMAT
+
     logging.basicConfig(
         level=logging.INFO,
-        format='%(message)s',
+        format=CHILD_LOG_FORMAT,
         force=True,  # Override any existing config
     )
 
@@ -483,9 +486,12 @@ def run_track_embedding(track_id: str) -> dict[str, Any]:
     """
     import asyncio
     import logging
+
+    from app.logging_config import CHILD_LOG_FORMAT
+
     logging.basicConfig(
         level=logging.INFO,
-        format='%(message)s',
+        format=CHILD_LOG_FORMAT,
         force=True,
     )
 
@@ -743,7 +749,10 @@ def run_track_mood_tags(track_id: str) -> dict[str, Any]:
     Very fast per track (numpy dot product, no model inference).
     """
     import logging
-    logging.basicConfig(level=logging.INFO, format='%(message)s', force=True)
+
+    from app.logging_config import CHILD_LOG_FORMAT
+
+    logging.basicConfig(level=logging.INFO, format=CHILD_LOG_FORMAT, force=True)
 
     from sqlalchemy import select
 
