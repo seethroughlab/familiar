@@ -38,30 +38,61 @@ GALLERY_DATA = ROOT / "site" / "visualizers.json"
 API_VERSION = 1
 
 
+DOCS_URL = "https://github.com/seethroughlab/familiar/blob/main/docs/"
+
+
+def _href(target: str) -> str:
+    """A link as the page must hold it. The document's relative links (`decisions/ADR-….md`)
+    resolve against `docs/` in the repository, and 404'd on the site, where there is no `docs/`."""
+    if re.match(r"^[a-z][a-z0-9+.-]*:", target) or target.startswith("#"):
+        return target
+    return DOCS_URL + target.removeprefix("./")
+
+
 def _inline(text: str) -> str:
     """Escape, then re-introduce the inline markup this document actually uses."""
     out = html.escape(text, quote=False)
     # Code first: nothing inside a code span should be processed further, and doing
     # it first means a `**` inside backticks stays literal.
-    out = re.sub(r"`([^`]+)`", lambda m: f"<code>{m.group(1)}</code>", out)
+    codes: list[str] = []
+
+    def keep(m: re.Match) -> str:
+        codes.append(f"<code>{m.group(1)}</code>")
+        return f"\x00{len(codes) - 1}\x00"
+
+    out = re.sub(r"`([^`]+)`", keep, out)
     out = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", out)
-    out = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', out)
-    return out
+    out = re.sub(r"(?<![*\w])\*(?!\s)([^*]+?)(?<!\s)\*(?![*\w])", r"<em>\1</em>", out)
+    out = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", lambda m: f'<a href="{_href(m.group(2))}">{m.group(1)}</a>', out)
+    return re.sub(r"\x00(\d+)\x00", lambda m: codes[int(m.group(1))], out)
 
 
 def render_markdown(md: str) -> str:
-    """The closed subset `VISUALIZER_API.md` uses. Not a general Markdown renderer."""
+    """The closed subset `VISUALIZER_API.md` uses. Not a general Markdown renderer.
+
+    Block by block, as Markdown means it: consecutive lines are one paragraph, an indented line
+    continues the list item above it, and `>` lines are one quotation. It rendered every source
+    line as its own `<p>` until 2026-10-03, which broke sentences mid-way, split list items from
+    their continuations and printed blockquote markers as `&gt;`.
+    """
     lines = md.split("\n")
     parts: list[str] = []
+    paragraph: list[str] = []
+    quote: list[str] = []
+    items: list[list[str]] = []
     in_code = False
     code: list[str] = []
-    in_list = False
 
-    def close_list() -> None:
-        nonlocal in_list
-        if in_list:
-            parts.append("</ul>")
-            in_list = False
+    def flush() -> None:
+        if paragraph:
+            parts.append(f"<p>{_inline(' '.join(paragraph))}</p>")
+            paragraph.clear()
+        if quote:
+            parts.append(f"<blockquote><p>{_inline(' '.join(quote))}</p></blockquote>")
+            quote.clear()
+        if items:
+            parts.append("<ul>" + "".join(f"<li>{_inline(' '.join(i))}</li>" for i in items) + "</ul>")
+            items.clear()
 
     for line in lines:
         if line.startswith("```"):
@@ -72,7 +103,7 @@ def render_markdown(md: str) -> str:
                 code = []
                 in_code = False
             else:
-                close_list()
+                flush()
                 in_code = True
             continue
 
@@ -82,12 +113,12 @@ def render_markdown(md: str) -> str:
 
         stripped = line.strip()
         if not stripped:
-            close_list()
+            flush()
             continue
 
         heading = re.match(r"^(#{1,4})\s+(.*)$", stripped)
         if heading:
-            close_list()
+            flush()
             level = len(heading.group(1))
             # The document's H1 becomes the page's own title, so it is not repeated
             # in the body.
@@ -96,18 +127,28 @@ def render_markdown(md: str) -> str:
             parts.append(f"<h{level}>{_inline(heading.group(2))}</h{level}>")
             continue
 
-        item = re.match(r"^[-*]\s+(.*)$", stripped)
-        if item:
-            if not in_list:
-                parts.append("<ul>")
-                in_list = True
-            parts.append(f"<li>{_inline(item.group(1))}</li>")
+        if stripped.startswith(">"):
+            if paragraph or items:
+                flush()
+            quote.append(stripped.lstrip(">").strip())
             continue
 
-        close_list()
-        parts.append(f"<p>{_inline(stripped)}</p>")
+        item = re.match(r"^[-*]\s+(.*)$", stripped)
+        if item:
+            if paragraph or quote:
+                flush()
+            items.append([item.group(1)])
+            continue
 
-    close_list()
+        if items and line[:1].isspace():
+            items[-1].append(stripped)
+            continue
+
+        if items or quote:
+            flush()
+        paragraph.append(stripped)
+
+    flush()
     if in_code:
         raise SystemExit("render-docs: unclosed code fence in VISUALIZER_API.md")
     return "\n".join(parts)
@@ -132,9 +173,8 @@ PAGE = """<!doctype html>
   </a>
   <div class="topnav-links">
     <a href="./#features">Features</a>
-    <a href="./#features">Ask</a>
     <a href="./#comparison">Compare</a>
-    <a href="https://github.com/seethroughlab/familiar" target="_blank" rel="noopener" class="topnav-github" aria-label="GitHub">GitHub</a>
+    <a href="./faq.html">FAQ</a>
     <a href="./#install" class="topnav-install">Install</a>
   </div>
 </nav>
@@ -149,8 +189,8 @@ PAGE = """<!doctype html>
 {body}
 </main>
 
-<footer class="site-footer">
-  <p><a href="./">Familiar</a> · <a href="./faq.html">FAQ</a> · <a href="./privacy.html">Privacy</a></p>
+<footer>
+  <p>MIT-licensed · <a href="https://github.com/seethroughlab/familiar" target="_blank" rel="noopener">GitHub</a> · <a href="https://github.com/seethroughlab/familiar/tree/main/docs" target="_blank" rel="noopener">Docs</a> · <a href="./faq.html">FAQ</a> · <a href="./privacy.html">Privacy</a> · <a href="https://github.com/seethroughlab/familiar/issues" target="_blank" rel="noopener">Report a bug</a></p>
 </footer>
 
 </body>

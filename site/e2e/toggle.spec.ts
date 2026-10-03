@@ -18,7 +18,7 @@ import { test, expect } from '@playwright/test';
  * it: the page looks correct in a browser precisely because the script *did* run.
  */
 // ADR-0143 point 2: the Mac first, the NAS choices equal to it.
-const PLATFORMS = ['Mac', 'Synology', 'OpenMediaVault', 'Linux & NAS', 'Windows'];
+const PLATFORMS = ['Mac', 'Synology', 'OpenMediaVault', 'Linux & NAS', 'Windows (Docker)'];
 const SERVER_PANELS = ['#p-macos', '#p-synology', '#p-omv', '#p-linux', '#p-windows'];
 
 test.describe('install platform chooser', () => {
@@ -77,7 +77,7 @@ test.describe('install platform chooser', () => {
     // Desktop's VM rejects it — measured at exit 125 — so a panel that stops mentioning the
     // override ships a Windows install that fails.
     await page.goto('index.html');
-    await page.getByRole('tab', { name: 'Windows' }).click();
+    await page.getByRole('tab', { name: 'Windows (Docker)' }).click();
     await expect(page.locator('#p-windows')).toContainText('docker-compose.desktop.yml');
     await expect(page.locator('#p-windows .platform-caveat')).toHaveCount(0);
   });

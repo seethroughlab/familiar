@@ -17,9 +17,8 @@
   </a>
   <div class="topnav-links">
     <a href="./#features">Features</a>
-    <a href="./#features">Ask</a>
+    <a href="./#comparison">Compare</a>
     <a href="./faq.html">FAQ</a>
-    <a href="https://github.com/seethroughlab/familiar" target="_blank" rel="noopener" class="topnav-github" aria-label="GitHub">GitHub</a>
     <a href="./#install" class="topnav-install">Install</a>
   </div>
 </nav>
@@ -29,33 +28,46 @@
 <header class="hero" style="padding-bottom: 24px;">
   <div class="hero-body">
     <h1 class="hero-title">Privacy</h1>
-    <p class="hero-tagline">Last updated: 2026-04-22</p>
+    <p class="hero-tagline">Last updated: 2026-10-03</p>
   </div>
 </header>
 
 <section>
-  <p>Familiar is a self-hosted music player. You install the app on your device and point it at a backend you control — your own machine, a home server, or (for App Store review) a shared demo server at <code>familiar-demo.fly.dev</code>. This page describes what data Familiar handles and where it goes.</p>
+  <p>Familiar is two apps: <strong>Familiar Server</strong>, which keeps your music library and analyses it — on your Mac, or in Docker on a NAS or another machine you run — and <strong>Familiar</strong>, the app you listen in on your Mac or iPhone, which plays from that server. There is no Familiar account and no Familiar service in between: your apps talk to your server. This page says what each handles and where anything goes.</p>
 </section>
 
 <section>
-  <h2>What stays on your device and your server</h2>
+  <h2>What stays with you</h2>
   <ul>
-    <li><strong>Your music files.</strong> Audio is never uploaded off your device or backend.</li>
-    <li><strong>Profile name, color, favorites, and play history.</strong> Stored on the backend you choose.</li>
-    <li><strong>Offline-cached tracks and playlists.</strong> Held in the app's local storage; removed when you uninstall.</li>
+    <li><strong>Your music files.</strong> Never uploaded anywhere. The server reads them where they are and never changes them.</li>
+    <li><strong>Profiles, favourites, playlists and play history.</strong> Stored by your server, in its own database.</li>
+    <li><strong>The server's sign-in token.</strong> Kept by the server, and by each app you pair with it (in the Keychain on Apple devices).</li>
+    <li><strong>Downloaded tracks and playlists.</strong> Held by the app on your device; removed when you uninstall it.</li>
   </ul>
 </section>
 
 <section>
-  <h2>Data sent to third parties (only when you opt in)</h2>
+  <h2>What the server sends out by default</h2>
+  <p>To fill in what your files don't say, the server asks a few public services, sending the names it is asking about and nothing about you:</p>
   <ul>
-    <li><strong>Your own AI assistant, if you connect one</strong> — Familiar holds no API key and calls no model. It exposes an MCP server, and an MCP host you run and configure — Claude Desktop, say — connects to it on your behalf. Anything you type goes from that host to whichever provider you have signed in to, on your account and under their privacy policy, not through Familiar. What crosses the connection from Familiar's side is the answers to the tool calls your host makes: search results, track and playlist metadata, playback state. Never audio.</li>
-    <li><strong>Last.fm</strong> — if you connect a Last.fm account, Familiar scrobbles now-playing metadata (artist, title, duration) to <code>ws.audioscrobbler.com</code>.</li>
-    <li><strong>LRCLIB</strong> — synced lyrics are fetched from <code>lrclib.net</code> by track title / artist / album / duration.</li>
-    <li><strong>MusicBrainz and Cover Art Archive</strong> — used for metadata and artwork lookups; only the fields named are sent.</li>
-    <li><strong>AcoustID</strong> — optional audio fingerprint lookup for unknown tracks.</li>
-    <li><strong>Community cache</strong> (<code>familiar-cache.fly.dev</code>) — if you opt in, SHA-256-hashed audio fingerprints and precomputed features or embeddings are shared so other users can skip analysis. No filename, metadata, or personal information is transmitted.</li>
-    <li><strong>Bandcamp, iTunes, Qobuz, Discogs, 7Digital, Amazon Music, YouTube</strong> — user-initiated search and discovery links that open in your browser or stream video on demand.</li>
+    <li><strong>MusicBrainz and the Cover Art Archive</strong> — artist, album and track names or identifiers, for metadata and album artwork.</li>
+    <li><strong>Wikipedia, Wikidata, Wikimedia Commons and Spotify's public embed service</strong> — artist names or identifiers, for artist pictures.</li>
+    <li><strong>LRCLIB</strong> (<code>lrclib.net</code>) — title, artist, album and duration, for synced lyrics.</li>
+    <li><strong>ListenBrainz</strong> — a request for its public list of new releases, for Discover. Nothing about your library is sent. It can be turned off.</li>
+    <li><strong>The community cache</strong> (<code>clapback.seethroughlab.com</code>) — a one-way hash of a track's audio fingerprint, and its MusicBrainz recording id when known, to skip analysing music that has been analysed elsewhere. No file names, titles or listening history.</li>
+    <li><strong>GitHub</strong> — to check for new releases, and the first time it starts to download the analysis model. Familiar Server on a Mac also reads its update feed there.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>What is sent only if you turn it on</h2>
+  <ul>
+    <li><strong>Contributing to the community cache</strong> — the analysis of tracks your server worked out itself, under the same hash, with an installation identifier that is not linked to you. Off unless you turn it on.</li>
+    <li><strong>Last.fm</strong> — if you connect an account, what you play (artist, title, duration) is scrobbled to <code>ws.audioscrobbler.com</code>, and artist information is fetched from it.</li>
+    <li><strong>AcoustID</strong> — with a key, audio fingerprints of tracks Familiar cannot otherwise identify.</li>
+    <li><strong>YouTube</strong> — only when you search for or download a music video, the track's artist and title.</li>
+    <li><strong>An AI assistant you connect</strong> — Familiar holds no API key and calls no model. If you connect an assistant that speaks MCP (Claude Desktop, say), what you type goes from it to whichever provider you signed in to, on your account and under their policy, not through Familiar. What Familiar returns to it is search results, track and playlist details, and playback state. Never audio.</li>
+    <li><strong>Links you open</strong> — Bandcamp, Apple Music, Qobuz, Discogs, 7digital, Amazon Music: search and buy links that open in your browser.</li>
   </ul>
 </section>
 
@@ -65,13 +77,14 @@
     <li>No analytics SDKs (no Google Analytics, Mixpanel, Sentry, etc.).</li>
     <li>No advertising identifiers, no ad tracking, no ads.</li>
     <li>No location, contacts, photos, health, or financial data.</li>
-    <li>No sharing or selling of personal data to third parties.</li>
+    <li>No sharing or selling of personal data to anyone.</li>
   </ul>
+  <p>The apps are distributed through Apple's App Store, and Familiar Server as a download from GitHub; Apple and GitHub see what they see of any download.</p>
 </section>
 
 <section>
   <h2>Retention and deletion</h2>
-  <p>All personal data lives on the backend you control. Delete a profile from the app to remove its data from the backend. Uninstall the app to remove any local cache from your device.</p>
+  <p>Everything personal lives on your server. Delete a profile to remove its data from the server; delete the server's data folder to remove everything. Uninstall an app to remove what it downloaded to your device.</p>
 </section>
 
 <section>
@@ -80,6 +93,10 @@
 </section>
 
 </main>
+
+<footer>
+  <p>MIT-licensed · <a href="https://github.com/seethroughlab/familiar" target="_blank" rel="noopener">GitHub</a> · <a href="https://github.com/seethroughlab/familiar/tree/main/docs" target="_blank" rel="noopener">Docs</a> · <a href="./faq.html">FAQ</a> · <a href="./privacy.html">Privacy</a> · <a href="https://github.com/seethroughlab/familiar/issues" target="_blank" rel="noopener">Report a bug</a></p>
+</footer>
 
 </body>
 </html>

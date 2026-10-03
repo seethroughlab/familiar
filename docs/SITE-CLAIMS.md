@@ -140,21 +140,41 @@ to have been true on a stated day, which is a promise that can actually be kept.
 
 ## `faq.html`
 
+Rewritten 2026-10-03 for a Mac owner (ADR-0146), with the shared nav and footer.
+
 | Claim | Verdict | Evidence |
 |---|---|---|
-| No API key needed | true | ADR-0048 |
-| Analysis ≈1s/track, 20k library ≈6h | **unverified** | No benchmark in the repository. Plausible and unchecked — needs a measured run |
-| Community cache shares only SHA-256 hashes | true | `services/` cache client sends hashes and features, no titles |
-| Nothing leaves the network without opt-in | true | consistent with `privacy.html` after correction |
-| Listening away from home via Tailscale | true | `docs/CONFIGURATION.md#tailscale-https` |
-| iOS app on the App Store | true | link resolves 200; native, not Capacitor |
+| A Mac with Apple Silicon, macOS 14 or later, runs Familiar Server | true | `lipo -archs` gives `arm64`; `LSMinimumSystemVersion` 14.0 (row above, Install) |
+| Two apps: the server keeps and analyses the library, the app plays it | true | ADR-0131, ADR-0135 |
+| Familiar Server never keeps the Mac awake | true | ADR-0138 point 5; no power assertion in `desktop/macos/Sources` |
+| Downloaded music plays without the server | true | offline downloads, Feature blocks row |
+| Windows server and apps, and an Android app, are planned, with no dates | **intent** | ADR-0147 (accepted); the answer links it. If a platform is dropped, ADR-0147 is superseded and this goes |
+| No API key, and no AI assistant needed | true | ADR-0048 |
+| What leaves the network: names to public metadata services, a fingerprint hash to the cache; audio and history never | true | the privacy rows below |
+| ~~Analysis ≈1s/track, 20k library ≈6h~~ | **removed 2026-10-02** | Never measured; on Familiar Server a track took minutes. "Days rather than hours" replaced it (Install row) |
+| ~~Nothing leaves the network without opt-in~~ | **false — corrected 2026-10-03** | MusicBrainz, Cover Art Archive, Wikipedia/Wikidata/Commons, Spotify oEmbed, LRCLIB, ListenBrainz and cache lookups are on by default |
+| ~~"Try the demo" → familiar-demo.fly.dev; "One `compose up`"~~ | **removed 2026-10-03** | The demo exists for App Store review (ADR-0038), and index.html had already removed its link; `compose up` was the Docker-only pitch |
+| A reverse proxy does not make Familiar safe to publish | true | the Install and remote access row (ADR-0145) |
+| iPhone app on the App Store | true | link resolves 200; native, not Capacitor |
 
 ## `privacy.html`
 
+Rewritten 2026-10-03 for two apps. Every host below is in the backend's source (`grep -rhoE 'https://…' backend/app`).
+
 | Claim | Verdict | Evidence |
 |---|---|---|
+| No Familiar account, no Familiar service between the apps and the server | true | ADR-0131 point 3; the apps hold only a server address and token (ADR-0134) |
+| The token is kept by the server, and in the Keychain by paired Apple apps | true | `auth.py` (in `settings.json`); `familiar-apple` `KeychainServerTokenStore` (`Sources/FamiliarAppCore/ServerTokenStore.swift`, ADR-0134) |
+| By default: MusicBrainz and Cover Art Archive | true | `services/metadata/musicbrainz.py`, `services/artwork_fetcher.py` |
+| By default: Wikipedia, Wikidata, Wikimedia Commons, Spotify oEmbed for artist pictures | true | `services/artist_image.py` |
+| By default: LRCLIB | true | `services/lyrics.py` |
+| By default: ListenBrainz's public new-release list, which can be turned off | true | `services/discovery/listenbrainz.py`; `discovery_listenbrainz_enabled = True` |
+| By default: cache lookups send a fingerprint hash and the recording id when known | true | `community_cache_enabled = True`; `DEFAULT_CACHE_URL = "https://clapback.seethroughlab.com"` (`services/community_cache.py`, checked by `e2e/pages.spec.ts`); ADR-0119 |
+| By default: GitHub for release checks, the analysis model, and Familiar Server's update feed | true | `services/update_checker.py`; ADR-0132 point 8; ADR-0135 point 3 |
+| Contributing to the cache is opt-in, under an installation id | true | `community_cache_contribute = False`; ADR-0108 |
+| Last.fm, AcoustID only when set up; YouTube only on a video search or download | true | key-gated in `app_settings`; `services/video.py` runs only from `/videos` routes |
+| ~~`familiar-cache.fly.dev`; the demo server; "only when you opt in"~~ | **false — corrected 2026-10-03** | The host moved to `clapback.seethroughlab.com`; the demo is for App Store review; several services are on by default |
 | Your own assistant, if you connect one | true | corrected 2026-08-13; previously claimed a chat feature that no longer exists |
-| Last.fm, LRCLIB, MusicBrainz, Cover Art Archive, AcoustID, community cache | **unswept** | integrations exist; the exact fields each sends have not been traced |
 | No analytics SDKs, no ad identifiers | true | no analytics dependency in `packages/web/package.json` |
 
 ## Open

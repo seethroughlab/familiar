@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>FAQ — Familiar</title>
-  <meta name="description" content="Common questions about Familiar: hardware, privacy, API keys, analysis time, and running it away from home.">
+  <meta name="description" content="Common questions about Familiar: what you need, why there are two apps, Windows and Android, privacy, analysis time, and listening away from home.">
   <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
   <link rel="stylesheet" href="./assets/site.css">
 </head>
@@ -17,9 +17,8 @@
   </a>
   <div class="topnav-links">
     <a href="./#features">Features</a>
-    <a href="./#features">Ask</a>
     <a href="./#comparison">Compare</a>
-    <a href="https://github.com/seethroughlab/familiar" target="_blank" rel="noopener" class="topnav-github" aria-label="GitHub">GitHub</a>
+    <a href="./faq.html">FAQ</a>
     <a href="./#install" class="topnav-install">Install</a>
   </div>
 </nav>
@@ -42,55 +41,62 @@
 <section id="faq">
 <div class="faq">
     <details>
-      <summary>Why not just use Apple Music or Spotify for this?</summary>
-      <p>Familiar isn't a streaming service — it plays the files you already own. If you've got a folder of MP3s/FLACs going back to 2002, Apple Music either won't accept them or will iCloud-Match them to its own catalog versions (sometimes the wrong remaster, occasionally DRM-locked, occasionally just gone). Spotify only plays its own catalog; its Local Files feature syncs from a desktop to a phone on the same network, not remotely. Neither runs semantic search or AI playlists across <em>your</em> library — only theirs. Familiar runs on your hardware, leaves your files alone, and points its AI at your collection.</p>
+      <summary>What do I need?</summary>
+      <p>A Mac with Apple Silicon (macOS&nbsp;14 or later) to run Familiar Server, and the Familiar app on your Mac or iPhone. If you already have a NAS or a Linux box, the server can run there in Docker instead — <a href="./#install">Install</a> has both. The author runs a 23k-track library on an OpenMediaVault box.</p>
     </details>
     <details>
-      <summary>Do I need an API key?</summary>
-      <p>No. Familiar holds no API key and calls no model. If you want to ask questions in plain language you connect your own MCP host — Claude Desktop, say — and whatever that costs is between you and them. Everything else, including search and the Music Map, is local.</p>
+      <summary>Why are there two apps?</summary>
+      <p><strong>Familiar Server</strong> keeps your library and listens to every track to work out how it sounds; <strong>Familiar</strong> is the app you play it in, on your Mac and your iPhone. They are separate so the server can live wherever suits you — on your Mac, or on a NAS that is always on — and so the app on your phone works the same either way.</p>
     </details>
     <details>
-      <summary>What hardware do I need?</summary>
-      <p>A Mac with Apple Silicon, running Familiar Server, or any machine that runs Docker — <a href="./#install">Install</a> has both. A small NAS works: the author runs a 23k-track library on an OpenMediaVault box. Analysis is the heaviest workload, and once a track is analysed it is not analysed again.</p>
+      <summary>Does my Mac have to stay on?</summary>
+      <p>To stream from it, yes: the server runs there. Music you have downloaded in the app plays without it, and Familiar Server never keeps your Mac awake — when the Mac sleeps, it waits. If you want your library reachable all the time, run the server on a NAS instead.</p>
+    </details>
+    <details>
+      <summary>Is there a Windows or Android version?</summary>
+      <p>Not yet. Familiar Server for Windows, a Windows app and an Android app are <a href="https://github.com/seethroughlab/familiar/blob/main/docs/decisions/ADR-0147-windows-and-android-are-planned.md" target="_blank" rel="noopener">planned</a>, after the Mac is finished; there are no dates. Today a Windows PC can run the server in Docker (see <a href="./#install">Install</a>), and you listen on a Mac or an iPhone.</p>
+    </details>
+    <details>
+      <summary>Why not just use Apple Music or Spotify?</summary>
+      <p>Familiar plays the files you already own. If you have a folder of MP3s and FLACs going back to 2002, Apple Music either won't take them or will match them to its own catalog versions (sometimes the wrong remaster, sometimes gone); Spotify plays only its own catalog, and its Local Files work from a desktop to a phone on the same network. Neither listens to <em>your</em> files to find music by how it sounds. Familiar does, on your own machine, and leaves the files alone.</p>
+    </details>
+    <details>
+      <summary>Do I need an AI assistant, or an API key?</summary>
+      <p>No. Familiar holds no API key and calls no model; search, playlists, similarity and the Music Map all work on their own. If you use an AI assistant that speaks MCP — Claude Desktop, say — you can connect it to ask for music in words, and whatever that costs is between you and them.</p>
     </details>
     <details>
       <summary>Does my music or listening data leave my network?</summary>
-      <p>No. The opt-in community cache shares only one-way SHA-256 hashes of audio fingerprints — no track titles, artists, file paths, or listening history. You cannot reconstruct a library from the hashes. If you connect an MCP host, whatever you ask it goes wherever that host sends it — that is your choice and your account. Your audio files never leave your server.</p>
-    </details>
-    <details>
-      <summary>What happens if Claude is down?</summary>
-      <p>Everything keeps working. Browsing, searching, playback, similarity, smart playlists and analysis are all local — Familiar makes no outbound call to run. An MCP host you have connected is the only part that needs the internet, and only for its own sake.</p>
+      <p>Your audio files and your listening history don't. To fill in artwork, artist pictures, lyrics and metadata, the server sends the names it is looking up — artists, albums, titles — to public services such as MusicBrainz and Wikipedia; the community cache gets a one-way hash of each track's audio fingerprint, from which no library can be reconstructed. Scrobbling to Last.fm and connecting an AI assistant happen only if you set them up. <a href="./privacy.html">The privacy page</a> lists every one.</p>
     </details>
     <details>
       <summary>How long does analysis take?</summary>
       <p>On a large library, days rather than hours, and on a Mac it pauses while you are on battery. You can listen while it works. The opt-in community cache skips tracks that have already been analysed elsewhere.</p>
     </details>
     <details>
-      <summary>What are the alternatives to Tailscale?</summary>
-      <p><strong>Cloudflare Tunnel</strong> if you want a stable public hostname routed through Cloudflare without opening a port. <strong>WireGuard</strong> if you would rather run your own VPN and use the LAN address. A <strong>reverse proxy</strong> — nginx, Caddy, Traefik — on a box that already has a domain and a certificate. Or any VPN you already run: anything that puts your phone on the same network as the server will do. What you should not do is port-forward <code>4400</code> to the open internet.</p>
-    </details>
-    <details>
       <summary>Can I listen away from home?</summary>
       <p>Yes — see <a href="./#remote">Listening away from home</a>. Tailscale is the easiest way: it puts your phone and your server on one private network, so the app reaches the server on cellular as it does at home.</p>
     </details>
     <details>
-      <summary>Is there an iOS app?</summary>
-      <p>Yes, and it is where listening on a phone is meant to happen — <a href="https://apps.apple.com/us/app/familiar-player/id6759879772" target="_blank" rel="noopener">Familiar Player</a> is on the App Store, with a Mac app alongside it. It plays from a Familiar server, so you need one running before the app is useful — <a href="./#install">Install</a> covers the server, then how each player connects to it.</p>
+      <summary>What are the alternatives to Tailscale?</summary>
+      <p><strong>Cloudflare Tunnel</strong> if you want a stable public hostname routed through Cloudflare without opening a port. <strong>WireGuard</strong> if you would rather run your own VPN and use the LAN address. Or any VPN you already run: anything that puts your phone on the same network as the server will do. A <strong>reverse proxy</strong> — nginx, Caddy, Traefik — does not make Familiar safe to publish: with HTTPS it keeps the sign-in private on the way, but the music needs no sign-in (<a href="./#remote">why</a>). What you should not do is port-forward <code>4400</code> to the open internet.</p>
+    </details>
+    <details>
+      <summary>Is there an iPhone app?</summary>
+      <p>Yes, and it is where listening on a phone is meant to happen — <a href="https://apps.apple.com/us/app/familiar-player/id6759879772" target="_blank" rel="noopener">Familiar</a> is on the App Store, with a Mac app alongside it. It plays from a Familiar server, so you need one running before the app is useful.</p>
     </details>
   </div>
 </section>
 
 <section id="get-started" class="closing-cta">
   <h2>Get started</h2>
-  <p>One <code>compose up</code> against the music you already own.</p>
+  <p>One server, on the music you already own.</p>
   <div class="closing-cta-actions">
     <a href="./#install" class="primary">Install the server</a>
-    <a href="https://familiar-demo.fly.dev" target="_blank" rel="noopener">Try the demo</a>
   </div>
 </section>
 
 <footer>
-  <p>MIT-licensed · <a href="https://github.com/seethroughlab/familiar" target="_blank" rel="noopener">seethroughlab/familiar</a> · <a href="https://github.com/seethroughlab/familiar/tree/main/docs" target="_blank" rel="noopener">Docs</a> · <a href="./faq.html">FAQ</a> · <a href="./privacy.html">Privacy</a></p>
+  <p>MIT-licensed · <a href="https://github.com/seethroughlab/familiar" target="_blank" rel="noopener">GitHub</a> · <a href="https://github.com/seethroughlab/familiar/tree/main/docs" target="_blank" rel="noopener">Docs</a> · <a href="./faq.html">FAQ</a> · <a href="./privacy.html">Privacy</a> · <a href="https://github.com/seethroughlab/familiar/issues" target="_blank" rel="noopener">Report a bug</a></p>
 </footer>
 
 </main>
