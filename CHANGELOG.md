@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-beta12] - 2026-10-02
+
+No migrations; the API contract stays at v1.
+
+### Library
+
+- **One file that cannot be opened no longer stops the sync.** On a NAS share mounted over SMB on
+  macOS, a file can be listed and yet refuse to open (seen with a decomposed `é` in its name).
+  That one file ended the sync before analysis, so a first import of 19,124 tracks analysed none.
+  It is now skipped, logged as `SKIP (unreadable: …)` and counted, and a track already held for it
+  is not marked missing.
+
 ## [0.2.0-beta11] - 2026-10-02
 
 The first release a Familiar Server can update to on its own: a Mac running `v0.2.0-beta10`
