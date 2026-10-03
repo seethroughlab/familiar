@@ -1,6 +1,6 @@
 # ADR-0096: Remote Access Is Explained, Not Instructed
 
-Status: accepted
+Status: accepted; points 2 and 6 superseded by [ADR-0145](ADR-0145-remote-access-is-explained-by-what-the-token-does-not-cover.md)
 
 Date: 2026-08-29
 

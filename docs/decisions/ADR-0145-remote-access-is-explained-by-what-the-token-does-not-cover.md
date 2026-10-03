@@ -1,8 +1,11 @@
 # ADR-0145: Remote Access Is Explained by What the Token Does Not Cover
 
-Status: proposed
+Status: accepted
 
 Date: 2026-10-03
+
+Implementation:
+- **Accepted 2026-10-03**, as written.
 
 Supersedes points 2 and 6 of [ADR-0096](ADR-0096-remote-access-is-explained-not-instructed.md), and
 extends [ADR-0141](ADR-0141-every-new-server-starts-with-a-token.md) and
