@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-beta15] - 2026-10-03
+
+No migrations; the API contract stays at v1.
+
+### Music videos
+
+- **Searching for a video answers in about two seconds**, not ten or more. Each of the five results
+  was fully extracted, formats and all, to show a title, a channel and a length; past ten seconds
+  the Apple app had already given up, so a video that existed could not be downloaded. Measured on
+  the NAS: 9.2 s before, 2.1 s after.
+
 ## [0.2.0-beta14] - 2026-10-03
 
 No migrations; the API contract stays at v1 (two additive fields on the backup status).
