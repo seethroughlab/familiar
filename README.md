@@ -209,15 +209,19 @@ constraint is memory rather than architecture, and 4 GB is what the model alone 
 - **[REST API Reference](docs/REST-API.md)** - Backend REST API documentation
 - **[Contributing](CONTRIBUTING.md)** - Local workflow, guardrails and PR checks
 
+## Bring your own assistant
+
+Familiar has no built-in LLM provider. It exposes its library as an [MCP](https://modelcontextprotocol.io) server (ADR-0043), so Claude Desktop, Claude Code, or any other MCP client can search the library, inspect the analysis and build playlists using your own subscription. Nothing here holds an API key on your behalf.
+
 ## Coming Soon
 
-Features planned for future releases:
+Planned, with no dates:
+
+### Windows and Android
+Familiar Server for Windows, a Familiar app for Windows, and a Familiar app for Android — after the Mac is finished ([ADR-0147](docs/decisions/ADR-0147-windows-and-android-are-planned.md)). Until then a Windows PC can run the server in Docker, and you listen on a Mac or an iPhone.
 
 ### Multi-Room Audio
 Play to Sonos speakers and AirPlay devices in addition to browser audio. Control playback across multiple rooms with per-room volume controls.
-
-### Bring your own assistant
-Familiar has no built-in LLM provider. It exposes its library as an [MCP](https://modelcontextprotocol.io) server (ADR-0043), so Claude Desktop, Claude Code, or any other MCP client can search the library, inspect the analysis and build playlists using your own subscription. Nothing here holds an API key on your behalf.
 
 ## Beta Feedback
 

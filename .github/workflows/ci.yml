@@ -800,6 +800,43 @@ jobs:
           pnpm --filter @familiar/visualizer-sdk typecheck
           pnpm -r --filter './packages/visualizers/*' typecheck
 
+  # The marketing site's own tests (site/e2e). Until 2026-10-03 nothing ran them: the deploy runs
+  # check-claims.py, which audits links and claims but not what the page does, so the install
+  # chooser, the no-JavaScript render and the shared nav were rules on paper. Static HTML over
+  # file://, no server.
+  site-test:
+    name: Site Test
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-latest"]') }}
+    timeout-minutes: 15
+    env:
+      NPM_CONFIG_FETCH_RETRIES: '5'
+      NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: '120000'
+      NPM_CONFIG_FETCH_TIMEOUT: '600000'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        working-directory: packages/web
+        run: npx playwright install --with-deps chromium
+
+      - name: Run site tests
+        working-directory: packages/web
+        run: npx playwright test --config=../../site/playwright.config.ts
+
   frontend-build:
     name: Frontend Build
     # **Linux, not bare `self-hosted`.** These three are Node jobs with no reason to want macOS, and

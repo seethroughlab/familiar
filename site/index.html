@@ -34,9 +34,7 @@
   <div class="topnav-links">
     <a href="#features">Features</a>
     <a href="#comparison">Compare</a>
-    <a href="#remote">Remote</a>
     <a href="./faq.html">FAQ</a>
-    <a href="https://github.com/seethroughlab/familiar" target="_blank" rel="noopener" class="topnav-github" aria-label="GitHub">GitHub</a>
     <a href="#install" class="topnav-install">Install</a>
   </div>
 </nav>
@@ -70,7 +68,7 @@
     <div class="hero-install">
       <p class="hero-requirements">A Mac with Apple Silicon, or any machine with Docker · MIT licensed</p>
       <p class="hero-cta"><a href="#install" class="primary">Install Familiar</a> <a href="#features" class="hero-cta-secondary">See what it does</a></p>
-      <p class="hero-cta-note">Mac, Synology, OpenMediaVault, Linux or Windows — about ten minutes</p>
+      <p class="hero-cta-note">Mac, Synology, OpenMediaVault, Linux, or Windows with Docker</p>
       <!-- The demo link was here under ADR-0039 point 8 and is deliberately gone. ADR-0038 built
            that instance because "Apple App Store review requires a working backend server with test
            data" — it is a compliance fixture, and pointing a visitor at it implied you could try
@@ -188,9 +186,9 @@
       <button type="button" role="tab" data-value="synology" data-panel="p-synology" aria-controls="p-synology">Synology</button>
       <button type="button" role="tab" data-value="omv" data-panel="p-omv" aria-controls="p-omv">OpenMediaVault</button>
       <button type="button" role="tab" data-value="linux" data-panel="p-linux" aria-controls="p-linux">Linux &amp; NAS</button>
-      <button type="button" role="tab" data-value="windows" data-panel="p-windows" aria-controls="p-windows">Windows</button>
+      <button type="button" role="tab" data-value="windows" data-panel="p-windows" aria-controls="p-windows">Windows (Docker)</button>
     </div>
-    <p class="nojs-only">Each is below, in step 2: a Mac, Synology, OpenMediaVault, Linux and other NAS, and Windows.</p>
+    <p class="nojs-only">Each is below, in step 2: a Mac, Synology, OpenMediaVault, Linux and other NAS, and Windows with Docker.</p>
   </div>
 
   <div class="step" data-step="2">
@@ -256,10 +254,10 @@ curl -LO https://raw.githubusercontent.com/seethroughlab/familiar/main/docker/in
       </div>
 
       <div class="platform-panel" id="p-windows" role="tabpanel" aria-labelledby="tab-p-windows">
-        <h4 class="platform-heading">Windows</h4>
+        <h4 class="platform-heading">Windows (Docker)</h4>
         <!-- Was labelled "Untested" under ADR-0095 point 5. Run end to end on Windows 11 Pro on
              2026-08-30: these exact commands, then the UI and the music folder. -->
-        <p class="platform-lead">You will use PowerShell for three commands.</p>
+        <p class="platform-lead">Docker Desktop, and PowerShell for three commands. Familiar Server for Windows, with no Docker, is <a href="https://github.com/seethroughlab/familiar/blob/main/docs/decisions/ADR-0147-windows-and-android-are-planned.md" target="_blank" rel="noopener">coming</a>.</p>
         <ol class="platform-steps">
           <li>Install <a href="https://www.docker.com/products/docker-desktop/" target="_blank" rel="noopener">Docker Desktop</a>, keeping the WSL&nbsp;2 option it offers, and open it once.</li>
           <li>Open PowerShell and download three small files:
@@ -364,12 +362,11 @@ docker compose -f docker-compose.prod.yml -f docker-compose.desktop.yml up -d</c
   </div>
   <div class="closing-cta-actions">
     <a href="#install" class="primary">Install the server</a>
-    <a href="https://github.com/seethroughlab/familiar/issues" target="_blank" rel="noopener">Report a bug</a>
   </div>
 </section>
 
 <footer>
-  <p>MIT-licensed · <a href="https://github.com/seethroughlab/familiar" target="_blank" rel="noopener">seethroughlab/familiar</a> · <a href="https://github.com/seethroughlab/familiar/tree/main/docs" target="_blank" rel="noopener">Docs</a> · <a href="./faq.html">FAQ</a> · <a href="./privacy.html">Privacy</a></p>
+  <p>MIT-licensed · <a href="https://github.com/seethroughlab/familiar" target="_blank" rel="noopener">GitHub</a> · <a href="https://github.com/seethroughlab/familiar/tree/main/docs" target="_blank" rel="noopener">Docs</a> · <a href="./faq.html">FAQ</a> · <a href="./privacy.html">Privacy</a> · <a href="https://github.com/seethroughlab/familiar/issues" target="_blank" rel="noopener">Report a bug</a></p>
 </footer>
 
 </main>

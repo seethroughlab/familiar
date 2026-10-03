@@ -3,9 +3,22 @@
 Plain static site for [familiar.seethroughlab.com](https://familiar.seethroughlab.com). Deployed to
 **Cloudflare Pages** on push to `main` (see `.github/workflows/cloudflare-pages.yml`).
 
-No generator and no build step: two HTML files and a stylesheet do not justify a toolchain
+No generator and no build step: four HTML pages, a stylesheet and one small script do not justify a toolchain
 ([ADR-0039](../docs/decisions/ADR-0039-the-website-is-rebuilt-in-place.md) point 1). Release notes,
 a blog or rendered docs are what would reverse that — see point 6 before adding one.
+
+## What is here
+
+- `index.html`, `faq.html`, `privacy.html` — written by hand. They share one nav and one footer;
+  `e2e/pages.spec.ts` checks they still do.
+- `visualizers.html` — **generated** from `docs/VISUALIZER_API.md` by `scripts/render-docs.py`
+  (ADR-0103). Edit the Markdown and re-render; never edit the HTML.
+- `assets/install.js` — the install section's two choosers (ADR-0143). It only hides; with no
+  JavaScript every path is shown.
+- `e2e/` — Playwright tests, run by CI's **Site Test** job:
+  `cd packages/web && npx playwright test --config=../../site/playwright.config.ts`.
+- `scripts/check-claims.py` — the mechanical half of `docs/SITE-CLAIMS.md`, run before and after
+  every deploy.
 
 ## Local preview
 
