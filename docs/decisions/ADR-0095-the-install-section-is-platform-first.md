@@ -1,6 +1,6 @@
 # ADR-0095: The Install Section Is Platform-First
 
-Status: accepted
+Status: accepted; point 2 superseded by [ADR-0143](ADR-0143-the-install-section-is-a-three-step-chooser.md)
 
 Date: 2026-08-29
 
