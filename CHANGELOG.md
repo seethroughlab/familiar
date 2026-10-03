@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-beta16] - 2026-10-03
+
+**One migration** (`20261003_artist_images`), run at start; the API contract stays at v1 (additions only).
+
+### Artists
+
+- **An artist has a gallery of photos** (ADR-0149): every Wikidata portrait and the photographs in
+  the artist's Wikimedia Commons category, and fanart.tv's when `FANARTTV_API_KEY` is set — ranked,
+  up to 24, each with its photographer, licence and source page. Fetched in the background only:
+  when an artist is opened, and by an hourly sweep of sixty artists that pauses on battery. The
+  Mac and iPhone apps show them from their next release.
+- **Hide a photo, or make one the artist's picture**; a hidden photo stays hidden, and a chosen
+  picture is never replaced by a later lookup — which, before this, a lookup already in flight
+  could do.
+- A fanart.tv card under Server › Providers.
+
+### Website
+
+- One nav and footer on every page; the FAQ and privacy page rewritten for the two apps (the
+  privacy page now lists every service the server contacts, and when); the visualizer page renders
+  its paragraphs and ADR links properly; Windows labelled as Docker, with a Windows app planned
+  (ADR-0147).
+
 ## [0.2.0-beta15] - 2026-10-03
 
 No migrations; the API contract stays at v1.
