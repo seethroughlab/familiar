@@ -1,8 +1,11 @@
 # ADR-0149: An Artist Has a Gallery of Freely Licensed Photos
 
-Status: proposed
+Status: accepted
 
 Date: 2026-10-03
+
+Implementation:
+- **Accepted 2026-10-03**, as written. Not yet built.
 
 Extends [ADR-0138](ADR-0138-a-desktop-server-yields-to-its-owner.md) (background work yields) and
 [ADR-0126](ADR-0126-the-admin-ui-is-organized-around-operator-workflows.md) (a provider is one card)
