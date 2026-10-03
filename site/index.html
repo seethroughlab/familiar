@@ -323,42 +323,34 @@ docker compose -f docker-compose.prod.yml -f docker-compose.desktop.yml up -d</c
   </ul>
 </section>
 
-<!-- ADR-0096. Its own section, after Install rather than step 4 of it (point 1): this is a decision
-     made once with a consequence, and someone who only listens at home should be able to finish the
-     install and stop.
+<!-- ADR-0096, revised by ADR-0145. Its own section, after Install (0096 point 1): a decision made
+     once with a consequence, and someone who only listens at home can finish the install and stop.
 
-     Point 2 — the reason leads, and is stated once. Familiar has no login: ADR-0045 is accepted and
-     unimplemented, with no token in deps.py, config.py or main.py. So "don't port-forward 4400" is
-     not hardening advice, it is the difference between a private server and a public one. The page
-     gave that instruction and never said why, and an unexplained instruction is one people route
-     around.
+     ADR-0145 point 1 — the reason leads, stated once. It used to be "Familiar has no login", true
+     until ADR-0141 gave every new server a token. The recommendation stands because the reason
+     moved: music and artwork are served without the token on purpose (MEDIA_ROUTES, auth.py), the
+     server speaks plain HTTP, and a server from before ADR-0141 may have no token at all.
 
-     Point 7 — no shields, no "hackers", no CVE language. The reader is being told how a thing works
-     so they can make one decision.
-
-     Point 6 — this wording expires. Its row in docs/SITE-CLAIMS.md records that it depends on
-     Familiar having no authentication, so shipping ADR-0045 is a scheduled edit here. -->
+     Point 4 — nothing about what to type into an app until pairing over Tailscale has been run end
+     to end; the section makes the server reachable and stops. Point 6 — the wording depends on the
+     media exemption and on plain HTTP; its docs/SITE-CLAIMS.md row says so, and changing either is
+     a reason to revisit this. ADR-0096 point 7's register: no shields, no "hackers". -->
 <section id="remote">
   <div class="section-head">
     <div><h2>Listening away from home</h2></div>
     <img class="section-art" src="./assets/marks/constellation.webp" alt="" aria-hidden="true"
          loading="lazy" width="1024" height="559">
   </div>
-
-  <p class="lede">On your own network, Familiar just works — open the app and it finds your server. Getting to it from a train is a different question, and worth understanding before you do it.</p>
-
+  <p class="lede">At home, your apps reach the server over your own network. Listening from a train is a different question, and worth understanding before you set it up.</p>
   <div class="note">
-    <strong>Familiar has no login.</strong> There are no accounts and no password, because it was built to sit on your own network where everything that can reach it is already yours. That is a fine trade at home and a bad one on the open internet: anything that can reach your server can play your music and look through your folders. So the answer is not to publish it and add a lock — it is to keep it private and let your own devices in.
+    <strong>Sign-in covers the library, not the music.</strong> A new Familiar server asks for sign-in before anything can browse the library, change it or use its tools. The music and artwork are served without it, on purpose, so speakers and the apps' players can fetch them. The server also speaks plain HTTP, so on the open internet the sign-in itself could be read on its way. And a server set up before October 2026 may have no sign-in at all. So the answer is not to publish it behind a lock — it is to keep it private and let your own devices in.
   </div>
-
   <h3>Use Tailscale</h3>
-  <p><a href="https://tailscale.com" target="_blank" rel="noopener">Tailscale</a> puts your server and your phone on a small private network of your own. Nothing is exposed to the internet, there is no router setting to change, and it works on cellular. Install it on the server and on each device you listen with, turn on HTTPS certificates in the admin console, then run one command on the server:</p>
+  <p><a href="https://tailscale.com" target="_blank" rel="noopener">Tailscale</a> puts your server and your phone on a small private network of your own. Nothing is exposed to the internet, there is no router setting to change, it works on cellular, and the connection is encrypted, so the sign-in stays private. Install it on the server and on each device you listen with, turn on HTTPS certificates in the admin console, then run one command on the server:</p>
 <pre><code>tailscale serve --bg https / http://localhost:4400</code></pre>
-  <p>Your apps then use <code>https://&lt;server&gt;.&lt;tailnet&gt;.ts.net</code>, with a certificate that renews itself. This is the setup Familiar is developed against.</p>
-
+  <p>The server is then at <code>https://&lt;server&gt;.&lt;tailnet&gt;.ts.net</code>, with a certificate that renews itself. This is the setup Familiar is developed against.</p>
   <h3>If you would rather not</h3>
-  <p>Cloudflare Tunnel and WireGuard both work, and are covered in <a href="./faq.html">the FAQ</a>. One warning worth reading twice: <strong>a reverse proxy is only a boundary if it asks for a password.</strong> Putting nginx or Caddy in front of Familiar without authentication does not protect it — it publishes it, through nginx. Given there is no login behind the proxy, that is the whole of the security.</p>
-  <p class="footnote">Adding real authentication to Familiar is <a href="https://github.com/seethroughlab/familiar/blob/main/docs/decisions/ADR-0045-familiar-authenticates-inbound-requests.md" target="_blank" rel="noopener">a decision already taken</a> and not yet built. When it ships, this page changes.</p>
+  <p>Cloudflare Tunnel and WireGuard both work, and are covered in <a href="./faq.html">the FAQ</a>. One warning worth reading twice: <strong>a reverse proxy does not make Familiar safe to publish.</strong> With HTTPS it keeps the sign-in private on the way, but the music needs no sign-in. A proxy that adds a login of its own covers everything — and the apps and speakers cannot answer it.</p>
 </section>
 
 <section id="get-started" class="closing-cta">
