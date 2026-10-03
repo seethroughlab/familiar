@@ -1,8 +1,11 @@
 # ADR-0143: The Install Section Is a Three-Step Chooser
 
-Status: proposed
+Status: accepted
 
 Date: 2026-10-02
+
+Implementation:
+- **Accepted 2026-10-02**, as written. Not yet built.
 
 Supersedes point 2 of [ADR-0095](ADR-0095-the-install-section-is-platform-first.md), and extends
 [ADR-0131](ADR-0131-the-server-is-its-own-app.md)
