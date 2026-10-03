@@ -11,7 +11,7 @@ from uuid import uuid4
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
-from sqlalchemy import delete
+from sqlalchemy import delete, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import settings
@@ -137,6 +137,27 @@ _CLEANUP_TABLES = [
 ]
 
 
+async def _reset_vector_state(engine) -> None:
+    """Start every test from a vector index and planner statistics that describe what is there.
+
+    The cleanup above is a DELETE, so every row a test removes stays in the HNSW index on
+    `track_analysis.embedding` until something vacuums it. That was harmless until autovacuum
+    analysed the tables mid-suite while a large fixture was loaded (the ambient pool's 150+ tracks):
+    the planner then believed the tables held thousands of rows and sent every later similarity
+    query through the index, whose bounded candidate list (`hnsw.ef_search`) could fill with dead
+    rows, so three live rows came back as none. That is `assert 'Here' in []`,
+    `test_agreement_outranks_proximity`'s IndexError and the excursion rate's "0 of 24", which
+    failed together in suite order for weeks and never alone (docs/HEALTH.md). Reproduced on
+    2026-10-03 by churning 2,100 analysed rows with an ANALYZE before the delete: the similarity
+    tests then failed every run.
+
+    VACUUM cannot run inside a transaction, hence its own autocommit connection.
+    """
+    async with engine.connect() as conn:
+        conn = await conn.execution_options(isolation_level="AUTOCOMMIT")
+        await conn.execute(text("VACUUM ANALYZE tracks, track_analysis"))
+
+
 @pytest_asyncio.fixture(scope="function")
 async def async_db():
     """Provide a per-test async DB session against the real PostgreSQL database.
@@ -161,6 +182,7 @@ async def async_db():
         for model in _CLEANUP_TABLES:
             await session.execute(delete(model))
         await session.commit()
+        await _reset_vector_state(engine)
 
         yield session
 
