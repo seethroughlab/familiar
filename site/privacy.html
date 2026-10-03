@@ -51,7 +51,7 @@
   <p>To fill in what your files don't say, the server asks a few public services, sending the names it is asking about and nothing about you:</p>
   <ul>
     <li><strong>MusicBrainz and the Cover Art Archive</strong> — artist, album and track names or identifiers, for metadata and album artwork.</li>
-    <li><strong>Wikipedia, Wikidata, Wikimedia Commons and Spotify's public embed service</strong> — artist names or identifiers, for artist pictures.</li>
+    <li><strong>Wikipedia, Wikidata, Wikimedia Commons and Spotify's public embed service</strong> — artist names or identifiers, for artist pictures and photo galleries.</li>
     <li><strong>LRCLIB</strong> (<code>lrclib.net</code>) — title, artist, album and duration, for synced lyrics.</li>
     <li><strong>ListenBrainz</strong> — a request for its public list of new releases, for Discover. Nothing about your library is sent. It can be turned off.</li>
     <li><strong>The community cache</strong> (<code>clapback.seethroughlab.com</code>) — a one-way hash of a track's audio fingerprint, and its MusicBrainz recording id when known, to skip analysing music that has been analysed elsewhere. No file names, titles or listening history.</li>
@@ -65,6 +65,7 @@
     <li><strong>Contributing to the community cache</strong> — the analysis of tracks your server worked out itself, under the same hash, with an installation identifier that is not linked to you. Off unless you turn it on.</li>
     <li><strong>Last.fm</strong> — if you connect an account, what you play (artist, title, duration) is scrobbled to <code>ws.audioscrobbler.com</code>, and artist information is fetched from it.</li>
     <li><strong>AcoustID</strong> — with a key, audio fingerprints of tracks Familiar cannot otherwise identify.</li>
+    <li><strong>fanart.tv</strong> — with a key, an artist's MusicBrainz identifier, for more artist photos.</li>
     <li><strong>YouTube</strong> — only when you search for or download a music video, the track's artist and title.</li>
     <li><strong>An AI assistant you connect</strong> — Familiar holds no API key and calls no model. If you connect an assistant that speaks MCP (Claude Desktop, say), what you type goes from it to whichever provider you signed in to, on your account and under their policy, not through Familiar. What Familiar returns to it is search results, track and playlist details, and playback state. Never audio.</li>
     <li><strong>Links you open</strong> — Bandcamp, Apple Music, Qobuz, Discogs, 7digital, Amazon Music: search and buy links that open in your browser.</li>

@@ -15,6 +15,8 @@ export interface AppSettingsResponse {
   // LLM provider
   lastfm_configured: boolean;
   acoustid_configured: boolean;
+  /** fanart.tv, for artist photos beyond Wikimedia Commons (ADR-0149). Optional. */
+  fanarttv_configured?: boolean;
   // Soulseek via slskd (ADR-0116). The key comes back masked; the URL in full.
   soulseek_url: string | null;
   soulseek_api_key: string | null;

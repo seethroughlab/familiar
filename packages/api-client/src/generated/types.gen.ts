@@ -500,6 +500,14 @@ export type ArtistDetailResponse = {
      */
     image_url?: string | null;
     /**
+     * Images
+     */
+    images?: Array<ArtistImageOut>;
+    /**
+     * Images State
+     */
+    images_state?: string;
+    /**
      * Lastfm Error
      */
     lastfm_error?: string | null;
@@ -543,6 +551,62 @@ export type ArtistDetailResponse = {
      * Tracks
      */
     tracks: Array<ArtistTrack>;
+};
+
+/**
+ * ArtistImageOut
+ *
+ * One photo in an artist's gallery (ADR-0149), with what its licence asks to be shown.
+ */
+export type ArtistImageOut = {
+    /**
+     * Author
+     */
+    author?: string | null;
+    /**
+     * Height
+     */
+    height?: number | null;
+    /**
+     * Hidden
+     */
+    hidden?: boolean;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * License
+     */
+    license?: string | null;
+    /**
+     * License Url
+     */
+    license_url?: string | null;
+    /**
+     * Page Url
+     */
+    page_url?: string | null;
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Thumb Url
+     */
+    thumb_url: string;
+    /**
+     * Url
+     */
+    url: string;
+    /**
+     * Width
+     */
+    width?: number | null;
 };
 
 /**
@@ -6236,6 +6300,14 @@ export type SettingsResponse = {
      */
     external_features_enabled: boolean;
     /**
+     * Fanarttv Api Key
+     */
+    fanarttv_api_key?: string | null;
+    /**
+     * Fanarttv Configured
+     */
+    fanarttv_configured?: boolean;
+    /**
      * Lastfm Api Key
      */
     lastfm_api_key: string | null;
@@ -6352,6 +6424,10 @@ export type SettingsUpdateRequest = {
      * External Features Enabled
      */
     external_features_enabled?: boolean | null;
+    /**
+     * Fanarttv Api Key
+     */
+    fanarttv_api_key?: string | null;
     /**
      * Lastfm Api Key
      */
@@ -11663,6 +11739,156 @@ export type LibraryGetArtistImageResponses = {
      */
     200: unknown;
 };
+
+export type LibraryHideArtistImageData = {
+    body?: never;
+    path: {
+        /**
+         * Artist Name
+         */
+        artist_name: string;
+        /**
+         * Image Id
+         */
+        image_id: string;
+    };
+    query?: never;
+    url: '/api/v1/library/artists/{artist_name}/images/{image_id}/hide';
+};
+
+export type LibraryHideArtistImageErrors = {
+    /**
+     * Bad Request
+     */
+    400: ErrorEnvelope;
+    /**
+     * Unauthorized
+     */
+    401: ErrorEnvelope;
+    /**
+     * Not Found
+     */
+    404: ErrorEnvelope;
+    /**
+     * Unprocessable Entity
+     */
+    422: ErrorEnvelope;
+    /**
+     * Internal Server Error
+     */
+    500: ErrorEnvelope;
+};
+
+export type LibraryHideArtistImageError = LibraryHideArtistImageErrors[keyof LibraryHideArtistImageErrors];
+
+export type LibraryHideArtistImageResponses = {
+    /**
+     * Successful Response
+     */
+    200: ArtistImageOut;
+};
+
+export type LibraryHideArtistImageResponse = LibraryHideArtistImageResponses[keyof LibraryHideArtistImageResponses];
+
+export type LibraryMakeArtistImageMainData = {
+    body?: never;
+    path: {
+        /**
+         * Artist Name
+         */
+        artist_name: string;
+        /**
+         * Image Id
+         */
+        image_id: string;
+    };
+    query?: never;
+    url: '/api/v1/library/artists/{artist_name}/images/{image_id}/main';
+};
+
+export type LibraryMakeArtistImageMainErrors = {
+    /**
+     * Bad Request
+     */
+    400: ErrorEnvelope;
+    /**
+     * Unauthorized
+     */
+    401: ErrorEnvelope;
+    /**
+     * Not Found
+     */
+    404: ErrorEnvelope;
+    /**
+     * Unprocessable Entity
+     */
+    422: ErrorEnvelope;
+    /**
+     * Internal Server Error
+     */
+    500: ErrorEnvelope;
+};
+
+export type LibraryMakeArtistImageMainError = LibraryMakeArtistImageMainErrors[keyof LibraryMakeArtistImageMainErrors];
+
+export type LibraryMakeArtistImageMainResponses = {
+    /**
+     * Successful Response
+     */
+    200: ArtistImageOut;
+};
+
+export type LibraryMakeArtistImageMainResponse = LibraryMakeArtistImageMainResponses[keyof LibraryMakeArtistImageMainResponses];
+
+export type LibraryUnhideArtistImageData = {
+    body?: never;
+    path: {
+        /**
+         * Artist Name
+         */
+        artist_name: string;
+        /**
+         * Image Id
+         */
+        image_id: string;
+    };
+    query?: never;
+    url: '/api/v1/library/artists/{artist_name}/images/{image_id}/unhide';
+};
+
+export type LibraryUnhideArtistImageErrors = {
+    /**
+     * Bad Request
+     */
+    400: ErrorEnvelope;
+    /**
+     * Unauthorized
+     */
+    401: ErrorEnvelope;
+    /**
+     * Not Found
+     */
+    404: ErrorEnvelope;
+    /**
+     * Unprocessable Entity
+     */
+    422: ErrorEnvelope;
+    /**
+     * Internal Server Error
+     */
+    500: ErrorEnvelope;
+};
+
+export type LibraryUnhideArtistImageError = LibraryUnhideArtistImageErrors[keyof LibraryUnhideArtistImageErrors];
+
+export type LibraryUnhideArtistImageResponses = {
+    /**
+     * Successful Response
+     */
+    200: ArtistImageOut;
+};
+
+export type LibraryUnhideArtistImageResponse = LibraryUnhideArtistImageResponses[keyof LibraryUnhideArtistImageResponses];
 
 export type DuplicatesDeduplicatePreviewData = {
     body?: never;

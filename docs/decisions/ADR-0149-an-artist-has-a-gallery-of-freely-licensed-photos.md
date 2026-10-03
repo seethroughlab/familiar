@@ -5,7 +5,32 @@ Status: accepted
 Date: 2026-10-03
 
 Implementation:
-- **Accepted 2026-10-03**, as written. Not yet built.
+- **Accepted 2026-10-03**, as written.
+- **Server half built 2026-10-03.**
+  - `artist_images` (migration `20261003_artist_images`), plus `artists.image_chosen` and
+    `artists.gallery_fetched_at`. `services/artist_gallery.py` gathers candidates — every Wikidata
+    P18 image in the entity's order, the P373 category filtered to photographs (photo MIME types,
+    600px short side, no logos, covers or vector files), fanart.tv thumbs and backgrounds only with
+    a key — ranks them by point 7, caps at 24, and upserts by `(source, source_id)` keeping `hidden`.
+  - Fetching: `schedule_gallery_fetch` from `GET /library/artists/{name}` when a gallery is missing
+    or older than 90 days, and the deferrable `artist_gallery` job, 60 artists an hour, those with a
+    MusicBrainz ID first. Both stand down while background work is paused, and when
+    `FAMILIAR_ARTIST_GALLERY_FETCH` is off.
+  - API (tag `library`): `images` and `images_state` on the artist detail; `POST
+    /library/artists/{name}/images/{id}/hide`, `/unhide` and `/main`. Images stay external URLs:
+    no new route, nothing added to `MEDIA_ROUTES`.
+  - A fanart.tv card under Server › Providers, naming `FANARTTV_API_KEY`.
+  - **Point 6 found a race in the existing resolver.** `_write_through_to_artist` read the artist,
+    then wrote `image_url`; a background resolve that had loaded the row before the owner chose a
+    main picture overwrote it — caught by the round-trip test, which once returned Björk's
+    Wikipedia thumbnail over the picture it had just chosen. It is now one conditional `UPDATE …
+    WHERE NOT image_chosen`; `test_a_resolve_already_holding_the_row_cannot_overwrite_a_chosen_picture`
+    fails on the old code.
+  - **The suite turns fetching off** (`settings.artist_gallery_fetch = False` in `conftest.py`):
+    with it on, every artist page a test opened started a real fetch that reached the network and
+    held locks a migration test's `DROP TABLE` deadlocked on.
+- **Not yet built:** the apps' photo strip, viewer and curation (`familiar-apple`), and the coverage
+  measurement this ADR's Consequences ask for after the first sweep on the NAS.
 
 Extends [ADR-0138](ADR-0138-a-desktop-server-yields-to-its-owner.md) (background work yields) and
 [ADR-0126](ADR-0126-the-admin-ui-is-organized-around-operator-workflows.md) (a provider is one card)

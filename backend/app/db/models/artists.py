@@ -11,6 +11,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
     text,
 )
@@ -47,6 +48,12 @@ class Artist(Base):
     # Resolved photo (migrated from artist_info.image_url during backfill).
     image_url: Mapped[str | None] = mapped_column(Text)
     image_checked_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # The owner chose `image_url` from the gallery (ADR-0149 point 6); the resolver leaves it alone.
+    image_chosen: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    # When the gallery was last fetched, whatever it found (ADR-0149 point 5). NULL: never.
+    gallery_fetched_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     # Last.fm-sourced fields, also migrated from artist_info during backfill.
     bio_summary: Mapped[str | None] = mapped_column(Text)
@@ -276,3 +283,47 @@ class DiscoverySourceHealth(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now()
     )
+
+
+class ArtistImage(Base):
+    """One photo in an artist's gallery (ADR-0149).
+
+    Many per artist, from Wikimedia Commons (always) and fanart.tv (when keyed). ``Artist.image_url``
+    stays the one main picture that lists and the offline cache read; this is the rest. Each row
+    carries what its licence requires shown beside it: author, licence and the source page
+    (ADR-0149 point 3). ``hidden`` is the owner's, and survives a refetch because a row is matched
+    by ``(artist_id, source, source_id)``, not replaced.
+    """
+
+    __tablename__ = "artist_images"
+    __table_args__ = (
+        UniqueConstraint("artist_id", "source", "source_id", name="uq_artist_images_source"),
+        Index("ix_artist_images_artist_rank", "artist_id", "rank"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+        server_default=text("gen_random_uuid()"),
+    )
+    artist_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("artists.id", ondelete="CASCADE"), nullable=False
+    )
+    source: Mapped[str] = mapped_column(String(20), nullable=False)  # 'commons' | 'fanarttv'
+    source_id: Mapped[str] = mapped_column(Text, nullable=False)  # Commons file title / fanart.tv id
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)  # 'portrait' | 'photo' | 'background'
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    thumb_url: Mapped[str] = mapped_column(Text, nullable=False)
+    width: Mapped[int | None] = mapped_column(Integer)
+    height: Mapped[int | None] = mapped_column(Integer)
+    author: Mapped[str | None] = mapped_column(Text)
+    license: Mapped[str | None] = mapped_column(Text)
+    license_url: Mapped[str | None] = mapped_column(Text)
+    page_url: Mapped[str | None] = mapped_column(Text)
+    rank: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    hidden: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+

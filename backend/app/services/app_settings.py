@@ -52,6 +52,10 @@ class AppSettings(BaseModel):
     # Audio fingerprinting
     acoustid_api_key: str | None = None  # Get free key at https://acoustid.org/new-application
 
+    # Artist photos beyond Wikimedia Commons (ADR-0149 point 2). Free personal key at
+    # https://fanart.tv/get-an-api-key/. Unset, the gallery uses Commons only.
+    fanarttv_api_key: str | None = None
+
     # Soulseek, through a slskd instance the operator runs (ADR-0116). Unset means the feature
     # does not exist on this server: the MCP tools are not listed, not merely failing. Familiar
     # never speaks the Soulseek protocol itself and holds no Soulseek credentials — only the
@@ -280,6 +284,7 @@ class AppSettingsService:
         secret_keys = {
             "lastfm_api_key", "lastfm_api_secret",
             "acoustid_api_key",
+            "fanarttv_api_key",
             "soulseek_api_key",
             "s3_backup_access_key_id", "s3_backup_secret_access_key",
         }
@@ -312,6 +317,10 @@ class AppSettingsService:
     def has_acoustid_key(self) -> bool:
         """Check if AcoustID API key is configured (from settings.json or env vars)."""
         return bool(self.get_effective("acoustid_api_key"))
+
+    def has_fanarttv_key(self) -> bool:
+        """Whether a fanart.tv key is set, from settings.json or FANARTTV_API_KEY (ADR-0149)."""
+        return bool(self.get_effective("fanarttv_api_key"))
 
     def has_soulseek_configured(self) -> bool:
         """Is a slskd URL set (from settings.json or env)? The key is optional — slskd can run without one."""
@@ -371,6 +380,7 @@ class AppSettingsService:
             "lastfm_api_key",
             "lastfm_api_secret",
             "acoustid_api_key",
+            "fanarttv_api_key",
             "soulseek_url",
             "soulseek_api_key",
             "s3_backup_access_key_id",

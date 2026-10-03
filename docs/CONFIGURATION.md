@@ -18,6 +18,8 @@ cp .env.example .env
 | `REDIS_URL` | Redis connection string. Unset, the server keeps the same state in PostgreSQL instead (ADR-0133); every Docker compose file sets it | *(none)* |
 | `FRONTEND_URL` | Base URL for OAuth callbacks, and for the sign-in link a new server prints | `http://localhost:4400` |
 | `FAMILIAR_OPEN_SERVER` | Run with no token on purpose (ADR-0141): nothing is minted at first start, and the web admin does not warn. For a deliberately public server such as the demo. | unset |
+| `FANARTTV_API_KEY` | A fanart.tv personal key, for more artist photos beside the ones from Wikimedia Commons, which need none (ADR-0149). Get one at fanart.tv/get-an-api-key. | unset |
+| `FAMILIAR_ARTIST_GALLERY_FETCH` | Set to `false` to stop fetching artist photo galleries in the background (ADR-0149). On by default; the test suite turns it off. | `true` |
 | `FAMILIAR_ALLOW_WRITABLE_LIBRARY` | Start even though the music library is writable. By default the server refuses, because Familiar never writes to your music and a read-only mount (`:ro`) makes that a guarantee (ADR-0136). For disposable copies such as the demo's library | *(off)* |
 | `FAMILIAR_SEMAPHORE_PREFIX` | Name the analysis pools' semaphores under this prefix. Set by Familiar Server to its app group, which the macOS sandbox requires (ADR-0136); leave unset elsewhere | *(none)* |
 | `S3_BACKUP_ACCESS_KEY_ID` | AWS access key for S3 backup | *(none)* |

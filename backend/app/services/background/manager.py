@@ -39,6 +39,10 @@ LISTENBRAINZ_INTERVAL_HOURS = 3
 #: (about a minute at the 3/s ceiling) then 150 corpus claims (six minutes at 25/min).
 #: The 23,853 unnamed tracks measured on 2026-09-14 resolve in about 1.1 days.
 RECORDING_BACKFILL_INTERVAL_MINUTES = 10
+#: The artist-gallery sweep (ADR-0149 point 5): about sixty artists an hour, so a few-thousand-artist
+#: library is covered in days without competing with a sync for MusicBrainz's one request a second.
+ARTIST_GALLERY_INTERVAL_MINUTES = 60
+ARTIST_GALLERY_PER_TICK = 60
 
 
 class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin, SoulseekMixin):
@@ -207,6 +211,17 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin, So
                 replace_existing=True,
             )
 
+            # Artist photo galleries (ADR-0149 point 5), deferrable below like every background job.
+            self._scheduler.add_job(
+                self._artist_gallery_sweep,
+                IntervalTrigger(minutes=ARTIST_GALLERY_INTERVAL_MINUTES),
+                id="artist_gallery",
+                max_instances=1,
+                coalesce=True,
+                misfire_grace_time=600,
+                replace_existing=True,
+            )
+
             # A settled Soulseek download triggers a sync (ADR-0117 point 3). Registered whether
             # or not slskd is configured: the job returns at once when it is not, and that is
             # cheaper than re-registering from the settings route every time the URL changes.
@@ -269,6 +284,7 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin, So
         "daily_external_albums",
         "listenbrainz_fresh_releases",
         "recording_backfill",
+        "artist_gallery",
         "soulseek_poll",
         "daily_update_check",
         "s3_backup",

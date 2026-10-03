@@ -469,6 +469,23 @@ class SyncMixin(_SyncBase):
         except Exception as e:
             logger.warning(f"Recording backfill tick failed: {e}")
 
+    async def _artist_gallery_sweep(self) -> None:
+        """APScheduler entry: one tick of ADR-0149's library-wide gallery fetch."""
+        from app.db.session import create_task_engine_session
+        from app.services.artist_gallery import sweep
+        from app.services.background.manager import ARTIST_GALLERY_PER_TICK
+
+        engine, session_maker = create_task_engine_session()
+        try:
+            async with session_maker() as db:
+                fetched = await sweep(db, limit=ARTIST_GALLERY_PER_TICK)
+            if fetched:
+                logger.info("Artist gallery sweep fetched %d artists", fetched)
+        except Exception as e:
+            logger.warning(f"Artist gallery sweep failed: {e}")
+        finally:
+            await engine.dispose()
+
     async def _daily_external_albums_refresh(self) -> None:
         """APScheduler entry: recompute "Albums you might want" for every profile.
 

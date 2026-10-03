@@ -188,3 +188,13 @@ describe('ProviderCards — a provider is one card (ADR-0126 point 2)', () => {
   });
 });
 
+
+describe('ProviderCards — fanart.tv (ADR-0149)', () => {
+  it('is a card of its own that names its key, and says the photos need none without it', async () => {
+    vi.mocked(systemApi.discoverySources).mockResolvedValue({ status: 'ok', sources: [] } as never);
+    renderPanel();
+    expect(await screen.findByText('fanart.tv')).toBeTruthy();
+    expect(screen.getByText(/FANARTTV_API_KEY/)).toBeTruthy();
+    expect(screen.getByText(/Wikimedia Commons, which need no key/)).toBeTruthy();
+  });
+});

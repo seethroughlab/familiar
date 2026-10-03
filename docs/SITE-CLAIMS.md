@@ -172,6 +172,7 @@ Rewritten 2026-10-03 for two apps. Every host below is in the backend's source (
 | By default: cache lookups send a fingerprint hash and the recording id when known | true | `community_cache_enabled = True`; `DEFAULT_CACHE_URL = "https://clapback.seethroughlab.com"` (`services/community_cache.py`, checked by `e2e/pages.spec.ts`); ADR-0119 |
 | By default: GitHub for release checks, the analysis model, and Familiar Server's update feed | true | `services/update_checker.py`; ADR-0132 point 8; ADR-0135 point 3 |
 | Contributing to the cache is opt-in, under an installation id | true | `community_cache_contribute = False`; ADR-0108 |
+| fanart.tv only with a key, sending an artist's MusicBrainz identifier | true | `services/artist_gallery.py` `fanart_candidates`, called only when `fanarttv_api_key` is set (ADR-0149) |
 | Last.fm, AcoustID only when set up; YouTube only on a video search or download | true | key-gated in `app_settings`; `services/video.py` runs only from `/videos` routes |
 | ~~`familiar-cache.fly.dev`; the demo server; "only when you opt in"~~ | **false — corrected 2026-10-03** | The host moved to `clapback.seethroughlab.com`; the demo is for App Store review; several services are on by default |
 | Your own assistant, if you connect one | true | corrected 2026-08-13; previously claimed a chat feature that no longer exists |

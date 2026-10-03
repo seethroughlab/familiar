@@ -25,7 +25,7 @@ from datetime import timedelta
 from urllib.parse import quote, unquote
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Artist, ArtistAlias, ExternalArtistImageCache
@@ -658,11 +658,19 @@ async def _write_through_to_artist(
     alias = await db.get(ArtistAlias, normalized)
     if alias is None:
         return
-    artist_row = await db.get(Artist, alias.artist_id)
-    if artist_row is None:
-        return
-    artist_row.image_url = image_url
-    artist_row.image_checked_at = checked_at
+    # One conditional UPDATE, not a read and a write: a main picture the owner chose from the
+    # gallery is theirs (ADR-0149 point 6), and this runs in a background session that may already
+    # hold the row from before the choice. Checking a loaded `image_chosen` let a resolve that
+    # started first overwrite a picture chosen while it ran — found by
+    # `test_hide_and_main_round_trip_through_the_detail`. The database decides, at write time.
+    await db.execute(
+        update(Artist)
+        .where(Artist.id == alias.artist_id, Artist.image_chosen.is_(False))
+        .values(image_url=image_url, image_checked_at=checked_at)
+        .execution_options(synchronize_session=False)
+    )
+    # Bring any copy of the row this session already holds in step with what was written.
+    await db.get(Artist, alias.artist_id, populate_existing=True)
 
 
 async def _read_cached(
