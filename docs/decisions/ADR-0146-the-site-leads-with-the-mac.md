@@ -1,8 +1,11 @@
 # ADR-0146: The Site Leads with the Mac
 
-Status: proposed
+Status: accepted
 
 Date: 2026-10-03
+
+Implementation:
+- **Accepted 2026-10-03**, as written. Not yet built.
 
 Supersedes point 1 and point 11 of [ADR-0055](ADR-0055-the-site-is-restructured-around-five-things.md)
 and what remains of point 3 of [ADR-0039](ADR-0039-the-website-is-rebuilt-in-place.md); refines

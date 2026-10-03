@@ -1,7 +1,8 @@
 # ADR-0039: The Website Is Rebuilt in Place
 
 Status: accepted — point 1's "no build step" clause amended by
-[ADR-0103](ADR-0103-the-visualizer-contract-is-published-with-a-gallery.md)
+[ADR-0103](ADR-0103-the-visualizer-contract-is-published-with-a-gallery.md); point 3 superseded by
+[ADR-0146](ADR-0146-the-site-leads-with-the-mac.md)
 
 Point 1's other three clauses stand and were reaffirmed on 2026-08-31 when
 [ADR-0069](ADR-0069-the-site-adopts-a-static-site-generator.md) was **rejected**: still no

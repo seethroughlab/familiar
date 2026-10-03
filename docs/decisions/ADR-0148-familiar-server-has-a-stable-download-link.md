@@ -1,8 +1,11 @@
 # ADR-0148: Familiar Server Has a Stable Download Link
 
-Status: proposed
+Status: accepted
 
 Date: 2026-10-03
+
+Implementation:
+- **Accepted 2026-10-03**, as written. Not yet built.
 
 Extends [ADR-0135](ADR-0135-familiar-server-is-a-separate-app.md);
 closes the follow-up in [ADR-0143](ADR-0143-the-install-section-is-a-three-step-chooser.md)

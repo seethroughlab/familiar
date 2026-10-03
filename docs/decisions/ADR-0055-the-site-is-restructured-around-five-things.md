@@ -1,6 +1,6 @@
 # ADR-0055: The Site Is Restructured Around Five Things
 
-Status: accepted
+Status: accepted; points 1 and 11 superseded by [ADR-0146](ADR-0146-the-site-leads-with-the-mac.md)
 
 Implementation:
 - **Accepted 2026-08-30, after checking every point against the page rather than against memory.**

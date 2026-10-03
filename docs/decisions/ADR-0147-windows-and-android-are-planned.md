@@ -1,8 +1,11 @@
 # ADR-0147: Windows and Android Are Planned
 
-Status: proposed
+Status: accepted
 
 Date: 2026-10-03
+
+Implementation:
+- **Accepted 2026-10-03**, as written. Not yet built.
 
 Extends [ADR-0131](ADR-0131-the-server-is-its-own-app.md) point 4 and
 [ADR-0001](ADR-0001-native-apple-clients-supersede-capacitor.md) point 7
