@@ -5,6 +5,16 @@
     <link>https://github.com/seethroughlab/familiar/releases</link>
     <description>Updates to Familiar Server, the Mac form of the Familiar server.</description>
     <item>
+      <title>Familiar Server 0.2.0-beta14</title>
+      <pubDate>Sat, 03 Oct 2026 16:10:38 GMT</pubDate>
+      <link>https://github.com/seethroughlab/familiar/releases/tag/v0.2.0-beta14</link>
+      <sparkle:version>202610031201</sparkle:version>
+      <sparkle:shortVersionString>0.2.0-beta14</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/seethroughlab/familiar/releases/tag/v0.2.0-beta14</sparkle:releaseNotesLink>
+      <enclosure url="https://github.com/seethroughlab/familiar/releases/download/v0.2.0-beta14/Familiar-Server-0.2.0-beta14.dmg" length="363806827" type="application/octet-stream" sparkle:edSignature="iD0hpfOc8fPkmEVKfKHEB5pQGX6jxPRnwXEGDSOodWHLw8fA4SAdJLU1ZYCMhMggTK7/mjfGjrAWTpuqmlW+DQ==" />
+    </item>
+    <item>
       <title>Familiar Server 0.2.0-beta13</title>
       <pubDate>Sat, 03 Oct 2026 02:54:25 GMT</pubDate>
       <link>https://github.com/seethroughlab/familiar/releases/tag/v0.2.0-beta13</link>
