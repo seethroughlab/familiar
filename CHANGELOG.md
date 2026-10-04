@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-beta17] - 2026-10-04
+
+No migrations; the API contract stays at v1.
+
+### Pairing
+
+- **A NAS reached over Tailscale can be paired by QR code.** The pairing code now says `https` when
+  the admin page was opened over https, as a NAS behind `tailscale serve` is (`https://…:8443`).
+  Before, every phone connected with plain http, which that port does not speak. Codes from
+  Familiar Server on your Wi-Fi are unchanged. Needs the Mac or iPhone app's next build.
+
+### Artists
+
+- An artist page opened while its photos were being fetched could start a second fetch of the
+  same photos. Harmless, but each one was a MusicBrainz lookup at one a second.
+
+### Demo server
+
+- **The demo has artists again.** Its tracks were never linked to artists after the artist model
+  changed in April, so the Artists list was empty and every artist page a 404. It also has a
+  Videos list, which answered every request with an error.
+
 ## [0.2.0-beta16] - 2026-10-03
 
 **One migration** (`20261003_artist_images`), run at start; the API contract stays at v1 (additions only).
