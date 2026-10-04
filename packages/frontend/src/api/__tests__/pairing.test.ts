@@ -44,12 +44,30 @@ describe('pairing link', () => {
 
   it('uses the host this page was loaded from', () => {
     const target = pairingHost(info, { hostname: 'nas.tailnet.ts.net', port: '4400', protocol: 'http:' });
-    expect(target).toEqual({ host: 'nas.tailnet.ts.net', port: 4400 });
+    expect(target).toEqual({ host: 'nas.tailnet.ts.net', port: 4400, scheme: 'http' });
   });
 
   it('falls back to a LAN address when the page is on loopback, which a phone cannot reach', () => {
     const target = pairingHost(info, { hostname: '127.0.0.1', port: '4400', protocol: 'http:' });
-    expect(target).toEqual({ host: '192.168.1.20', port: 4400 });
+    expect(target).toEqual({ host: '192.168.1.20', port: 4400, scheme: 'http' });
+  });
+
+  it('keeps https when the page was loaded over it, as a NAS behind `tailscale serve` is', () => {
+    const target = pairingHost(info, { hostname: 'nas.tailnet.ts.net', port: '8443', protocol: 'https:' });
+    expect(target).toEqual({ host: 'nas.tailnet.ts.net', port: 8443, scheme: 'https' });
+    const params = new URL(buildPairingLink(info, target!).replace('familiar://', 'http://x/')).searchParams;
+    expect(params.get('scheme')).toBe('https');
+    expect(params.get('port')).toBe('8443');
+  });
+
+  it('falls back to plain http on the LAN even when the loopback page was https', () => {
+    const target = pairingHost(info, { hostname: 'localhost', port: '', protocol: 'https:' });
+    expect(target?.scheme).toBe('http');
+  });
+
+  it('leaves http implicit, so a link an older app reads is unchanged', () => {
+    const link = buildPairingLink(info, { host: '192.168.1.20', port: 4400, scheme: 'http' });
+    expect(link).not.toContain('scheme=');
   });
 
   it('has nowhere to point when loopback is all there is', () => {

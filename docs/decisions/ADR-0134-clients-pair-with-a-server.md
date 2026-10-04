@@ -66,6 +66,16 @@ Implementation:
     - the MCP helper still sends no token (it needs a shared keychain group)
     - the visualizer bundle's lyrics fetch is gated
     - library stores still word a token 401 as an unknown profile
+- **2026-10-04: first paired phone, and point 5's link gained a scheme.** An iPhone paired with
+  Familiar Server over Wi-Fi from the QR code, and browsed and streamed with the token. The
+  same check against the NAS found that **a link carried no scheme and the app built every paired
+  address as `http://`** (`PairingLink.swift`), while a NAS reached over Tailscale is
+  `https://…:8443` through `tailscale serve`, a port that speaks nothing else. A code scanned
+  from that admin page would have pointed the phone at a port that cannot answer it. The web
+  admin now adds `scheme=https` when the page was loaded over https (`api/pairing.ts`), and
+  keeps `http` implicit, so every link an older app reads is unchanged. A loopback page still
+  falls back to plain http on the LAN, which is what the server's own listener speaks. The app
+  reads `scheme` (`http` or `https`, anything else refused), defaulting to `http`.
 
 Extends [ADR-0045](ADR-0045-familiar-authenticates-inbound-requests.md),
 [ADR-0131](ADR-0131-the-server-is-its-own-app.md)
