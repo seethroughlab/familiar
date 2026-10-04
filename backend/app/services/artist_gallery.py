@@ -365,7 +365,11 @@ async def _fetch_in_background(artist_ids: list[UUID]) -> None:
                 try:
                     async with session_maker() as db:
                         artist = await db.get(Artist, artist_id)
-                        if artist is None:
+                        # Asked again here, against the row as it is now: the caller decided from a
+                        # row it read earlier. A page request that loaded the artist before a fetch
+                        # finished, and reached `schedule_gallery_fetch` after it had (so nothing was
+                        # in flight), scheduled a second fetch of a gallery 37 seconds old.
+                        if artist is None or not is_stale(artist):
                             continue
                         count = await fetch_gallery(db, artist, client, fanart_key=key)
                         await db.commit()
