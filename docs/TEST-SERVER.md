@@ -134,9 +134,32 @@ run. A week of accumulated play counts is cosmetic; losing a deliberate change i
 
 ## The review account
 
-The server URL and profile a reviewer types belong beside the App Store Connect metadata, in this
-repository, so that preparing a submission does not begin by working out what they were. That
-location is **not yet chosen** — ADR-0038 point 6, unfinished.
+The server URL and profile a reviewer types live here, as the notes App Review is given
+(ADR-0038 point 6). Paste them into **both** places App Store Connect asks: TestFlight → Test
+Information (Beta App Review), and the App Review Information of each new App Store version.
+
+**Last checked against the live demo on 2026-10-04** — every step opened and worked: setup
+prefilled on both platforms, the Demo profile, 11 albums, Kevin MacLeod's artist page with photos,
+downloads, and playlist creation. Saved to TestFlight that day. The App Store notes on the released
+1.4 still describe the chat tab and an Admin AI key, both removed (ADR-0048); a released version's
+notes cannot be edited, so they are replaced when 1.5 is created.
+
+**Before pasting, open each step against the demo.** Do not send a reviewer to a feature the demo
+cannot show: it has no Music Map (no `umap-learn` in its image, and four artists would make a
+meaningless one), and chat no longer exists. The notes previously walked reviewers through both.
+
+> Familiar is a music player for a library you host yourself: the app connects to a Familiar server on your own Mac or home server. For review, a public demo server is running at https://familiar-demo.fly.dev with 32 Creative Commons tracks by Kevin MacLeod, Jahzzar, Hussalonia and Nicolas Falcon.
+>
+> On first launch the app shows "Connect to your server" with the demo address already filled in. Tap Connect (no sign-in), then choose the Demo profile under "Who are you?".
+>
+> Suggested test flow (3 minutes):
+> 1. Albums: browse the 11 albums and open one.
+> 2. Play any track. Audio streams from the demo server; the lock screen and Control Center controls work.
+> 3. Artists → Kevin MacLeod: the page opens on a slideshow of freely licensed photos from Wikimedia Commons, with each photographer and licence credited on the photo. Tap it for full size.
+> 4. Downloads: tap Download on an album. The tracks are saved for offline listening, and playback stays responsive while they download.
+> 5. Playlists: tap + to create a playlist, then add tracks to it from any track's menu (long-press on iPhone, right-click on Mac).
+>
+> The demo server exists only so reviewers can try the app without their own server. In normal use the music never leaves the listener's own devices. The demo music is Creative Commons / royalty-free; attribution is at https://familiar.seethroughlab.com and in the GitHub repository.
 
 ## The Fly footprint
 
