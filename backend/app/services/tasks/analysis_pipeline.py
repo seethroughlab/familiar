@@ -5,6 +5,7 @@ and all queue_* functions for the background analysis pipeline.
 """
 
 import gc
+import hashlib
 import logging
 from datetime import timedelta
 from pathlib import Path
@@ -56,9 +57,10 @@ def run_track_features(track_id: str) -> dict[str, Any]:
     This is separated from embedding extraction to reduce peak memory usage.
     Each phase runs in its own subprocess that exits after completion.
 
-    External Features Lookup:
-    Before running expensive librosa analysis, checks if pre-computed features
-    are available from external services (e.g., ReccoBeats via Spotify track ID).
+    Community cache (ADR-0144):
+    A features hit at the current ``FEATURES_VERSION`` is trusted and the track is not decoded for
+    features. One hit in ``HIT_SAMPLE_RATE``, chosen from the fingerprint, is also analysed locally
+    and its disagreements recorded. A miss, or a lookup that did not answer, is analysed locally.
     """
     # Configure logging for subprocess (spawned processes don't inherit parent's config)
     import asyncio
@@ -157,15 +159,15 @@ def run_track_features(track_id: str) -> dict[str, Any]:
             if fp_result:
                 _, acoustid_fingerprint = fp_result
 
-            # Try external feature lookup first (ReccoBeats via Spotify ID)
             features: dict[str, Any] = {}
             features_source = "local"
             app_settings = get_app_settings_service().get()
 
-
-            # Try community cache for features if no external features found
+            # The community cache is the only outside source of features (ADR-0144's Context:
+            # the ReccoBeats lookup this once sat behind is gone).
             deep_scalars: dict[str, Any] = {}
-            if not features.get("bpm") and app_settings.community_cache_enabled and acoustid_fingerprint:
+            cached_analysis_detail: dict[str, Any] | None = None
+            if app_settings.community_cache_enabled and acoustid_fingerprint:
                 try:
                     cache_service = get_community_cache_service(
                         cache_url=app_settings.community_cache_url
@@ -198,7 +200,7 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                                 cache_service.lookup_analysis_detail(acoustid_fingerprint)
                             )
                             if cached_detail:
-                                analysis_detail = cached_detail.detail
+                                cached_analysis_detail = cached_detail.detail
                                 logger.info(
                                     f"Community cache analysis detail hit for "
                                     f"{track.title}"
@@ -217,56 +219,73 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                 except Exception as e:
                     logger.warning(f"Community cache features lookup failed: {e}")
 
-            # Always run local librosa analysis for features + cross-validation
+            # ADR-0144: trust a hit, check one in fifty, analyse a miss.
+            #
+            # This used to decode and analyse every track, hit or not ("always run local
+            # librosa analysis for features + cross-validation"), a rule from when the outside
+            # source was ReccoBeats, a different algorithm. It cost a hit ~28 of its ~35 s and
+            # raised the worker from 110 MB to 870 MB, for values nothing read. It also threw away
+            # the cache's section analysis: it was fetched into `analysis_detail`, which this
+            # block then reset to None and recomputed.
+            cache_hit = features_source == "community_cache" and bool(features.get("bpm"))
+            path = features_path(cache_hit, acoustid_fingerprint)
             computed_locally = False
-            analysis_detail = None
+            analysis_detail = cached_analysis_detail
             feature_confidence: dict[str, Any] = {}
             local_features_dict: dict[str, Any] | None = None
-            has_external = bool(features.get("bpm"))
 
-            # Use unified pipeline: shared precomputation → features + cheap sections
-            y, sr, shared = precompute_shared(file_path)
-            local_result = derive_features(y, sr, shared, file_path)
-            local_feats, local_confidence = local_result
-
-            if not has_external:
-                # No external features — use local as primary
-                features = local_feats
-                features_source = "local"
-                computed_locally = True
+            if path != "hit":
+                # Unified pipeline: shared precomputation → features + cheap sections
+                y, sr, shared = precompute_shared(file_path)
+                local_feats, local_confidence = derive_features(y, sr, shared, file_path)
                 feature_confidence = dict(local_confidence)
-            else:
-                # External features are primary — store local for cross-validation
-                local_features_dict = local_feats
-                feature_confidence = dict(local_confidence)
-                # Compute disagreements between local and external
-                disagreements = _compute_disagreements(local_feats, features)
-                for feat_key, disagreement_val in disagreements.items():
-                    feature_confidence[f"{feat_key}_cross_validated"] = True
-                    if disagreement_val is not None:
-                        feature_confidence[f"{feat_key}_disagreement"] = disagreement_val
 
-            # Run cheap analysis sections (harmonic, rhythmic, spectral, structural, energy)
-            # Only if track is long enough for meaningful analysis
-            if track.duration_seconds and track.duration_seconds >= 30:
-                try:
-                    analysis_detail, deep_scalars, section_errors = run_cheap_sections(
-                        y, sr, shared, str(file_path), track_id
-                    )
-                    if section_errors:
-                        logger.warning(
-                            f"Analysis section errors for {track.title}: {section_errors}"
+                if path == "local":
+                    features = local_feats
+                    features_source = "local"
+                    computed_locally = True
+                else:
+                    # A sampled hit: the cache's values stay primary; the local ones are kept to
+                    # compare, and never contributed (point 2 — the cache already holds the track,
+                    # and a second submission from the same algorithm is manufactured agreement).
+                    local_features_dict = local_feats
+                    disagreements = _compute_disagreements(local_feats, features)
+                    for feat_key, disagreement_val in disagreements.items():
+                        feature_confidence[f"{feat_key}_cross_validated"] = True
+                        if disagreement_val is not None:
+                            feature_confidence[f"{feat_key}_disagreement"] = disagreement_val
+
+                # Cheap analysis sections (harmonic, rhythmic, spectral, structural, energy),
+                # only for a track long enough for them to mean anything.
+                if track.duration_seconds and track.duration_seconds >= 30:
+                    try:
+                        local_detail, local_deep, section_errors = run_cheap_sections(
+                            y, sr, shared, str(file_path), track_id
                         )
-                    # Capture structural boundary confidence
-                    if analysis_detail:
-                        structural = analysis_detail.get("structural", {})
-                        if structural.get("boundary_confidence") is not None:
-                            feature_confidence["structural"] = structural["boundary_confidence"]
-                except Exception as e:
-                    logger.warning(f"Cheap sections failed for {track.title}: {e}")
+                        if section_errors:
+                            logger.warning(
+                                f"Analysis section errors for {track.title}: {section_errors}"
+                            )
+                        if path == "local":
+                            analysis_detail, deep_scalars = local_detail, local_deep
+                        else:
+                            # The cache's stay primary where it had them.
+                            analysis_detail = cached_analysis_detail or local_detail
+                            deep_scalars = {**local_deep, **deep_scalars}
+                        if analysis_detail:
+                            structural = analysis_detail.get("structural", {})
+                            if structural.get("boundary_confidence") is not None:
+                                feature_confidence["structural"] = structural["boundary_confidence"]
+                    except Exception as e:
+                        logger.warning(f"Cheap sections failed for {track.title}: {e}")
 
-            del y, shared
-            gc.collect()
+                del y, shared
+                gc.collect()
+            # A trusted hit without cached section analysis keeps `analysis_detail` None, and the
+            # backfill phase (rows with `analysis_detail IS NULL`) computes it later (point 3).
+
+            # Point 5: which path, beside the per-line times, so the saving is measured.
+            logger.info(f"Features path for {track.title}: {path}")
 
             # Contribute features to community cache if computed locally
             if (
@@ -390,6 +409,7 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                 "artwork_extracted": artwork_hash is not None,
                 "features_extracted": bool(all_features.get("bpm")),
                 "features_source": features_source,
+                "features_path": path,
                 "bpm": all_features.get("bpm"),
                 "key": all_features.get("key"),
             }
@@ -687,6 +707,29 @@ def run_track_analysis(track_id: str) -> dict[str, Any]:
         **result,
         "embedding_generated": embedding_result.get("embedding_generated", False),
     }
+
+
+HIT_SAMPLE_RATE = 50
+"""One community cache hit in this many is also analysed locally (ADR-0144 point 2)."""
+
+
+def is_sampled_hit(fingerprint: str | None, rate: int = HIT_SAMPLE_RATE) -> bool:
+    """Whether a hit is one of the few also analysed locally.
+
+    Chosen from the fingerprint rather than at random, so a track is or is not sampled on every
+    installation and every run, and a disagreement can be reproduced.
+    """
+    if not fingerprint:
+        return False
+    digest = hashlib.sha256(fingerprint.encode()).digest()
+    return int.from_bytes(digest[:8], "big") % rate == 0
+
+
+def features_path(cache_hit: bool, fingerprint: str | None) -> str:
+    """``hit`` (trusted, not decoded), ``hit (sampled)`` (also analysed), or ``local``."""
+    if not cache_hit:
+        return "local"
+    return "hit (sampled)" if is_sampled_hit(fingerprint) else "hit"
 
 
 def _compute_disagreements(

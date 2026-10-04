@@ -5,7 +5,29 @@ Status: accepted
 Date: 2026-10-02
 
 Implementation:
-- **Accepted 2026-10-02**, as written. Not yet built.
+- **Accepted 2026-10-02**, as written. **Built 2026-10-04**, released in the version after
+  `v0.2.0-beta17`.
+  - `tasks/analysis_pipeline.py`: `features_path()` chooses `hit`, `hit (sampled)` or `local`;
+    `is_sampled_hit()` takes the first eight bytes of the fingerprint's SHA-256 modulo
+    `HIT_SAMPLE_RATE` (50). A trusted hit never calls `precompute_shared`. A sampled hit keeps the
+    cache's features and deep scalars as primary, stores the local ones in `local_features` and
+    the disagreements in `feature_confidence`, and is not contributed. A miss is unchanged. The
+    worker logs `Features path for …: <path>`, and the task result carries `features_path`.
+  - `tests/test_features_cache_trust.py` runs `run_track_features` against the test database with
+    the decoder rigged to record every call: a trusted hit decodes nothing. Five of its eight tests
+    fail on the code this replaced.
+  - **The cache's section analysis was being thrown away.** The pipeline fetched it into
+    `analysis_detail`, and the next block reset `analysis_detail = None` and recomputed it, so a hit
+    *with* cached detail decoded the track anyway, and the cached detail was never stored. Point 3
+    now holds for the first time: cached detail is kept, and only a hit without it is left to the
+    backfill.
+  - **Point 1 named the wrong `features_source`.** It said a hit is written as
+    `community_cache:recording` or `community_cache:hash` "as today". That split is ADR-0119's and
+    exists for embeddings only; the features lookup is by fingerprint alone and writes
+    `community_cache`, which is what it still writes. Asking the corpus by recording for features
+    too is not part of this ADR.
+  - The MCP tool description that named ReccoBeats (`services/llm/tools.py`) now describes the
+    cache and the sample.
 
 Extends [ADR-0119](ADR-0119-the-corpus-is-asked-by-recording-before-it-is-asked-by-hash.md) and
 [ADR-0138](ADR-0138-a-desktop-server-yields-to-its-owner.md)
