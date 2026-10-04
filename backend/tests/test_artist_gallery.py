@@ -303,3 +303,41 @@ def test_no_fetch_is_scheduled_while_background_work_is_paused(monkeypatch):
         assert gallery.schedule_gallery_fetch(artist) is None
     finally:
         background_pause.resume()
+
+
+async def test_a_fetch_scheduled_from_an_old_read_does_not_fetch_a_gallery_just_fetched(async_db, monkeypatch):
+    """A request that read the artist before a fetch committed schedules another one; the
+    background task reads the row again and stands down rather than fetching it twice."""
+    from contextlib import asynccontextmanager
+
+    from app.db import session as db_session
+
+    artist = await _artist(async_db)
+    artist.gallery_fetched_at = gallery.utcnow()
+    await async_db.commit()
+
+    class _Engine:
+        async def dispose(self):
+            pass
+
+    @asynccontextmanager
+    async def _session():
+        yield async_db
+
+    monkeypatch.setattr(db_session, "create_task_engine_session", lambda: (_Engine(), _session))
+    monkeypatch.setattr(gallery, "_fanart_key", lambda: None)
+    fetched: list = []
+
+    async def _record(db, a, client, *, fanart_key):
+        fetched.append(a.id)
+        return 0
+
+    monkeypatch.setattr(gallery, "fetch_gallery", _record)
+
+    await gallery._fetch_in_background([artist.id])
+    assert fetched == []
+
+    artist.gallery_fetched_at = None
+    await async_db.commit()
+    await gallery._fetch_in_background([artist.id])
+    assert fetched == [artist.id]
