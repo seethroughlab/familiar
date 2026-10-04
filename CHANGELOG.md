@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-beta18] - 2026-10-04
+
+No migrations; the API contract stays at v1.
+
 ### Analysis
 
 - **A track the community cache already knows is no longer analysed again** (ADR-0144). Its cached
