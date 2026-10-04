@@ -1026,7 +1026,7 @@ Use filter_tracks with these features. Use get_feature_distribution first to cal
 
 **Feature Confidence:**
 - Features have confidence scores (0-1) stored in feature_confidence. Most reliable: energy (0.95), key (varies). Least reliable: valence (0.4), speechiness (0.3 without VAD).
-- When external features (ReccoBeats) exist, local analysis is also run for cross-validation. Disagreements are flagged.
+- Features may come from the community cache (computed by Familiar on another installation). One cached track in fifty is also analysed locally and any disagreement is recorded as `<feature>_disagreement`.
 
 **Mood mapping examples:**
 - "chill" → energy<0.4, valence 0.3-0.6

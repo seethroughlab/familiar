@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Analysis
+
+- **A track the community cache already knows is no longer analysed again** (ADR-0144). Its cached
+  features are stored as they are, without decoding the file — about 28 of a cache hit's 35
+  seconds on Familiar Server, and 760 MB of the worker's memory. One hit in fifty is still
+  analysed locally to check the cache, and any disagreement is recorded.
+- **The cache's section analysis is kept.** It was fetched and then discarded and recomputed.
+
 ## [0.2.0-beta17] - 2026-10-04
 
 No migrations; the API contract stays at v1.
