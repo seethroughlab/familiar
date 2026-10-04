@@ -32,6 +32,14 @@ uploads, no durability guarantee, and no growth into a service. Familiar is self
 `deploy/fly/entrypoint.sh` ensures the `pgvector` extension and runs `alembic upgrade head` on every
 boot, so a deploy carries its own migrations.
 
+**It then links the seeded tracks to canonical artists and albums** (`app.cli.backfill_artists
+--no-mb`, `app.cli.backfill_albums`; ADR-0052), because the seed's tracks carry
+`canonical_artist_id = NULL` and the demo never syncs, which is what links them on a real server.
+Without this the demo had **no artists for two months** — an empty Artists list and a 404 on every
+artist page — while every deploy and reset went green. Both are idempotent and take under two
+seconds on the 32 tracks. The weekly reset restarts the app afterwards so they run again, and both
+workflows now ask for the Kevin MacLeod artist page rather than trusting a track count.
+
 ### Why 1 GB is enough, and why not to "fix" the CLAP flag
 
 `fly.toml` sets `DISABLE_CLAP_EMBEDDINGS = 'true'`. The CLAP model is ~1.5 GB, so that flag is what

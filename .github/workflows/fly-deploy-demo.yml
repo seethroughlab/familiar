@@ -30,3 +30,17 @@ jobs:
       - run: flyctl deploy . --remote-only --config deploy/fly/fly.toml --dockerfile deploy/fly/Dockerfile
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Confirm a reviewer can open an artist
+        # The demo had no artists for two months while every deploy went green: the seed's tracks
+        # were never linked to canonical artists, and nothing here asked for an artist page.
+        # `entrypoint.sh` now links them on boot; this is what proves it did.
+        run: |
+          for attempt in $(seq 1 10); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
+              "https://familiar-demo.fly.dev/api/v1/library/artists/Kevin%20MacLeod")
+            [ "$code" = "200" ] && { echo "artist page: 200"; exit 0; }
+            sleep 15
+          done
+          echo "::error::The Kevin MacLeod artist page returned $code after deploy."
+          exit 1
