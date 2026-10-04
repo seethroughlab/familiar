@@ -153,6 +153,17 @@ jobs:
           SQL
           psql "$DEMO_DATABASE_URL_DIRECT" -v ON_ERROR_STOP=1 -f /tmp/demo-seed.sql
 
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Restart, so the entrypoint links artists and albums again
+        # The restore truncates `tracks` and reloads rows whose `canonical_artist_id` is NULL — the
+        # seed predates canonical artists (ADR-0052), and nothing on a running server repairs a
+        # track it did not scan. `deploy/fly/entrypoint.sh` runs both backfills on every boot, so a
+        # restart is what puts the Artists list and artist pages back.
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl apps restart familiar-demo
+
       - name: Confirm the app still serves music
         # Not just a health check. A restore that drops the tracks and fails halfway leaves a
         # perfectly healthy server with an empty library, which is the failure this is most likely
@@ -177,5 +188,22 @@ jobs:
           echo "tracks after restore: ${tracks:-0}"
           if [ "${tracks:-0}" -lt 1 ]; then
             echo "::error::The library is empty after the restore."
+            exit 1
+          fi
+
+          # An empty Artists list passed every check above for two months. Ask for one artist page,
+          # since a reviewer reaches artists through those pages, not through a count.
+          artists=$(curl -s --max-time 30 -H "X-Profile-ID: $profile" \
+            https://familiar-demo.fly.dev/api/v1/library/stats \
+            | sed -n 's/.*"total_artists":\([0-9]*\).*/\1/p')
+          echo "artists after restore: ${artists:-0}"
+          if [ "${artists:-0}" -lt 1 ]; then
+            echo "::error::No artists after the restore — the entrypoint's backfill did not run."
+            exit 1
+          fi
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 -H "X-Profile-ID: $profile" \
+            "https://familiar-demo.fly.dev/api/v1/library/artists/Kevin%20MacLeod")
+          if [ "$code" != "200" ]; then
+            echo "::error::The Kevin MacLeod artist page returned $code."
             exit 1
           fi
