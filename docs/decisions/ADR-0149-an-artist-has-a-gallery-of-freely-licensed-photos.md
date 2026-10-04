@@ -29,8 +29,27 @@ Implementation:
   - **The suite turns fetching off** (`settings.artist_gallery_fetch = False` in `conftest.py`):
     with it on, every artist page a test opened started a real fetch that reached the network and
     held locks a migration test's `DROP TABLE` deadlocked on.
-- **Not yet built:** the apps' photo strip, viewer and curation (`familiar-apple`), and the coverage
-  measurement this ADR's Consequences ask for after the first sweep on the NAS.
+- **Apps built 2026-10-03/04** (`familiar-apple` #205, then #206), in TestFlight builds 58–61.
+  #205 drew a strip of 120pt thumbnails under the header; seen on a real Mac, it read as more
+  furniture on a page that already opens with a grid of covers, and Jeff asked for **one hero
+  slideshow at the top** instead. #206 replaced it: a full-width photo crossfading every 7 s with
+  the artist's name, album count and duration over it, paused on hover, while the viewer is open
+  and under Reduce Motion. The header drops its own name and picture when the hero is there. Point
+  3 holds on the hero as well as the viewer: the photo on screen carries its own credit, a link to
+  its page. Curation is the hero's and the viewer's context menu. A gallery still being fetched
+  shows "Finding photos…" and asks again every 15 s, eight times, so the hero appears without
+  reopening the page — the first build needed a reopen.
+  - **A double fetch** (`familiar` #396, beta17): a page request that read the artist before a
+    fetch committed scheduled a second one after it finished. The background task now re-reads
+    staleness on its own row.
+- **Coverage so far** (NAS, 2026-10-04, mid-sweep, Commons only — no fanart.tv key): 1,086 of
+  3,538 artists fetched; **393 (36%) have at least one photo, 305 (28%) two or more, 183 ten or
+  more**; 4,304 photos stored. Of the 60 artists with the most active tracks, 46 have a photo and 36
+  three or more.
+  Small electronic acts and new artists (no Wikidata item) have none, as the Tradeoff below
+  predicted. The wrong-person rate is not measured yet: nothing has been hidden, which says no one
+  has looked closely, not that there are none. Replace these figures after the sweep finishes —
+  at 60 an hour, about two days from these.
 
 Extends [ADR-0138](ADR-0138-a-desktop-server-yields-to-its-owner.md) (background work yields) and
 [ADR-0126](ADR-0126-the-admin-ui-is-organized-around-operator-workflows.md) (a provider is one card)
