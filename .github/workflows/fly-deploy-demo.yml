@@ -44,3 +44,10 @@ jobs:
           done
           echo "::error::The Kevin MacLeod artist page returned $code after deploy."
           exit 1
+
+      - name: Confirm the Videos list answers
+        # A sidebar destination that 500'd on every request (`/data/videos` was never created).
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
+            "https://familiar-demo.fly.dev/api/v1/videos?page=1&page_size=5")
+          [ "$code" = "200" ] || { echo "::error::GET /videos returned $code after deploy."; exit 1; }

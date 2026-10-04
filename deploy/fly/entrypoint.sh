@@ -1,6 +1,11 @@
 #!/bin/bash
 set -e
 
+# **Create them before handing them over.** `chown` on a folder that does not exist does nothing,
+# and `/data` is root's, so the server cannot create one later either: `/data/videos` was never
+# made, and the Videos list answered every request with a 500 (`PermissionError`) in the sidebar a
+# reviewer opens.
+mkdir -p /data/music /data/art /data/videos /app/data
 chown -R familiar:familiar /data/music /data/art /data/videos /app/data 2>/dev/null || true
 
 # The API container: started by `python -m app.serve` (ADR-0141 point 5), or by uvicorn in an image
