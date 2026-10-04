@@ -6,6 +6,12 @@
  * it was loaded from is the one a phone on the same network, or tailnet, can also use. The exception
  * is loopback. A page opened on the server's own machine at `127.0.0.1` falls back to the server's
  * LAN addresses, since a phone cannot reach `127.0.0.1`.
+ *
+ * **The scheme travels too, as `scheme=https`, and only when it is https.** A NAS reached over
+ * Tailscale is usually `https://host:8443`, served by `tailscale serve`, and that port speaks
+ * nothing else; the app built every paired address as `http://`, so a code scanned from that page
+ * pointed the phone at a port that could not answer it. `http` stays implicit, so every link an
+ * older app can already read is byte-for-byte what it was.
  */
 
 import {
@@ -24,25 +30,27 @@ export function isLoopbackHost(hostname: string): boolean {
   return LOOPBACK.has(hostname) || hostname.startsWith('127.');
 }
 
+export type PairingTarget = { host: string; port: number; scheme: 'http' | 'https' };
+
 /** Where a phone should connect, given where this page was loaded from. `null` if nowhere works. */
 export function pairingHost(
   info: Pick<PairingInfo, 'addresses' | 'port'>,
   location: { hostname: string; port: string; protocol: string },
-): { host: string; port: number } | null {
-  const pagePort = location.port
-    ? Number(location.port)
-    : location.protocol === 'https:' ? 443 : 80;
+): PairingTarget | null {
+  const secure = location.protocol === 'https:';
+  const pagePort = location.port ? Number(location.port) : secure ? 443 : 80;
   if (!isLoopbackHost(location.hostname)) {
-    return { host: location.hostname, port: pagePort };
+    return { host: location.hostname, port: pagePort, scheme: secure ? 'https' : 'http' };
   }
+  // The server's own LAN listener is plain http (ADR-0134 point 2), whatever this page used.
   const lan = info.addresses[0];
   if (!lan) return null;
-  return { host: lan, port: info.port ?? pagePort };
+  return { host: lan, port: info.port ?? pagePort, scheme: 'http' };
 }
 
 export function buildPairingLink(
   info: Pick<PairingInfo, 'server_id' | 'server_name' | 'token'>,
-  target: { host: string; port: number },
+  target: { host: string; port: number; scheme?: 'http' | 'https' },
 ): string {
   const params = new URLSearchParams({
     id: info.server_id,
@@ -51,6 +59,7 @@ export function buildPairingLink(
     port: String(target.port),
     token: info.token,
   });
+  if (target.scheme === 'https') params.set('scheme', 'https');
   return `familiar://pair?${params.toString()}`;
 }
 
