@@ -1,6 +1,6 @@
 # ADR-0137: The Phone Keeps a Copy of Its Library
 
-Status: accepted
+Status: accepted; point 5 superseded by [ADR-0150](ADR-0150-each-server-and-listener-gets-8-gb-on-a-device.md)
 
 Date: 2026-09-29
 
@@ -11,8 +11,9 @@ Implementation:
   1. **The away state (point 4)** and the reachability it depends on: "can this phone see its
      server", which is not `Connectivity.isOnline`. Point 3's triggers and point 4's dimming both
      need it. Offline favourite toggles join the event queue here.
-  2. **The storage budget (point 5).** It comes before point 1 so that turning the default on can
-     never fill a phone without a bound.
+  2. **The storage budget (point 5, now ADR-0150).** It comes before point 1 so that turning the
+     default on can never fill a phone without a bound. ADR-0150 replaced "a share of free space"
+     with 8 GB per server and profile, which needs storage split per pair first.
   3. **The pairing offer (point 1).**
   4. **Kept playlists and the sync that follows them (points 2 and 3).**
   5. **The Mac against a server on the same machine (point 6).** It depends on nothing above, so

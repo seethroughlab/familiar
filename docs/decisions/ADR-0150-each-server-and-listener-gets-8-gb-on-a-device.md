@@ -1,8 +1,13 @@
 # ADR-0150: Each Server and Listener Gets 8 GB on a Device
 
-Status: proposed
+Status: accepted
 
 Date: 2026-10-04
+
+Implementation:
+- Accepted 2026-10-04. Built in `familiar-apple` in three parts, in this order: the per-pair
+  storage partition (points 1, 3 and 6), the budget (point 2), then the warning and the storage
+  screen (points 4 and 5).
 
 Supersedes point 5 of [ADR-0137](ADR-0137-the-phone-keeps-a-copy-of-its-library.md).
 Extends [ADR-0010](ADR-0010-played-bytes-are-cached-downloads-are-pinned.md).
