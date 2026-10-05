@@ -18,6 +18,13 @@ Implementation:
   4. **Kept playlists and the sync that follows them (points 2 and 3).**
   5. **The Mac against a server on the same machine (point 6).** It depends on nothing above, so
      it can move earlier.
+- **Slice 1 built 2026-10-04** in `familiar-apple`, not yet run on a device:
+  - #210: reachability from the contract check, and the away state in the player and rows.
+  - #211: "Needs <server>" wherever the server is needed.
+  - #212: favourites kept on disk, with changes made away queued as absolute adds and removes.
+    **There had been no favourites cache at all**, so a phone launched away from its server
+    showed no favourites. Point 4 assumed browsing worked from cache everywhere.
+- **Slice 2 built** as ADR-0150 (#213–#216).
 
 Extends [ADR-0131](ADR-0131-the-server-is-its-own-app.md),
 [ADR-0009](ADR-0009-offline-downloads-are-background-transfers.md),

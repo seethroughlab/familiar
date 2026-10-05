@@ -8,6 +8,20 @@ Implementation:
 - Accepted 2026-10-04. Built in `familiar-apple` in three parts, in this order: the per-pair
   storage partition (points 1, 3 and 6), the budget (point 2), then the warning and the storage
   screen (points 4 and 5).
+- **Built 2026-10-04, all six points, as a stack in `familiar-apple`.** None of it had been run on
+  a device when this was written.
+  - #213: points 1 and 6. `StorageSpaces` hands out one `DownloadStore` per pair. A download
+    request is stamped with its pair, which travels in the task description, so a transfer that
+    finishes after a switch of server still lands with whoever asked. The shared folders are
+    renamed into the pair in use, and never merged into a pair folder that already exists.
+  - #214: point 3. The `Kept` directory and `DownloadRequest.residency`. Downloading a kept track
+    moves it into `Downloads`.
+  - #215: point 2. `StorageBudget`. The play cache's bound is 8 GB on the Mac too. **Auto-download
+    queues only what the room left by kept tracks can hold**, which this ADR did not spell out:
+    without it, the budget releases a favourite and the next launch fetches it straight back.
+  - #216: points 4 and 5. `ServerConfiguration.storageNotice`, and "Storage on this device" in
+    Settings → Downloads. Offering to remove files at the moment a server is forgotten is not
+    built: forgotten pairs stay listed there instead.
 
 Supersedes point 5 of [ADR-0137](ADR-0137-the-phone-keeps-a-copy-of-its-library.md).
 Extends [ADR-0010](ADR-0010-played-bytes-are-cached-downloads-are-pinned.md).
