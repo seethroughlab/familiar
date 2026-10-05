@@ -23,8 +23,9 @@ Implementation:
     Settings → Downloads.
   - #221: the rest of point 5. Forgetting a server offers to remove what it kept, with Keep as the
     default, since a server forgotten by mistake should not cost its music.
-- **#213–#216 merged 2026-10-05.** The move of an existing install's downloads (point 6) had still
-  not been run on a device when this was written.
+- **#213–#216 merged 2026-10-05.** Point 6's move was then run on the owner's phone, a real
+  install paired to the NAS: the downloads were all still listed afterwards and played in airplane
+  mode, so the shared folders were renamed into the pair's and the player found its files there.
 
 Supersedes point 5 of [ADR-0137](ADR-0137-the-phone-keeps-a-copy-of-its-library.md).
 Extends [ADR-0010](ADR-0010-played-bytes-are-cached-downloads-are-pinned.md).
