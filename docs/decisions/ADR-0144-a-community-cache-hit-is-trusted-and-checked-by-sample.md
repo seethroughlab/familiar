@@ -28,6 +28,22 @@ Implementation:
     too is not part of this ADR.
   - The MCP tool description that named ReccoBeats (`services/llm/tools.py`) now describes the
     cache and the sample.
+  - **Measured on Familiar Server, `v0.2.0-beta18`, 2026-10-04** — the first 20 tracks analysed
+    after the update, from `server.log` (`Features path` lines, start-to-end times and peak
+    `[MEMORY]` per worker):
+
+    | Path | Tracks | Median time | Median peak memory |
+    |---|---|---|---|
+    | `hit` | 13 | 7.2 s | 134 MB |
+    | `hit (sampled)` | 1 | 38.7 s | 872 MB |
+    | `local` | 6 | 44.9 s | 920 MB |
+
+    **The hit rate was 65%, not the 30% the Context measured** (3 in 10 on 2026-10-02): the
+    cache had grown. A hit now costs a sixth of a miss in time and a seventh in memory, and at this
+    rate the library's mean is about 20 s per track against about 43 s, roughly halving what
+    remains of its features phase. One sampled hit in 14 is chance at this size. What is left of a
+    hit's 7.2 s is the Follow-up's: starting a process per track (~4.6 s) and the fingerprint's
+    decode (~3.4 s).
 
 Extends [ADR-0119](ADR-0119-the-corpus-is-asked-by-recording-before-it-is-asked-by-hash.md) and
 [ADR-0138](ADR-0138-a-desktop-server-yields-to-its-owner.md)
