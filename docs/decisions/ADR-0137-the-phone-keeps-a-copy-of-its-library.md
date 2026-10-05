@@ -1,6 +1,6 @@
 # ADR-0137: The Phone Keeps a Copy of Its Library
 
-Status: accepted
+Status: accepted; point 5 superseded by [ADR-0150](ADR-0150-each-server-and-listener-gets-8-gb-on-a-device.md)
 
 Date: 2026-09-29
 
@@ -11,12 +11,31 @@ Implementation:
   1. **The away state (point 4)** and the reachability it depends on: "can this phone see its
      server", which is not `Connectivity.isOnline`. Point 3's triggers and point 4's dimming both
      need it. Offline favourite toggles join the event queue here.
-  2. **The storage budget (point 5).** It comes before point 1 so that turning the default on can
-     never fill a phone without a bound.
+  2. **The storage budget (point 5, now ADR-0150).** It comes before point 1 so that turning the
+     default on can never fill a phone without a bound. ADR-0150 replaced "a share of free space"
+     with 8 GB per server and profile, which needs storage split per pair first.
   3. **The pairing offer (point 1).**
   4. **Kept playlists and the sync that follows them (points 2 and 3).**
   5. **The Mac against a server on the same machine (point 6).** It depends on nothing above, so
      it can move earlier.
+- **Slice 1 built 2026-10-04** in `familiar-apple`, not yet run on a device:
+  - #210: reachability from the contract check, and the away state in the player and rows.
+  - #211: "Needs <server>" wherever the server is needed.
+  - #212: favourites kept on disk, with changes made away queued as absolute adds and removes.
+    **There had been no favourites cache at all**, so a phone launched away from its server
+    showed no favourites. Point 4 assumed browsing worked from cache everywhere.
+- **Slice 2 built** as ADR-0150 (#213–#216).
+- **Slices 3–5 built 2026-10-04**, not yet run on a device:
+  - #217: point 1. The toggle is above the profile list, because choosing a profile saves at once.
+  - #218: point 6. Same machine is decided by address, loopback or one of this Mac's own, which
+    covers both ways a same-Mac server is paired without browsing. The play cache is off too.
+  - #219: points 2 and 3. `KeptSet` and one `syncKeptTracks()` replace the favourites-only
+    auto-download. **A sync that cannot read every rule releases nothing**, so a network blip is
+    never why music leaves the phone. Un-favouriting a kept favourite now releases it, which it
+    did not before.
+- **Follow-up:** point 3's opportunistic background refresh is not built. It needs a
+  `BGTaskScheduler` identifier and background modes in `familiar-apple`'s Info.plist. Foreground
+  and the server's return cover the cases the point names.
 
 Extends [ADR-0131](ADR-0131-the-server-is-its-own-app.md),
 [ADR-0009](ADR-0009-offline-downloads-are-background-transfers.md),
