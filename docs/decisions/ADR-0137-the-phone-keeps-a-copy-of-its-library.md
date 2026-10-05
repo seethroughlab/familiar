@@ -1,8 +1,22 @@
 # ADR-0137: The Phone Keeps a Copy of Its Library
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-29
+
+Implementation:
+- Accepted 2026-10-04. Client-only: every point is built in `familiar-apple`, and the server is
+  untouched. Planned as five slices, in this order. The order differs from the numbering, and the
+  budget deliberately lands before the default.
+  1. **The away state (point 4)** and the reachability it depends on: "can this phone see its
+     server", which is not `Connectivity.isOnline`. Point 3's triggers and point 4's dimming both
+     need it. Offline favourite toggles join the event queue here.
+  2. **The storage budget (point 5).** It comes before point 1 so that turning the default on can
+     never fill a phone without a bound.
+  3. **The pairing offer (point 1).**
+  4. **Kept playlists and the sync that follows them (points 2 and 3).**
+  5. **The Mac against a server on the same machine (point 6).** It depends on nothing above, so
+     it can move earlier.
 
 Extends [ADR-0131](ADR-0131-the-server-is-its-own-app.md),
 [ADR-0009](ADR-0009-offline-downloads-are-background-transfers.md),
@@ -28,8 +42,8 @@ Most of the pieces already exist, built one at a time for the NAS:
   need the server.
 - **Listening events queued offline**, each carrying its own timestamp
   (`FamiliarKit/ListeningEventQueue.swift`).
-- **Favourites auto-download**, following the profile's server-side `favorites_auto_download`,
-  which defaults to off (`backend/app/api/routes/favorites.py:157`,
+- **Favourites auto-download**, a device-local setting per profile that defaults to off
+  (`familiar-apple`'s `ServerConfiguration.favoritesAutoDownloadEnabled`,
   `FamiliarKit/FavoritesAutoDownload.swift`).
 - **A one-time "Download" for an album or playlist** (`App/Shared/BrowseViews.swift`), which
   fetches what is there now and does not follow later additions.
@@ -37,10 +51,24 @@ Most of the pieces already exist, built one at a time for the NAS:
 What is missing is not a mechanism but a default: nothing treats the phone's copy as the normal
 state of affairs.
 
+**The first draft had the auto-download setting wrong.** It said the setting followed the profile's
+server-side `favorites_auto_download`, and its third alternative rejected making it device-local.
+That move had already happened on 2026-08-05: ADR-0029 point 4, `familiar` #99 and `familiar-apple`
+#71. The server value survives only as a seed. `ServerConfiguration.seedFavoritesAutoDownload` copies
+it across once per profile, and the endpoints at `backend/app/api/routes/favorites.py:141` and `:162`
+are deprecated. Point 1 below is written against the device-local setting, and the rejected
+alternative has been replaced with a real one. Checked against both repositories on 2026-10-04, before
+acceptance. The rest of the list above held. Three things this ADR treats as new were confirmed
+missing. `Connectivity` reports only whether the device has a network, never whether the server
+answers. No favourite toggle is queued offline. And nothing on the Mac detects a server on the same
+machine.
+
 ## Decision
 
 1. **Pairing a phone to any server offers "Keep my favourites on this phone", on by
-   default.** Accepting it sets the profile's `favorites_auto_download`. The existing
+   default.** Accepting it turns on this device's auto-download for the paired profile
+   (ADR-0029 point 4) and marks that profile's seed as done. Otherwise the first launch would copy
+   the server's deprecated value, off by default, over the answer just given. The existing
    `FavoritesAutoDownload` then fetches newest first, as AAC per ADR-0118. Nothing new is invented
    for the default case.
 
@@ -93,10 +121,12 @@ state of affairs.
 - **Mirror the whole library onto the phone.** Nothing is ever missing. Rejected: a 26k-track
   library is hundreds of GB even as AAC, well beyond any phone. The kept sets (point 2) with a
   budget (point 5) are the same idea at a size a phone can hold.
-- **Make auto-download a device-local preference instead of the profile's setting.** It would fix
-  the odd case where the web app, the Mac and the phone all act on one flag. Rejected here as a
-  separate problem: `FavoritesAutoDownload.swift` records why it follows the profile deliberately,
-  and point 6 removes the case (the local Mac) where following it did harm.
+- **Leave auto-download off by default and promote it in Settings instead.** Nothing would fill a
+  phone without being asked, and the setting already exists (Settings → Downloads). Rejected: an
+  off-by-default setting is found by people who already know they need it, and they find out when
+  they are already away. Away from the server, the phone would show a catalogue of dimmed rows, which
+  is point 4's honest state with nothing in it. Offering the choice at pairing, with the size spelled
+  out, asks the question while the server is in reach to answer it.
 
 ## Consequences
 
