@@ -33,9 +33,13 @@ Implementation:
     auto-download. **A sync that cannot read every rule releases nothing**, so a network blip is
     never why music leaves the phone. Un-favouriting a kept favourite now releases it, which it
     did not before.
-- **Follow-up:** point 3's opportunistic background refresh is not built. It needs a
-  `BGTaskScheduler` identifier and background modes in `familiar-apple`'s Info.plist. Foreground
-  and the server's return cover the cases the point names.
+- **All merged 2026-10-05** (`familiar-apple` #210–#219, `main` at `411319f`, CI green).
+- **Point 3's background refresh built** in #220. `BackgroundRefresh` is a `BGAppRefreshTask`,
+  registered at every launch and scheduled each time the app leaves the foreground. A run checks
+  the server first and stops if it is away (point 7), sends queued listening, runs `KeptSync`
+  (moved out of `LibraryView` so a process with no scene can use it), then refreshes the catalogue.
+  A text test keeps the plist identifier, the `fetch` mode and the registration in step, because a
+  mismatch only shows up on a device, as a crash at launch.
 
 Extends [ADR-0131](ADR-0131-the-server-is-its-own-app.md),
 [ADR-0009](ADR-0009-offline-downloads-are-background-transfers.md),

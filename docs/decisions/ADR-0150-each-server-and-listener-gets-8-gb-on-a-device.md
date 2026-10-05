@@ -20,8 +20,11 @@ Implementation:
     queues only what the room left by kept tracks can hold**, which this ADR did not spell out:
     without it, the budget releases a favourite and the next launch fetches it straight back.
   - #216: points 4 and 5. `ServerConfiguration.storageNotice`, and "Storage on this device" in
-    Settings → Downloads. Offering to remove files at the moment a server is forgotten is not
-    built: forgotten pairs stay listed there instead.
+    Settings → Downloads.
+  - #221: the rest of point 5. Forgetting a server offers to remove what it kept, with Keep as the
+    default, since a server forgotten by mistake should not cost its music.
+- **#213–#216 merged 2026-10-05.** The move of an existing install's downloads (point 6) had still
+  not been run on a device when this was written.
 
 Supersedes point 5 of [ADR-0137](ADR-0137-the-phone-keeps-a-copy-of-its-library.md).
 Extends [ADR-0010](ADR-0010-played-bytes-are-cached-downloads-are-pinned.md).
