@@ -25,6 +25,17 @@ Implementation:
     **There had been no favourites cache at all**, so a phone launched away from its server
     showed no favourites. Point 4 assumed browsing worked from cache everywhere.
 - **Slice 2 built** as ADR-0150 (#213–#216).
+- **Slices 3–5 built 2026-10-04**, not yet run on a device:
+  - #217: point 1. The toggle is above the profile list, because choosing a profile saves at once.
+  - #218: point 6. Same machine is decided by address, loopback or one of this Mac's own, which
+    covers both ways a same-Mac server is paired without browsing. The play cache is off too.
+  - #219: points 2 and 3. `KeptSet` and one `syncKeptTracks()` replace the favourites-only
+    auto-download. **A sync that cannot read every rule releases nothing**, so a network blip is
+    never why music leaves the phone. Un-favouriting a kept favourite now releases it, which it
+    did not before.
+- **Follow-up:** point 3's opportunistic background refresh is not built. It needs a
+  `BGTaskScheduler` identifier and background modes in `familiar-apple`'s Info.plist. Foreground
+  and the server's return cover the cases the point names.
 
 Extends [ADR-0131](ADR-0131-the-server-is-its-own-app.md),
 [ADR-0009](ADR-0009-offline-downloads-are-background-transfers.md),
