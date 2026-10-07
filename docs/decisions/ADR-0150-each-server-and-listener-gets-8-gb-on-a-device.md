@@ -26,6 +26,20 @@ Implementation:
 - **#213–#216 merged 2026-10-05.** Point 6's move was then run on the owner's phone, a real
   install paired to the NAS: the downloads were all still listed afterwards and played in airplane
   mode, so the shared folders were renamed into the pair's and the player found its files there.
+- **That conclusion was wrong: point 6's move had not run on either device.** Read off the disks on
+  2026-10-07, the phone's shared `Downloads` still held 1,747 files with its index last written
+  10/4 and its `Libraries/` folder created at 8:11 that morning; the Mac's shared `Downloads` still
+  held 2,129 files (40 GB) beside an empty pair `Downloads`. Auto-download had meanwhile refetched
+  favourites into `Kept` (612 on the phone, 262 on the Mac), which the owner saw as every download
+  restarting. A build that skipped the move would have listed nothing, so whatever the 2026-10-05
+  check ran, it was not a build that had moved this phone's folders; the next check reads the disk
+  (`devicectl device info files`) rather than the screen. The cause was ordering: `migrateLegacy` moved only into a
+  folder that did not exist, constructing a `DownloadStore` or `PlayCacheStore` creates its folder,
+  and the player's play cache and the screens' download store were both built at launch before
+  `adoptActivePair` reached the move. Fixed in `familiar-apple` (`fix/adr-0150-legacy-move`): the
+  move runs first in `Downloads.init`, moves into a pair folder holding nothing but an index, never
+  moves downloads under an open store, and a pair's kept copies of downloaded tracks are released
+  when it is adopted.
 
 Supersedes point 5 of [ADR-0137](ADR-0137-the-phone-keeps-a-copy-of-its-library.md).
 Extends [ADR-0010](ADR-0010-played-bytes-are-cached-downloads-are-pinned.md).
