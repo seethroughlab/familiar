@@ -1,8 +1,11 @@
 # ADR-0152: On the Phone, Search Belongs to the Screen
 
-Status: proposed
+Status: accepted
 
 Date: 2026-10-07
+
+Implementation:
+- Accepted 2026-10-07.
 
 Supersedes points 1 and 2 of [ADR-0061](ADR-0061-the-phones-tabs-are-home-search-and-library.md).
 
