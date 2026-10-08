@@ -1,7 +1,8 @@
 # ADR-0013: The Mac Is a Management Surface Too
 
 Status: accepted — points 1 and 5 superseded by
-[ADR-0050](ADR-0050-the-web-app-is-a-management-surface.md)
+[ADR-0050](ADR-0050-the-web-app-is-a-management-surface.md); point 2 superseded for playlists by
+[ADR-0151](ADR-0151-the-phone-makes-and-edits-smart-playlists.md)
 
 Point 1 said "Both clients keep everything… which costs nothing to keep". That was measured and found
 false; ADR-0050 records what it cost. Point 5 kept "a complete player at a computer, not an admin
