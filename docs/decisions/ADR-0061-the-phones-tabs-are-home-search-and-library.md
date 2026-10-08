@@ -1,6 +1,6 @@
 # ADR-0061: The Phone's Tabs Are Home, Search and Library
 
-Status: accepted
+Status: accepted; points 1 and 2 superseded by [ADR-0152](ADR-0152-on-the-phone-search-belongs-to-the-screen.md)
 
 Date: 2026-08-17
 
