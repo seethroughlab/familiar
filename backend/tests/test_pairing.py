@@ -34,6 +34,12 @@ class TestIdentity:
         monkeypatch.setattr(socket, "gethostname", lambda: "Studio-MacBook.local")
         assert get_server_identity().server_name == "Studio-MacBook"
 
+    def test_a_docker_container_id_is_not_a_name(self, settings_file, monkeypatch):
+        # A container with no `hostname:` is called after its id, which the phone then showed as
+        # "Needs 8720566297e5" and re-learned on every recreate.
+        monkeypatch.setattr(socket, "gethostname", lambda: "8720566297e5")
+        assert get_server_identity().server_name == "Familiar"
+
     def test_a_chosen_name_wins(self, settings_file):
         settings_file.update(server_name="Living Room")
         assert get_server_identity().server_name == "Living Room"

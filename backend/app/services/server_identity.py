@@ -8,6 +8,7 @@ so a client that remembered only `192.168.1.20` would lose its server within day
 from __future__ import annotations
 
 import ipaddress
+import re
 import socket
 import threading
 import uuid
@@ -16,6 +17,11 @@ from dataclasses import dataclass
 from app.services.app_settings import get_app_settings_service
 
 _mint_lock = threading.Lock()
+
+
+# Docker names a container's host after the first twelve hex digits of its id. Shown to a listener
+# it reads as a fault ("Needs 8720566297e5"), and it changes every time the container is recreated.
+_CONTAINER_ID_HOSTNAME = re.compile(r"[0-9a-f]{12}")
 
 
 @dataclass(frozen=True)
@@ -30,6 +36,8 @@ def _host_name() -> str:
     for suffix in (".local", ".localdomain", ".lan"):
         if name.lower().endswith(suffix):
             name = name[: -len(suffix)]
+    if _CONTAINER_ID_HOSTNAME.fullmatch(name):
+        return "Familiar"
     return name or "Familiar"
 
 
