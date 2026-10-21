@@ -1,6 +1,6 @@
 # ADR-0021: Track Lists on the Mac Are Sortable Tables
 
-Status: accepted
+Status: accepted; point 7's shared column layout superseded for album and artist lists by [ADR-0153](ADR-0153-album-and-artist-tables-keep-their-own-column-layout.md)
 
 Date: 2026-08-02
 
