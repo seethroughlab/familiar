@@ -68,7 +68,9 @@ found and the layout is copied as it was: the old behaviour, not a worse one.
 - **Positive:** a width chosen in Favorites stays chosen; visiting an album no longer resets it.
 - **Positive:** a wide window spends its extra width on Artist and Album, not on the title.
 - **Tradeoff:** a column turned on in an album or artist page no longer turns on in the other lists,
-  and the reverse. The two entity pages share one layout with each other.
+  and the reverse. The two entity pages share one layout with each other. Put to the listener on
+  2026-10-20, who judged it the more intuitive behaviour, not merely an acceptable cost: an album
+  page is a different kind of screen, and its columns are expected to be its own.
 - **Tradeoff:** every saved width is forgotten once, at the first launch with this change.
 - **Follow-up:** the migration in point 3 can be deleted, along with `legacyStorageKey`, once no
   build that wrote v2 is still offered.
