@@ -1,8 +1,12 @@
 # ADR-0153: Album and Artist Tables Keep Their Own Column Layout
 
-Status: proposed
+Status: accepted
 
 Date: 2026-10-20
+
+Implementation:
+- Accepted 2026-10-20. Built in `familiar-apple` #230: `TrackTableLayout` in FamiliarKit, the
+  two keys and width caps in `TrackTable.swift`, the v2 migration in `FamiliarApp.init`.
 
 Supersedes point 7's "one column preference across them" in
 [ADR-0021](ADR-0021-track-lists-on-the-mac-are-sortable-tables.md), for the album and artist lists
