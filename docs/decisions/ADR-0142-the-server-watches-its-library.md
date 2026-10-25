@@ -1,6 +1,6 @@
 # ADR-0142: The Server Watches Its Library
 
-Status: accepted
+Status: accepted; point 5 superseded by [ADR-0154](ADR-0154-familiar-does-not-acquire-music.md)
 
 Date: 2026-10-01
 

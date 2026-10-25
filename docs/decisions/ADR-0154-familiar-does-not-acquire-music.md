@@ -1,11 +1,32 @@
 # ADR-0154: Familiar Does Not Acquire Music
 
-Status: proposed
+Status: accepted
 
 Date: 2026-10-25
 
-Supersedes [ADR-0116](ADR-0116-familiar-acquires-through-a-soulseek-client-it-does-not-own.md) and
-[ADR-0117](ADR-0117-a-soulseek-download-is-a-pending-review-track-not-a-file-move.md).
+Implementation:
+- **Accepted 2026-10-25, built the same day** on `docs/adr-0154-familiar-does-not-acquire`. Every
+  point as written. `soulseek-mcp` (point 5) is its own repository, built first so nothing was
+  lost in between; it is the one place the slskd client and its measured facts now live.
+- **Point 2 also reverses [ADR-0142](ADR-0142-the-server-watches-its-library.md) point 5**, which
+  had the watcher ignore `Inbox/` because the poll owned it. With the poll gone the watcher scans an
+  `Inbox` folder like any other. 0142's Status says so.
+- **`start_library_sync`'s handler lived in the Soulseek handler file.** It moved to
+  `llm/handlers/library_info.py` rather than going with it (point 4).
+- **`withheld_tools()` is deleted, not left returning an empty set.** Soulseek was its only
+  reason to exist, and [ADR-0077](ADR-0077-a-surface-with-no-caller-is-deleted-not-documented.md)
+  applies. The next integration that exists only when configured brings it back with a test.
+- **What the empty container costs:** `test_application_assembly.py` no longer proves that two
+  containers give two answers, because nothing in the container can differ. That proof returns
+  with the next domain moved in. `generatedTransport.test.ts` now drives `libraryWatchApi.status`,
+  and `START-HERE.md` traces `GET /library/sync/watch`, naming the two layers it lacks.
+- **A settings file from before loads whole** (`test_api_settings.py::TestSoulseekSettingsAreGone`).
+  This is pinned because `AppSettingsService._load` answers a `ValidationError` by returning
+  defaults, so a removed field that made old files invalid would have reset every setting.
+
+Supersedes [ADR-0116](ADR-0116-familiar-acquires-through-a-soulseek-client-it-does-not-own.md),
+[ADR-0117](ADR-0117-a-soulseek-download-is-a-pending-review-track-not-a-file-move.md), and point 5 of
+[ADR-0142](ADR-0142-the-server-watches-its-library.md).
 
 ## Context
 
@@ -117,4 +138,4 @@ and `operations/soulseek.py`, three test files (1,048 lines), `SoulseekSettings.
   change.
 - **Follow-up:** `CLAUDE.md`'s paragraphs on ADR-0116/0117, ADR-0129's "Soulseek status is the first
   feature on the generated path" and ADR-0130's Implementation block are rewritten to say what
-  replaced them once this is accepted. Their Status lines change to `superseded by ADR-0154`.
+  replaced them. Their Status lines change to `superseded by ADR-0154`.

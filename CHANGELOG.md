@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **Familiar no longer acquires music** (ADR-0154). The four Soulseek tools, the slskd settings and
+  their Server → Providers card, the two-minute poll and `GET /soulseek/status` are gone. When a
+  recommendation names something you lack, it ends at Bandcamp. A `settings.json` that still holds
+  the slskd address loads as before; the next save drops it.
+- **The Inbox is gone too.** `docker-compose.inbox.yml` and `SOULSEEK_INBOX_PATH` are removed, and a
+  folder named `Inbox` is an ordinary library folder. New files reach Pending Review by the usual
+  rule. **If you start the server with `-f docker-compose.inbox.yml`, remove it** (and from
+  `COMPOSE_FILE` in your `.env`), or Compose will fail on the missing file.
+
 ## [0.2.0-beta18] - 2026-10-04
 
 No migrations; the API contract stays at v1.

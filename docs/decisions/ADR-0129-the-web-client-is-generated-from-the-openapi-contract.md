@@ -39,6 +39,9 @@ Implementation:
   8. As listed in `openapi-ts.config.ts`: audio and video range streams, artwork `<img>`, SSE,
      downloads.
   9. One feature moved; the other hand-written wrappers in `src/api/*.ts` move as they are touched.
+- **2026-10-25 — the first adapter is gone.** `soulseek.ts` was removed by
+  [ADR-0154](ADR-0154-familiar-does-not-acquire-music.md). `generatedTransport.test.ts` now drives
+  `libraryWatchApi.status`; the transport it proves is unchanged.
 
 ## Context
 

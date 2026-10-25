@@ -1,6 +1,6 @@
 # ADR-0116: Familiar Acquires Through a Soulseek Client It Does Not Own
 
-Status: accepted
+Status: superseded by [ADR-0154](ADR-0154-familiar-does-not-acquire-music.md)
 
 Date: 2026-09-13
 

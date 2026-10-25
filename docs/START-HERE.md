@@ -57,22 +57,23 @@ Three things about that picture that are decided, not incidental:
 
 ## One request, traced
 
-`GET /api/v1/soulseek/status` — the settings panel's "test connection" — through every layer. It is
-the smallest complete example of how a feature is put together, and every file below is current.
+`GET /api/v1/library/sync/watch` — the Overview's "is new music being noticed?" — through every
+layer. Every file below is current.
 
 | Layer | File | What it does |
 |---|---|---|
-| Panel | `packages/frontend/src/panels/server/SoulseekSettings.tsx` | A React Query `useQuery` whose `queryFn` is `soulseekApi.status` |
-| Feature adapter | `packages/frontend/src/api/soulseek.ts` | Names the generated operation in the app's vocabulary; re-exports the wire type as `SoulseekStatus` |
-| Generated client | `packages/api-client/src/generated/sdk.gen.ts` | `soulseekGetSoulseekStatus` — path, method, response type, from the schema |
+| Panel | `packages/frontend/src/screens/overview/OverviewPage.tsx` | A React Query `useQuery` whose `queryFn` is `libraryWatchApi.status` |
+| Feature adapter | `packages/frontend/src/api/libraryWatch.ts` | Names the generated operation in the app's vocabulary; re-exports the wire type as `WatchStatus` |
+| Generated client | `packages/api-client/src/generated/sdk.gen.ts` | `ingestGetWatchStatus` — path, method, response type, from the schema |
 | Transport | `packages/frontend/src/api/base.ts` | `installTransport()`: origin, server token and profile header, installed once on both axios instances |
-| Route | `backend/app/api/routes/soulseek.py` | Receives the operation by `Depends`, invokes it, serialises the answer. Knows nothing of slskd |
-| Dependency | `backend/app/api/deps.py` | `get_services` reads the container off `app.state`; `probe_soulseek_status` builds the operation |
-| Operation | `backend/app/operations/soulseek.py` | `ProbeSoulseekStatus`: the use case, no HTTP |
-| Container | `backend/app/container.py` | `Services`, built once in `create_app()`; `build_services()` is the only place a singleton is reached |
-| Gateway | `backend/app/services/soulseek.py` | `SoulseekGateway`: reads the configured slskd URL *per call*, opens a client, closes it |
-| Background | `backend/app/services/background/soulseek.py` | Every two minutes, asks the same gateway for downloads; a settled folder starts a library sync, remembered in Redis |
-| Persistence | the scanner | Finds the downloaded files in the read-only inbox and puts them in pending review — no file moves |
+| Route | `backend/app/api/routes/library_sync.py` | `get_watch_status` reads the watch's status and serialises it |
+| Service | `backend/app/services/library_watch.py` | `LibraryWatch`: watches the library folders, scans a folder once it is quiet, keeps its `status` |
+
+**Two layers this slice does not have**, because no feature has them today. A route that needs a
+long-lived resource takes the container (`get_services` in `backend/app/api/deps.py`) and hands it
+to an operation in `backend/app/operations/`. That container is `backend/app/container.py`, and it
+is empty: its first domain, Soulseek, left Familiar with ADR-0154. ADR-0130's Implementation block
+records how that slice was built, and the next domain migrated becomes this table's example.
 
 Errors travel one envelope ([`docs/ERROR-CONTRACTS.md`](ERROR-CONTRACTS.md)); the two a client
 *acts on* carry a `code` (`backend/app/api/exceptions.py`), and the transport switches on that,
@@ -105,14 +106,15 @@ Each names the contract, test and documentation work, not just the first file to
 4. Then it is an endpoint change: step 2 of the path above.
 
 ### 3. Add background work
-1. A mixin in `backend/app/services/background/` (`soulseek.py` is the small worked example),
-   scheduled from `BackgroundManager.startup()` in `backend/app/services/background/manager.py`.
+1. A mixin in `backend/app/services/background/` (`backup.py` is a small one), scheduled from
+   `BackgroundManager.startup()` in `backend/app/services/background/manager.py`.
    Resolve dependencies from `self.services`, the container the manager is handed — never from a
    singleton inside the job.
 2. Progress and "already triggered" state go in Redis with a TTL; the Overview and Server → Jobs
    read `GET /background/jobs`.
-3. Test the mixin with a fake manager, the way `backend/tests/test_soulseek_poll.py` does: the
-   test decides when the job fires and what the gateway answers.
+3. Test the mixin with a fake manager: the test decides when the job fires and what its
+   dependencies answer. The Soulseek poll's test was the worked example until ADR-0154 removed it,
+   and is still in git history at commit `98da2c41`.
 
 ### 4. Add an admin section
 1. Decide the unit: the collection → Library, the pipeline → Analysis, the installation → Server. A
@@ -147,18 +149,18 @@ Each names the contract, test and documentation work, not just the first file to
 
 ## Restarting the NAS
 
-The NAS runs the released image with three compose files. From the repository, `make restart-nas`;
+The NAS runs the released image with two compose files. From the repository, `make restart-nas`;
 on the NAS itself, from `/opt/familiar/docker`:
 
 ```bash
-docker compose -f docker-compose.prod.yml -f docker-compose.gpu.yml -f docker-compose.inbox.yml up -d
+docker compose -f docker-compose.prod.yml -f docker-compose.gpu.yml up -d
 ```
 
 **Not `docker compose up -d`.** With no `-f`, Compose reads the dev `docker-compose.yml`, and on
 2026-10-02 that recreated `familiar-postgres` and `familiar-redis` on `docker_default` instead of
 `docker_familiar-network`: the API could not resolve them for about 2.5 hours. No data was lost —
 the volumes belong to the project name, which both files share. Adding
-`COMPOSE_FILE=docker-compose.prod.yml:docker-compose.gpu.yml:docker-compose.inbox.yml` to the `.env`
+`COMPOSE_FILE=docker-compose.prod.yml:docker-compose.gpu.yml` to the `.env`
 in that directory on the NAS makes the short command do the right thing as well.
 
 ## Security posture, stated plainly
