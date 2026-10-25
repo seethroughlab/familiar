@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-beta19] - 2026-10-25
+
+No migrations; the API contract stays at v1.
+
 ### Removed
 
 - **Familiar no longer acquires music** (ADR-0154). The four Soulseek tools, the slskd settings and
@@ -17,6 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   folder named `Inbox` is an ordinary library folder. New files reach Pending Review by the usual
   rule. **If you start the server with `-f docker-compose.inbox.yml`, remove it** (and from
   `COMPOSE_FILE` in your `.env`), or Compose will fail on the missing file.
+
+### Pairing
+
+- **A server in Docker is no longer named after its container id.** A container with no `hostname:`
+  reported the first twelve hex digits of its id as its name, so the phone said "Needs
+  8720566297e5" while away, and learned a new name each time the container was recreated. It is now
+  "Familiar" unless `server_name` is set. Phones pick up the new name on their next contract check.
 
 ## [0.2.0-beta18] - 2026-10-04
 
