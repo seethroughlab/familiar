@@ -11,7 +11,6 @@ from app.services.redis_client import get_resilient_redis
 from .analysis import AnalysisMixin
 from .backup import BackupMixin
 from .executors import ExecutorMixin
-from .soulseek import SOULSEEK_POLL_MINUTES, SoulseekMixin
 from .sync import SyncMixin
 
 logger = logging.getLogger(__name__)
@@ -45,7 +44,7 @@ ARTIST_GALLERY_INTERVAL_MINUTES = 60
 ARTIST_GALLERY_PER_TICK = 60
 
 
-class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin, SoulseekMixin):
+class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
     """Manages background tasks in the API process.
 
     Key features:
@@ -94,9 +93,9 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin, So
     async def startup(self, services: Services | None = None) -> None:
         """Initialize scheduler on app startup.
 
-        `services` is the container the polls resolve their dependencies from (ADR-0130 point
-        7): the Soulseek poll asks `services.soulseek`, never a settings singleton. Omitted, the
-        manager runs as a server with no integrations configured — what the tests want.
+        `services` is the container a poll resolves its dependencies from (ADR-0130 point 7),
+        never a settings singleton. Omitted, the manager runs as a server with no integrations
+        configured — what the tests want.
         """
         if services is not None:
             self.services = services
@@ -222,19 +221,6 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin, So
                 replace_existing=True,
             )
 
-            # A settled Soulseek download triggers a sync (ADR-0117 point 3). Registered whether
-            # or not slskd is configured: the job returns at once when it is not, and that is
-            # cheaper than re-registering from the settings route every time the URL changes.
-            self._scheduler.add_job(
-                self._soulseek_poll,
-                IntervalTrigger(minutes=SOULSEEK_POLL_MINUTES),
-                id="soulseek_poll",
-                max_instances=1,
-                coalesce=True,
-                misfire_grace_time=60,
-                replace_existing=True,
-            )
-
             # Periodic metrics summary every 5 minutes
             self._scheduler.add_job(
                 self._log_metrics_summary,
@@ -285,7 +271,6 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin, So
         "listenbrainz_fresh_releases",
         "recording_backfill",
         "artist_gallery",
-        "soulseek_poll",
         "daily_update_check",
         "s3_backup",
     )

@@ -43,7 +43,7 @@ from app.mcp.playback import (
     navigate_tool,
     now_playing_tool,
 )
-from app.services.llm.tools import MUSIC_TOOLS, SOULSEEK_TOOL_NAMES
+from app.services.llm.tools import MUSIC_TOOLS
 
 logger = logging.getLogger(__name__)
 
@@ -71,24 +71,6 @@ PROFILE_ENV = "FAMILIAR_MCP_PROFILE_ID"
 EXCLUDED: frozenset[str] = frozenset()
 
 
-def withheld_tools(services: Services) -> frozenset[str]:
-    """Tools this server cannot answer *right now*, as opposed to ever (ADR-0116 point 2).
-
-    `EXCLUDED` is about the host; this is about the installation. The Soulseek tools exist only
-    when the operator has pointed Familiar at a slskd, so on a server with none configured they are
-    not listed — the same rule ADR-0022 point 3 set for chat: a destination that cannot answer is
-    absent, not present and failing once the listener has asked. Read per `tools/list` rather than
-    at import, so configuring slskd in Settings takes effect on the host's next listing without a
-    restart.
-
-    Asked of the container's gateway rather than the settings singleton (ADR-0130): a test that
-    wants an unconfigured server hands in a `Services` whose gateway says so.
-    """
-    if services.soulseek.configured:
-        return frozenset()
-    return SOULSEEK_TOOL_NAMES
-
-
 class ProfileNotBound(Exception):
     """No profile is bound to this connection.
 
@@ -101,10 +83,9 @@ class ProfileNotBound(Exception):
 def exposed_tools(services: Services) -> list[types.Tool]:
     """The tool surface, taken from MUSIC_TOOLS so it cannot drift."""
     tools: list[types.Tool] = []
-    hidden = EXCLUDED | withheld_tools(services)
     for spec in MUSIC_TOOLS:
         name = spec["name"]
-        if name in hidden:
+        if name in EXCLUDED:
             continue
         schema = deepcopy(spec["input_schema"])
         if name == "create_playlist_from_items":
@@ -228,12 +209,6 @@ async def on_call_tool(
 ) -> types.CallToolResult:
     name = params.name
     services: Services = ctx.lifespan_context
-    if name in withheld_tools(services):
-        # A host holding a listing from before slskd was unconfigured. Say why, not "unknown".
-        return _error(
-            f"{name!r} is unavailable: no Soulseek client is configured on this server. "
-            "Set the slskd URL under Server → Integrations → Soulseek."
-        )
     if name in EXCLUDED or not any(t.name == name for t in exposed_tools(services)):
         return _error(f"Unknown tool {name!r}.")
 

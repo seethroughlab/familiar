@@ -121,9 +121,6 @@ export const queryKeys = {
   backupStatus: {
     all: ['backup-status'] as const,
   },
-  soulseekStatus: {
-    all: ['soulseek-status'] as const,
-  },
   libraryWatch: ['library', 'watch'] as const,
   pairing: {
     token: ['pairing', 'token'] as const,

@@ -215,29 +215,17 @@ Linux" — is required there; **the first pull is ~7 GB**, not the 4 GB three do
 **disabling CLAP costs far more than "semantic search"**, since `TrackAnalysis.embedding` is read by
 eighteen modules including Find Similar and suggested tracks.
 
-**`ADR-0116` lets a host acquire what the discovery tools recommend** (accepted 2026-09-15).
-Familiar talks HTTP to a **slskd** the operator already runs — never the Soulseek protocol — and
-only once `soulseek_url` is set. On a server with none configured the four tools are **withheld
-from `tools/list`** by `app/mcp/server.py`'s `withheld_tools()`, which is ADR-0022 point 3 applied
-to tools: absent, not present and failing. Two slskd facts the schema does not tell you, both
-pinned in `tests/test_soulseek.py`: responses read as `[]` until the search `isComplete` (~15–25 s),
-and `extension` is blank on most files. `find_missing_on_soulseek` checks the library **before** the
-network; `download_from_soulseek` lists the folder before enqueueing, so a one-track match downloads
-the album.
-
-**`ADR-0117` closes the loop without a file move** (accepted 2026-09-15, built with 0116). The
-follow-up 0116 first asked for — "move-and-sync" — would have broken **zero-touch**
-(`docs/ZERO-TOUCH.md`, commit `5fe90d7a`: Familiar never creates, moves or deletes library files).
-Instead slskd's completed folder is bind-mounted **inside** the library at `/music/Inbox:ro`
-(`SOULSEEK_INBOX_PATH`), the ordinary scanner finds new files and puts them in `PENDING_REVIEW`,
-and `background/soulseek.py` polls slskd every two minutes to start a sync when a folder has
-*settled* — every file terminal, at least one success — once per success count. Not per file
-(slskd moves files to `complete` one at a time) and not a watcher (inotify across bind mounts).
-Without an inbox, the tools return a **handoff** — the folder's path as slskd sees it, the
-library path, and "move it, then call `start_library_sync`" — for the listener or a host with
-its own shell to act on; the move never goes through Familiar. The dead `/imports-incoming`
-mount and `GET /import/scan-path` are gone. If you find yourself adding a `shutil.move` for
-downloads, read 0117's Alternatives first.
+**`ADR-0154` takes acquisition out of Familiar** (accepted and built 2026-10-25). It supersedes
+`ADR-0116`/`0117`, and `0142` point 5: the four Soulseek tools, the slskd settings, the two-minute
+poll, `GET /soulseek/status` and the `/music/Inbox` mount are gone. A recommendation of something
+the library lacks ends at **Bandcamp**, which Familiar means to send listeners to. Soulseek lives in
+a separate repository, `soulseek-mcp`, which took the slskd client and its measured facts, and can
+also move a settled download into the music folder. That move is the listener's own tool doing it,
+never Familiar, so zero-touch is unaffected. Familiar's watcher then finds the folder, and its files
+reach Pending Review by the ordinary rule. **Do not bring back an acquisition tool, an inbox
+special case or a `withheld_tools()`-style seam for one** without reading 0154's Context. A
+`settings.json` holding the old `soulseek_*` keys still loads, because unknown keys are ignored.
+That is pinned, because a `ValidationError` there silently resets every setting.
 
 **`ADR-0118` makes a phone download AAC when the source is lossless** (accepted 2026-09-15,
 both halves shipped). `GET /tracks/{id}/stream?format=aac` encodes a lossless file once — 256 kbps, ffmpeg's
@@ -295,11 +283,11 @@ again differs from the numbering:
 | # | ADR | Why here |
 |---|---|---|
 | 1 | `0128` | **Built 2026-09-17.** `TEST_DATABASE_URL`, a `_test` suffix with no second marker, CI renamed to `familiar_test`. Its guard runs in the rootdir `conftest.py` until `0130` gives it a factory. |
-| 2 | `0130` | **Soulseek slice built 2026-09-18.** `create_app(settings, services)` exists; `app/container.py` holds one gateway; the route, MCP executor and background poll are handed it. The pattern for the next domain is the ADR's Implementation block. Library sync and analysis go last; `scanner.py:126` still reads env at import. |
-| 3 | `0129` | **First slice built 2026-09-18.** `packages/api-client` is generated from `backend/openapi.json` by `@hey-api/openapi-ts` 0.99.0 and checked in CI; `base.ts` installs one transport on both the wrappers' and the generated client's instances; the interceptor switches on the envelope's `code` — the prose match it replaced had never fired for a dead profile, because the sentence was in `message`, not `detail`. Soulseek status is the first feature on the generated path. Remaining features migrate one at a time. |
+| 2 | `0130` | **Soulseek slice built 2026-09-18, removed with the feature by `0154`.** `create_app(settings, services)` exists; `app/container.py` is **empty** until the next domain moves in, and that domain's first test restores the two-containers proof. The pattern is the ADR's Implementation block. Library sync and analysis go last; `scanner.py:126` still reads env at import. |
+| 3 | `0129` | **First slice built 2026-09-18.** `packages/api-client` is generated from `backend/openapi.json` by `@hey-api/openapi-ts` 0.99.0 and checked in CI; `base.ts` installs one transport on both the wrappers' and the generated client's instances; the interceptor switches on the envelope's `code` — the prose match it replaced had never fired for a dead profile, because the sentence was in `message`, not `detail`. Soulseek status was the first feature on the generated path (gone with `0154`); library-watch status is the one the transport test drives now. Remaining features migrate one at a time. |
 | 4 | `0126` | **Built 2026-09-19.** Overview / Library / Analysis / Server, section rails with routes, ancestor matching in one `isUnder`, `/tools/*` redirects. A provider is one card (`ProviderCards.tsx`); the pipeline is one destination; the Overview's rules are pure (`screens/overview/attention.ts`) and read the backlog from the worker phase queues. Its gate was a mock; the built page was then checked against the NAS and the demo. Not done: pending review (no screen), a persisted duplicates count. |
 | 5 | `0125` | **Built 2026-09-19.** `packages/visualizer-sdk`; the four visualizers are workspace members at last (they never were — `packages/*` does not recurse) building to their own `dist/`, vendored into `familiar-apple` by `scripts/build-visualizers.sh`. Bridge tests on recorded events; `packages/visualizers/e2e` runs every built document in a sandboxed frame. |
-| 6 | `0127` | **Built 2026-09-19.** `docs/START-HERE.md` (map, the Soulseek-status slice traced through eleven current files, five golden paths, the security posture), `make doctor`, `make check`, `docs/ADR-INDEX.md` (generated), `docs/HEALTH.md` (the debt register that replaced the archived backlog), and `scripts/check_docs.py` in CI — which found six wrong claims in START-HERE's own first draft. Follow-up: one shared source for this file and `AGENTS.md`. |
+| 6 | `0127` | **Built 2026-09-19.** `docs/START-HERE.md` (map, a slice traced through every layer — the library-watch status since `0154`, five golden paths, the security posture), `make doctor`, `make check`, `docs/ADR-INDEX.md` (generated), `docs/HEALTH.md` (the debt register that replaced the archived backlog), and `scripts/check_docs.py` in CI — which found six wrong claims in START-HERE's own first draft. Follow-up: one shared source for this file and `AGENTS.md`. |
 | — | `0122` → `0123` → `0124` | **Built 2026-09-19** (`familiar-apple` #195, #196, #197). `FamiliarAppCore` is the one target that knows both `FamiliarKit` and `FamiliarAPI`; `FamiliarApplication` there is the process — `start()` and `bindConfiguration()`, both idempotent and measured; `RepositoryError` is the one vocabulary a server-backed capability fails with, mapped once in `GeneratedResponses.swift`, casting the first slice. Each ADR's Implementation block has what moved and what it found. After a `familiar` schema change, every `familiar-apple` branch fails CI until `scripts/vendor-schema.sh --fetch` is run there. |
 
 Two things the numbers in those records settle that the text would have let you assume otherwise: the
@@ -324,8 +312,8 @@ and prints a sign-in link to its log (`python -m app.token` reprints it); an exi
 server keeps serving and warns; `FAMILIAR_OPEN_SERVER` (the demo) is open on purpose. Both images
 start through `python -m app.serve`, so a start-up rule cannot again apply to only one form.
 **`ADR-0142`**: the server watches its own library (`watchfiles`), scans only folders
-quiet for three minutes, never marks anything missing from such a scan, and leaves `Inbox/` to the
-Soulseek poll; Familiar Server's own FSEvents watch is gone. Execution order differs from the numbering:
+quiet for three minutes, never marks anything missing from such a scan, and (since `0154`) treats `Inbox/` like any
+other folder; Familiar Server's own FSEvents watch is gone. Execution order differs from the numbering:
 
 | # | ADR | Why here |
 |---|---|---|

@@ -27,11 +27,10 @@ class TestWhatAChangeScans:
         album.mkdir(parents=True)
         assert folder_to_scan(album, [tmp_path]) == album
 
-    def test_the_inbox_is_left_to_the_soulseek_poll(self, tmp_path):
-        """ADR-0142 point 5: a file appearing is not a download finishing."""
+    def test_an_inbox_folder_is_an_ordinary_folder(self, tmp_path):
+        """ADR-0154 point 2: no Soulseek poll owns `Inbox/` any more, so the watcher does."""
         (tmp_path / "Inbox" / "x").mkdir(parents=True)
-        assert folder_to_scan(tmp_path / "Inbox" / "x" / "01.mp3", [tmp_path]) is None
-        assert folder_to_scan(tmp_path / "Inbox", [tmp_path]) is None
+        assert folder_to_scan(tmp_path / "Inbox" / "x" / "01.mp3", [tmp_path]) == tmp_path / "Inbox" / "x"
 
     def test_not_music_and_not_ours_are_ignored(self, tmp_path):
         assert folder_to_scan(tmp_path / "cover.jpg", [tmp_path]) is None

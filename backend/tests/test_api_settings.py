@@ -162,65 +162,31 @@ def test_partial_update(
     assert data["community_cache_enabled"] is False  # Updated
 
 
-class TestSoulseekSettings:
-    """ADR-0116: the slskd address is a setting like any outbound integration, key masked."""
+class TestSoulseekSettingsAreGone:
+    """ADR-0154. A settings.json written while Soulseek existed must still load whole.
 
-    def test_unconfigured_by_default(self, client: TestClient, mock_settings_service) -> None:
-        data = client.get("/api/v1/settings").json()
-        assert data["soulseek_configured"] is False
-        assert data["soulseek_url"] is None
+    `_load` answers a `ValidationError` by returning defaults — every key, token and path reset —
+    so a removed field that made old files invalid would wipe an installation's settings silently.
+    """
 
-    def test_url_and_key_round_trip_with_the_key_masked(
-        self, client: TestClient, mock_settings_service: AppSettingsService
-    ) -> None:
-        response = client.put(
-            "/api/v1/settings",
-            json={"soulseek_url": "http://slskd:5030", "soulseek_api_key": "abcdefghijklmnop"},
+    def test_an_old_settings_file_loads_with_everything_else_intact(self, tmp_path) -> None:
+        import json
+
+        path = tmp_path / "settings.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "lastfm_api_key": "kept",
+                    "soulseek_url": "http://slskd:5030",
+                    "soulseek_api_key": "abcdefghijklmnop",
+                }
+            )
         )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["soulseek_configured"] is True
-        assert data["soulseek_url"] == "http://slskd:5030"
-        assert data["soulseek_api_key"] == "abcd" + "•" * 8
-        assert mock_settings_service.get().soulseek_api_key == "abcdefghijklmnop"
+        service = AppSettingsService(settings_path=path)
+        assert service.get().lastfm_api_key == "kept"
+        service.update(lastfm_api_key="still kept")
+        assert "soulseek_url" not in json.loads(path.read_text()), "dropped on the next save"
 
-    def test_an_empty_url_clears_it(
-        self, client: TestClient, mock_settings_service: AppSettingsService
-    ) -> None:
-        mock_settings_service.update(soulseek_url="http://slskd:5030")
-        data = client.put("/api/v1/settings", json={"soulseek_url": ""}).json()
-        assert data["soulseek_configured"] is False
-
-    # The status route receives its operation from the container (ADR-0130 point 3), so a test
-    # overrides `get_services` on the real app rather than patching module attributes.
-
-    def test_status_reports_unconfigured_without_probing(self, client: TestClient) -> None:
-        from app.api.deps import get_services
-        from app.container import Services
-
-        client.app.dependency_overrides[get_services] = Services.unconfigured  # type: ignore[attr-defined]
-        try:
-            data = client.get("/api/v1/soulseek/status").json()
-        finally:
-            del client.app.dependency_overrides[get_services]  # type: ignore[attr-defined]
-        assert data == {
-            "configured": False, "url": None, "reachable": False, "logged_in": False,
-            "username": None, "version": None, "shared_files": None, "error": None,
-        }
-
-    def test_status_probes_the_configured_address(self, client: TestClient) -> None:
-        import httpx
-
-        from app.api.deps import get_services
-        from tests.test_soulseek import FakeSlskd, services_for
-
-        services = services_for(httpx.MockTransport(FakeSlskd().handler))
-        client.app.dependency_overrides[get_services] = lambda: services  # type: ignore[attr-defined]
-        try:
-            data = client.get("/api/v1/soulseek/status").json()
-        finally:
-            del client.app.dependency_overrides[get_services]  # type: ignore[attr-defined]
-        assert data["configured"] is True
-        assert data["url"] == "http://slskd:5030"
-        assert data["logged_in"] is True
-        assert data["username"] == "otterbad"
+    def test_the_response_no_longer_mentions_it(self, client: TestClient, mock_settings_service) -> None:
+        data = client.get("/api/v1/settings").json()
+        assert not {k for k in data if k.startswith("soulseek")}

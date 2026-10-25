@@ -40,6 +40,12 @@ Implementation:
   Tests: `test_application_assembly.py` (two containers, two answers, no patching),
   `TestGateway` in `test_soulseek.py`, `test_lint_boundaries.py`; the poll, tool and MCP tests
   lost their `monkeypatch` of `from_settings` and `has_soulseek_configured`.
+- **2026-10-25 — the Soulseek slice was removed** by
+  [ADR-0154](ADR-0154-familiar-does-not-acquire-music.md), with the feature. `Services` is empty;
+  `create_app(settings, services)`, `build_services`, `get_services`, `BackgroundManager.startup
+  (services=…)` and `app/operations/` stay as the pattern above describes them. The record of that
+  slice, point by point, is the guide for the next domain, and its first test should restore the
+  "two containers, two answers" proof that `test_application_assembly.py` had to drop.
 
 ## Context
 

@@ -43,7 +43,7 @@ def test_nothing_imports_the_assembled_app():
 
 
 def test_a_route_importing_an_operation_is_the_intended_direction():
-    assert lint.check("from app.operations.soulseek import ProbeSoulseekStatus\n", "app/api/routes/s.py") == []
+    assert lint.check("from app.operations.example import Example\n", "app/api/routes/s.py") == []
 
 
 def test_the_repository_passes():

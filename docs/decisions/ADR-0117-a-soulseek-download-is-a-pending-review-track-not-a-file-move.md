@@ -1,6 +1,6 @@
 # ADR-0117: A Soulseek Download Is a Pending-Review Track, Not a File Move
 
-Status: accepted
+Status: superseded by [ADR-0154](ADR-0154-familiar-does-not-acquire-music.md)
 
 Date: 2026-09-13
 

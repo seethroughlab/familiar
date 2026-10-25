@@ -18,7 +18,6 @@ Settings by Source
 
 **Admin UI with env fallback**:
 - lastfm_api_key, lastfm_api_secret, acoustid_api_key
-- soulseek_url, soulseek_api_key
 - s3_backup_access_key_id, s3_backup_secret_access_key
 - s3_backup_bucket, s3_backup_region, s3_backup_prefix
 
@@ -56,12 +55,8 @@ class AppSettings(BaseModel):
     # https://fanart.tv/get-an-api-key/. Unset, the gallery uses Commons only.
     fanarttv_api_key: str | None = None
 
-    # Soulseek, through a slskd instance the operator runs (ADR-0116). Unset means the feature
-    # does not exist on this server: the MCP tools are not listed, not merely failing. Familiar
-    # never speaks the Soulseek protocol itself and holds no Soulseek credentials — only the
-    # slskd API key, which is an outbound credential like the ones above.
-    soulseek_url: str | None = None  # e.g. http://slskd:5030 or http://192.168.1.50:5030
-    soulseek_api_key: str | None = None
+    # `soulseek_url` and `soulseek_api_key` were here until ADR-0154. A settings.json that still
+    # holds them loads: unknown keys are ignored, and the next save drops them.
 
     # Analysis settings
     clap_embeddings_enabled: bool | None = None  # None = auto-detect based on RAM (6GB+ required)
@@ -173,7 +168,7 @@ class AppSettings(BaseModel):
 
     # Whether this library's first import has finished. Until it has, newly found files are
     # active on arrival rather than pending review: review exists to vet *additions* to a library
-    # (duplicates, better copies, Soulseek downloads under ADR-0117), and a first import has
+    # (duplicates, better copies), and a first import has
     # nothing to compare them with. `None` until the first sync decides it: a library that already
     # has tracks is treated as imported, so no existing installation changes behaviour.
     initial_import_complete: bool | None = None
@@ -285,7 +280,6 @@ class AppSettingsService:
             "lastfm_api_key", "lastfm_api_secret",
             "acoustid_api_key",
             "fanarttv_api_key",
-            "soulseek_api_key",
             "s3_backup_access_key_id", "s3_backup_secret_access_key",
         }
 
@@ -321,10 +315,6 @@ class AppSettingsService:
     def has_fanarttv_key(self) -> bool:
         """Whether a fanart.tv key is set, from settings.json or FANARTTV_API_KEY (ADR-0149)."""
         return bool(self.get_effective("fanarttv_api_key"))
-
-    def has_soulseek_configured(self) -> bool:
-        """Is a slskd URL set (from settings.json or env)? The key is optional — slskd can run without one."""
-        return bool(self.get_effective("soulseek_url"))
 
     def has_s3_credentials(self) -> bool:
         """Check if S3 backup credentials are configured (from settings.json or env vars)."""
@@ -381,8 +371,6 @@ class AppSettingsService:
             "lastfm_api_secret",
             "acoustid_api_key",
             "fanarttv_api_key",
-            "soulseek_url",
-            "soulseek_api_key",
             "s3_backup_access_key_id",
             "s3_backup_secret_access_key",
             "s3_backup_bucket",

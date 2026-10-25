@@ -11,7 +11,6 @@ from .metadata import MetadataHandlersMixin
 from .playback import PlaybackHandlersMixin
 from .playlists import PlaylistHandlersMixin
 from .search import SearchHandlersMixin
-from .soulseek import SoulseekHandlersMixin
 
 __all__ = [
     "AnalysisHandlersMixin",
@@ -21,5 +20,4 @@ __all__ = [
     "PlaybackHandlersMixin",
     "PlaylistHandlersMixin",
     "SearchHandlersMixin",
-    "SoulseekHandlersMixin",
 ]

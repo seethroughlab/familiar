@@ -20,7 +20,6 @@ import type { ReactNode } from 'react';
 import { appSettingsApi, systemApi, type DiscoverySourceHealth } from '../../api';
 import { queryKeys } from '../../api/queryKeys';
 import { LastfmSettings } from './LastfmSettings';
-import { SoulseekSettings } from './SoulseekSettings';
 
 const REFRESH_MS = 30_000;
 
@@ -32,7 +31,6 @@ const SOURCE_LABELS: Record<string, string> = {
   acoustid: 'AcoustID',
   fanarttv: 'fanart.tv',
   bandcamp: 'Bandcamp',
-  soulseek: 'Soulseek',
   community_cache_claims: 'Community cache',
   discovery_batch: 'Nightly discovery',
 };
@@ -57,7 +55,6 @@ const PROVIDERS: readonly {
   { source: 'listenbrainz', key: 'none' },
   { source: 'fanarttv', key: { env: 'FANARTTV_API_KEY', configuredFlag: 'fanarttv_configured' }, note: 'More artist photos, beside the ones from Wikimedia Commons, which need no key (ADR-0149).' },
   { source: 'bandcamp', key: 'none' },
-  { source: 'soulseek', key: 'none', panel: <SoulseekSettings />, note: 'The four Soulseek tools are withheld from MCP hosts until a slskd address is saved below.' },
 ];
 
 const STATE_STYLES: Record<string, { label: string; cls: string; Icon: typeof CheckCircle }> = {
@@ -204,9 +201,9 @@ export function ProviderCards() {
 
             {provider.key !== 'none' ? (
               <KeyLine env={provider.key.env} configured={settings.data?.[provider.key.configuredFlag]} />
-            ) : provider.source !== 'soulseek' ? (
+            ) : (
               <p className="text-xs text-zinc-500">No key needed.</p>
-            ) : null}
+            )}
 
             {provider.note && <p className="text-xs text-zinc-500">{provider.note}</p>}
 

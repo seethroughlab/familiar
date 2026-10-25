@@ -145,9 +145,6 @@ class Settings(BaseSettings):
     # fanart.tv, for artist photos (ADR-0149). FANARTTV_API_KEY; optional.
     fanarttv_api_key: str | None = None
 
-    # Soulseek via slskd (ADR-0116). SOULSEEK_URL / SOULSEEK_API_KEY; the admin UI wins over these.
-    soulseek_url: str | None = None
-    soulseek_api_key: str | None = None
 
     # Network audio outputs (Sonos / WiiM / AirPlay / Chromecast).
     # DEVICE_STREAM_BASE_URL: LAN-reachable base URL (e.g. http://192.168.1.50:4400) that network

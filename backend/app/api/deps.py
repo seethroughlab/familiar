@@ -15,7 +15,6 @@ from app.utils.time import utcnow
 if TYPE_CHECKING:
     from app.container import Services
     from app.db.models import Profile
-    from app.operations.soulseek import ProbeSoulseekStatus
 
 
 # The profile header, declared so it reaches the OpenAPI schema (ADR-0007).
@@ -174,10 +173,3 @@ def get_services(request: Request) -> "Services":
     """The container `create_app` was given. Routes never construct infrastructure themselves."""
     return request.app.state.services
 
-
-def probe_soulseek_status(
-    services: Annotated["Services", Depends(get_services)],
-) -> "ProbeSoulseekStatus":
-    from app.operations.soulseek import ProbeSoulseekStatus
-
-    return ProbeSoulseekStatus(services.soulseek)
