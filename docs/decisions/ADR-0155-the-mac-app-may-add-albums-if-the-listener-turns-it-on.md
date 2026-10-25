@@ -12,7 +12,30 @@ Implementation:
   itself hidden (`~/.music`) is still watched. Pinned in `test_scanner.py::TestDiscoverySkipsHiddenEntries`
   and `test_library_watch.py`; both fail against the previous code. On the NAS no track sat under
   a hidden path (0 of 27,335), so no existing track changes state.
-- **Point 7 not started:** it needs a real Bandcamp download.
+- **Point 7 done 2026-10-25**, against two FLAC purchases: Bonobo, *Distance in Static* (830 MB,
+  22 entries) and Max Cooper, *Feeling Is Structure* (670 MB, 11 entries). What a Bandcamp album
+  download actually is:
+  - **The zip is `Artist - Album.zip` and flat.** Entries sit at its root with no enclosing folder:
+    tracks as `Artist - Album - NN Title.flac`, a `cover.jpg`, and sometimes more (Bonobo's has a
+    booklet, oddly named `Bonobo - Distance in Static - Bonobo - Distance in Static - Booklet.pdf`).
+    The importer therefore makes the album folder itself and moves the whole zip's contents into it,
+    extras included.
+  - **Names are UTF-8 with the zip's UTF-8 flag set** (`Youth’s Fountain (feat. Nilüfer Yanya)`).
+    macOS's bundled `unzip` (Info-ZIP 6.0) *lists* them garbled; `ditto` and Python's `zipfile`
+    read them correctly. Use a flag-aware extractor; never derive names from `unzip -l`.
+  - **Tags are complete and consistent:** `ARTIST`, `album_artist`, `ALBUM`, `TITLE`, `track`,
+    `DATE` (year only), `ISRC`, and `COMMENT=Visit https://<page>.bandcamp.com`. Both comments named
+    the artist's own page (`bonobomusic`, `maxcooper`). Point 6's recognition holds. The destination
+    is `<album_artist>/<ALBUM>` from the tags; the zip name agrees but is not relied on.
+  - **Zip timestamps carry no time zone.** Extracted on the Mac and copied to the NAS, files landed
+    four hours in the future. The importer should give added files the time of the import rather
+    than the zip's.
+  - **The single-track form is still unverified:** no single was bought.
+  - **Both albums were filed by hand the importer's way** (stage in `.familiar-import-<id>` at the
+    library root, `sha256sum -c` against the unpacked files, one `mv -T`), into
+    `Bonobo/Distance in Static` and `Max Cooper/Feeling Is Structure` on the NAS. The first attempt
+    failed at the copy (macOS `rsync` has no `--protect-args`), and the hash check then refused
+    both albums with nothing reaching the library, which is the behaviour point 4 asks for.
 
 Extends [ADR-0140](ADR-0140-familiar-server-enforces-zero-touch-with-a-seatbelt-profile.md) and
 [ADR-0154](ADR-0154-familiar-does-not-acquire-music.md).
