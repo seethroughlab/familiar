@@ -6,7 +6,7 @@ from typing import Any
 MUSIC_TOOLS: list[dict[str, Any]] = [
     {
         "name": "search_library",
-        "description": "Search the user's music library by text query. Searches across title, artist, album, and genre. Returns matching tracks.",
+        "description": "Search the user's music library by text query. Searches across title, artist, album, and genre; a multi-word query matches when every word appears in some field, so 'Inferno Boards of Canada' finds that album. Returns matching tracks.",
         "input_schema": {
             "type": "object",
             "properties": {

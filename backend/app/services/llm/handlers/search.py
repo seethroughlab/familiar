@@ -34,17 +34,21 @@ class SearchHandlersMixin:
         except (ValueError, TypeError):
             limit = 20
 
-        variations = self._normalize_query_variations(query)
+        def in_any_field(term: str):
+            pattern = f"%{term}%"
+            return or_(
+                Track.title.ilike(pattern),
+                Track.artist.ilike(pattern),
+                Track.album.ilike(pattern),
+                Track.genre.ilike(pattern),
+            )
 
-        conditions = []
-        for var in variations:
-            search_filter = f"%{var}%"
-            conditions.extend([
-                Track.title.ilike(search_filter),
-                Track.artist.ilike(search_filter),
-                Track.album.ilike(search_filter),
-                Track.genre.ilike(search_filter),
-            ])
+        # The whole query as one phrase in one field, or every word in some field. A host asks
+        # "Inferno Boards of Canada" — an album and an artist — and no single field holds that.
+        conditions = [in_any_field(var) for var in self._normalize_query_variations(query)]
+        words = query.split()
+        if len(words) > 1:
+            conditions.append(and_(*(in_any_field(word) for word in words)))
 
         stmt = select(Track).where(Track.active_filter(), or_(*conditions)).limit(limit * 5)
         result = await self.db.execute(stmt)
