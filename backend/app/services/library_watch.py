@@ -10,8 +10,6 @@ host's writes into a bind-mounted folder, which is how music copied over SMB arr
 - **Only the changed folders** (`run_folder_scan`): a full sync with nothing new takes about six
   minutes on 28,000 files. Nothing is marked missing; deletions and moves stay with the sync.
 - **Never during a sync, never while paused:** folders wait, and are scanned afterwards.
-- **`Inbox/` is ignored:** the Soulseek poll knows when a transfer has finished; a file appearing
-  does not mean that.
 - **If watching fails** (the watch limit, a mount that cannot be watched), the reason is kept for the
   Overview and the periodic sync covers the library, as it always has.
 """
@@ -35,7 +33,6 @@ logger = logging.getLogger(__name__)
 QUIET_SECONDS = float(os.environ.get("FAMILIAR_WATCH_QUIET_SECONDS", "180"))
 #: How often quiet folders are looked for: never longer than the quiet period itself.
 TICK_SECONDS = min(30.0, max(1.0, QUIET_SECONDS / 2))
-INBOX_DIRNAME = "Inbox"
 
 
 class FolderClock:
@@ -64,14 +61,10 @@ class FolderClock:
 
 
 def folder_to_scan(path: Path, roots: list[Path]) -> Path | None:
-    """The folder a change should scan, or None: outside every library, inside an inbox, or not
-    music. A new audio file means its folder; a new folder means itself (it may hold an album)."""
+    """The folder a change should scan, or None: outside every library, or not music. A new audio file means its folder; a new folder means itself (it may hold an album)."""
     for root in roots:
         if path != root and root not in path.parents:
             continue
-        inbox = root / INBOX_DIRNAME
-        if path == inbox or inbox in path.parents:
-            return None
         if path.suffix.lower() in AUDIO_EXTENSIONS:
             return path.parent
         if path.is_dir():

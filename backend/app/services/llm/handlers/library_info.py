@@ -1,4 +1,4 @@
-"""Library info tool handlers (get_library_stats, get_library_genres)."""
+"""Library info tool handlers (get_library_stats, get_library_genres, start_library_sync)."""
 
 from __future__ import annotations
 
@@ -164,4 +164,29 @@ class LibraryInfoHandlersMixin:
             "tags": tags,
             "total_tags": len(tags),
             "total_tagged_tracks": sum(t["track_count"] for t in tags if t["track_count"] > 0),
+        }
+
+    async def _start_library_sync(self: "ToolExecutor") -> dict[str, Any]:
+        """Ask Familiar to look for new files now rather than waiting for the watcher or the cron.
+
+        DB-only: the sync reads the library and writes rows. It is the step after something
+        outside Familiar has put files in the library (ADR-0154 point 4). Runs in the background;
+        the result says whether it started or was already running.
+        """
+        from app.services.background import get_background_manager
+
+        bg = get_background_manager()
+        if bg.is_sync_running():
+            return {
+                "status": "already_running",
+                "note": "A library sync is already in progress; new files will be picked up by it "
+                "or by the next one.",
+            }
+        result = await bg.run_sync()
+        return {
+            "status": result.get("status", "started"),
+            "note": (
+                "Library sync started in the background. New files enter Pending Review, where "
+                "the listener accepts or skips them; analysis of new tracks follows."
+            ),
         }

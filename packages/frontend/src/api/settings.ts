@@ -17,10 +17,6 @@ export interface AppSettingsResponse {
   acoustid_configured: boolean;
   /** fanart.tv, for artist photos beyond Wikimedia Commons (ADR-0149). Optional. */
   fanarttv_configured?: boolean;
-  // Soulseek via slskd (ADR-0116). The key comes back masked; the URL in full.
-  soulseek_url: string | null;
-  soulseek_api_key: string | null;
-  soulseek_configured: boolean;
   // Community cache
   /** Server-owned playback queue (ADR-0003). Session endpoints 503 while this is off. */
   queue_sync_enabled: boolean;
@@ -46,9 +42,6 @@ export interface AppSettingsResponse {
 export interface AppSettingsUpdate {
   lastfm_api_key?: string;
   lastfm_api_secret?: string;
-  /** Soulseek via slskd (ADR-0116). Send "" to clear either. */
-  soulseek_url?: string;
-  soulseek_api_key?: string;
   // LLM provider
   // Community cache
   queue_sync_enabled?: boolean;

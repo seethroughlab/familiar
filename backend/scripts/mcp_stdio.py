@@ -39,7 +39,7 @@ from app.mcp.server import PROFILE_ENV, build_server  # noqa: E402
 async def main() -> None:
     bound = os.environ.get(PROFILE_ENV)
     print(f"[familiar-mcp] stdio, profile={bound or 'sole profile'}", file=sys.stderr)
-    # The same container the HTTP mount gets (ADR-0130): the operator's slskd, if configured.
+    # The same container the HTTP mount gets (ADR-0130).
     server = build_server(build_services(settings))
     async with stdio_server() as (stdin, stdout):
         await server.run(stdin, stdout, server.create_initialization_options())

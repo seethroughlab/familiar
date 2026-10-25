@@ -14,7 +14,6 @@ vi.mock('../../../api', () => ({
 }));
 // The cards embed each provider's own management panel; those are tested on their own.
 vi.mock('../LastfmSettings', () => ({ LastfmSettings: () => null }));
-vi.mock('../SoulseekSettings', () => ({ SoulseekSettings: () => null }));
 
 function renderPanel() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

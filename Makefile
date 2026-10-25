@@ -49,12 +49,12 @@ build:
 deploy-dev:
 	./scripts/deploy-dev.sh
 
-# Restart the NAS stack the way it runs: all three compose files. A bare `docker compose up -d` in
+# Restart the NAS stack the way it runs: both compose files. A bare `docker compose up -d` in
 # /opt/familiar/docker reads the dev `docker-compose.yml` instead, and on 2026-10-02 that recreated
 # familiar-postgres and familiar-redis on `docker_default` rather than `docker_familiar-network`;
 # the API could not resolve them for about 2.5 hours. Setting COMPOSE_FILE in the NAS's
 # docker/.env makes the bare command safe too (docs/START-HERE.md).
-NAS_COMPOSE_FILES = -f docker-compose.prod.yml -f docker-compose.gpu.yml -f docker-compose.inbox.yml
+NAS_COMPOSE_FILES = -f docker-compose.prod.yml -f docker-compose.gpu.yml
 restart-nas:
 	ssh jeff@$${NAS_HOST:-openmediavault} "cd /opt/familiar/docker && docker compose $(NAS_COMPOSE_FILES) up -d"
 

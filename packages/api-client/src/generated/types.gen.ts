@@ -6361,18 +6361,6 @@ export type SettingsResponse = {
      */
     s3_backup_schedule: string;
     /**
-     * Soulseek Api Key
-     */
-    soulseek_api_key?: string | null;
-    /**
-     * Soulseek Configured
-     */
-    soulseek_configured?: boolean;
-    /**
-     * Soulseek Url
-     */
-    soulseek_url?: string | null;
-    /**
      * Update Channel
      */
     update_channel: string;
@@ -6456,14 +6444,6 @@ export type SettingsUpdateRequest = {
      * S3 Backup Schedule
      */
     s3_backup_schedule?: string | null;
-    /**
-     * Soulseek Api Key
-     */
-    soulseek_api_key?: string | null;
-    /**
-     * Soulseek Url
-     */
-    soulseek_url?: string | null;
     /**
      * Update Channel
      */
@@ -6694,46 +6674,6 @@ export type SmartPlaylistUpdate = {
      * Rules
      */
     rules?: Array<RuleSchema> | null;
-};
-
-/**
- * SoulseekStatusResponse
- *
- * What the configured slskd said when asked, or why it could not be asked.
- */
-export type SoulseekStatusResponse = {
-    /**
-     * Configured
-     */
-    configured: boolean;
-    /**
-     * Error
-     */
-    error?: string | null;
-    /**
-     * Logged In
-     */
-    logged_in?: boolean;
-    /**
-     * Reachable
-     */
-    reachable?: boolean;
-    /**
-     * Shared Files
-     */
-    shared_files?: number | null;
-    /**
-     * Url
-     */
-    url?: string | null;
-    /**
-     * Username
-     */
-    username?: string | null;
-    /**
-     * Version
-     */
-    version?: string | null;
 };
 
 /**
@@ -18128,47 +18068,6 @@ export type SmartPlaylistsGetSmartPlaylistTracksResponses = {
 };
 
 export type SmartPlaylistsGetSmartPlaylistTracksResponse = SmartPlaylistsGetSmartPlaylistTracksResponses[keyof SmartPlaylistsGetSmartPlaylistTracksResponses];
-
-export type SoulseekGetSoulseekStatusData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/soulseek/status';
-};
-
-export type SoulseekGetSoulseekStatusErrors = {
-    /**
-     * Bad Request
-     */
-    400: ErrorEnvelope;
-    /**
-     * Unauthorized
-     */
-    401: ErrorEnvelope;
-    /**
-     * Not Found
-     */
-    404: ErrorEnvelope;
-    /**
-     * Unprocessable Entity
-     */
-    422: ErrorEnvelope;
-    /**
-     * Internal Server Error
-     */
-    500: ErrorEnvelope;
-};
-
-export type SoulseekGetSoulseekStatusError = SoulseekGetSoulseekStatusErrors[keyof SoulseekGetSoulseekStatusErrors];
-
-export type SoulseekGetSoulseekStatusResponses = {
-    /**
-     * Successful Response
-     */
-    200: SoulseekStatusResponse;
-};
-
-export type SoulseekGetSoulseekStatusResponse = SoulseekGetSoulseekStatusResponses[keyof SoulseekGetSoulseekStatusResponses];
 
 export type TracksListTracksData = {
     body?: never;

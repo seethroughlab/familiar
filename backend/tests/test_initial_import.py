@@ -2,7 +2,7 @@
 
 Every new file used to enter PENDING_REVIEW, so a first-time user (on Familiar Server especially)
 saw an empty library: analysis skips pending tracks, and the web admin has no Review screen. Review
-exists to vet additions to a library (duplicates, better copies, Soulseek downloads under ADR-0117),
+exists to vet additions to a library (duplicates, better copies),
 and a first import has nothing to compare against.
 """
 
@@ -44,7 +44,7 @@ async def clean_db():
 
 @pytest.fixture
 def library(tmp_path) -> Path:
-    """The fixture library, with one album moved into the Soulseek Inbox."""
+    """The fixture library, with one album in a folder named Inbox — ordinary since ADR-0154."""
     music = tmp_path / "music"
     shutil.copytree(FIXTURES_DIR, music)
     (music / "Inbox").mkdir()
@@ -65,14 +65,15 @@ class TestScanner:
 
         assert statuses["ambient_loop.mp3"] == TrackStatus.ACTIVE
         assert statuses["epic_boss_battle.mp3"] == TrackStatus.ACTIVE
-        # 8 unique files; one of them is in the Inbox.
-        assert results["new"] == 7
-        assert results["pending_review"] == 1
+        # 8 unique files, the one under Inbox/ included.
+        assert results["new"] == 8
+        assert results["pending_review"] == 0
 
-    async def test_the_inbox_is_reviewed_even_during_a_first_import(self, clean_db, library):
+    async def test_an_inbox_folder_is_not_special_during_a_first_import(self, clean_db, library):
+        """ADR-0154 point 2: the Inbox exception went with the Inbox."""
         await LibraryScanner(clean_db, initial_import=True).scan(library)
         statuses = await _statuses(clean_db)
-        assert statuses["comedy_intro.mp3"] == TrackStatus.PENDING_REVIEW
+        assert statuses["comedy_intro.mp3"] == TrackStatus.ACTIVE
 
     async def test_after_the_first_import_new_files_are_reviewed_as_before(self, clean_db, library):
         results = await LibraryScanner(clean_db, initial_import=False).scan(library)

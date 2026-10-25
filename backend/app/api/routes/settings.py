@@ -44,11 +44,6 @@ class SettingsResponse(BaseModel):
     acoustid_api_key: str | None
     fanarttv_api_key: str | None = None
 
-    # Soulseek via slskd (ADR-0116). The URL is shown in full (it is an address, not a secret);
-    # the key is masked like the others.
-    soulseek_url: str | None = None
-    soulseek_api_key: str | None = None
-
 
     # Analysis settings
     clap_embeddings_enabled: bool | None  # None = auto-detect
@@ -88,7 +83,6 @@ class SettingsResponse(BaseModel):
     lastfm_configured: bool
     acoustid_configured: bool
     fanarttv_configured: bool = False
-    soulseek_configured: bool = False
     s3_backup_configured: bool
     music_library_configured: bool
 
@@ -101,10 +95,6 @@ class SettingsUpdateRequest(BaseModel):
     lastfm_api_secret: str | None = None
     acoustid_api_key: str | None = None
     fanarttv_api_key: str | None = None
-
-    # Soulseek via slskd (ADR-0116). Send "" to clear — None means "not in this request".
-    soulseek_url: str | None = None
-    soulseek_api_key: str | None = None
 
 
     # Analysis settings
@@ -193,7 +183,6 @@ async def get_settings() -> SettingsResponse:
     masked["s3_backup_bucket"] = service.get_effective("s3_backup_bucket")
     masked["s3_backup_region"] = service.get_effective("s3_backup_region") or "us-east-1"
     masked["s3_backup_prefix"] = service.get_effective("s3_backup_prefix") or ""
-    masked["soulseek_url"] = service.get_effective("soulseek_url")
 
     # Get CLAP status
     clap_status_data = service.get_clap_status()
@@ -205,7 +194,6 @@ async def get_settings() -> SettingsResponse:
         lastfm_configured=service.has_lastfm_credentials(),
         acoustid_configured=service.has_acoustid_key(),
         fanarttv_configured=service.has_fanarttv_key(),
-        soulseek_configured=service.has_soulseek_configured(),
         s3_backup_configured=service.has_s3_credentials(),
         music_library_configured=service.has_music_library_configured(),
     )
@@ -250,7 +238,6 @@ async def update_settings(request: SettingsUpdateRequest) -> SettingsResponse:
     masked["s3_backup_bucket"] = service.get_effective("s3_backup_bucket")
     masked["s3_backup_region"] = service.get_effective("s3_backup_region") or "us-east-1"
     masked["s3_backup_prefix"] = service.get_effective("s3_backup_prefix") or ""
-    masked["soulseek_url"] = service.get_effective("soulseek_url")
 
     # Get CLAP status
     clap_status_data = service.get_clap_status()
@@ -262,7 +249,6 @@ async def update_settings(request: SettingsUpdateRequest) -> SettingsResponse:
         lastfm_configured=service.has_lastfm_credentials(),
         acoustid_configured=service.has_acoustid_key(),
         fanarttv_configured=service.has_fanarttv_key(),
-        soulseek_configured=service.has_soulseek_configured(),
         s3_backup_configured=service.has_s3_credentials(),
         music_library_configured=service.has_music_library_configured(),
     )

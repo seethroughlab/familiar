@@ -68,7 +68,6 @@ const PROVIDER_LABELS: Record<string, string> = {
   lastfm: 'Last.fm',
   acoustid: 'AcoustID',
   bandcamp: 'Bandcamp',
-  soulseek: 'Soulseek',
   community_cache_claims: 'Community cache',
   discovery_batch: 'Nightly discovery',
 };
