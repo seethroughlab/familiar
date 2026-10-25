@@ -32,6 +32,19 @@ class TestWhatAChangeScans:
         (tmp_path / "Inbox" / "x").mkdir(parents=True)
         assert folder_to_scan(tmp_path / "Inbox" / "x" / "01.mp3", [tmp_path]) == tmp_path / "Inbox" / "x"
 
+    def test_a_hidden_folder_is_ignored(self, tmp_path):
+        """ADR-0155 point 5: an import in progress is staged in a hidden folder until it is whole."""
+        staging = tmp_path / ".familiar-import-1" / "Album"
+        staging.mkdir(parents=True)
+        assert folder_to_scan(staging / "01 Song.flac", [tmp_path]) is None
+        assert folder_to_scan(staging, [tmp_path]) is None
+        assert folder_to_scan(tmp_path / "Artist" / "._01 Song.flac", [tmp_path]) is None
+
+    def test_a_hidden_library_root_is_still_watched(self, tmp_path):
+        root = tmp_path / ".music"
+        (root / "Artist").mkdir(parents=True)
+        assert folder_to_scan(root / "Artist" / "01.mp3", [root]) == root / "Artist"
+
     def test_not_music_and_not_ours_are_ignored(self, tmp_path):
         assert folder_to_scan(tmp_path / "cover.jpg", [tmp_path]) is None
         assert folder_to_scan(Path("/elsewhere/song.mp3"), [tmp_path]) is None

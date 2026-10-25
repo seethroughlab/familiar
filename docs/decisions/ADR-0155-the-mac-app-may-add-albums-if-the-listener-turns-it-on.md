@@ -1,0 +1,150 @@
+# ADR-0155: The Mac App May Add Albums If the Listener Turns It On
+
+Status: accepted
+
+Date: 2026-10-25
+
+Implementation:
+- **Accepted 2026-10-25.**
+- **Point 5 built 2026-10-25** on `docs/adr-0155-opt-in-add-only-import`. `_discover_files_sync`
+  skips any entry whose name begins with `.`, files as well as folders, so macOS `._` files go too.
+  `folder_to_scan` ignores a change under a hidden folder *below* a library root; a root that is
+  itself hidden (`~/.music`) is still watched. Pinned in `test_scanner.py::TestDiscoverySkipsHiddenEntries`
+  and `test_library_watch.py`; both fail against the previous code. On the NAS no track sat under
+  a hidden path (0 of 27,335), so no existing track changes state.
+- **Point 7 not started:** it needs a real Bandcamp download.
+
+Extends [ADR-0140](ADR-0140-familiar-server-enforces-zero-touch-with-a-seatbelt-profile.md) and
+[ADR-0154](ADR-0154-familiar-does-not-acquire-music.md).
+
+## Context
+
+Familiar's library is read-only by promise and by enforcement. `docs/ZERO-TOUCH.md` states the
+principle ("Familiar never creates, modifies, moves, re-encodes, or deletes files in the user's
+music library"). The server refuses to start on a writable library (`validate_library_path`,
+`backend/app/main.py:228`, unless `allow_writable_library` is set), Docker mounts the library `:ro`,
+and on a Mac the Python server runs under a Seatbelt profile that denies writes to the folder
+(ADR-0140).
+
+The intent is to send listeners to Bandcamp, and Bandcamp's customers are almost the only people
+who still buy files. The step where a purchase is lost is the one after buying: Bandcamp delivers an
+album as a zip in `~/Downloads`, and the listener has to unpack it into the right folder by hand.
+Nothing in Familiar helps with that, and under the promise above nothing can.
+
+Two things were settled before this ADR was drafted:
+
+- **Nothing here talks to Bandcamp.** There is no public API for a fan's purchases. The tools that
+  sync a collection automatically drive the website with the fan's session cookie, which is not
+  above board, and they are rejected below. The importer only handles files the listener has
+  already downloaded.
+- **A Bandcamp file identifies itself.** Bandcamp writes a comment tag into every file it sells.
+  Sampled from the NAS library on 2026-10-25, for example `Visit https://warprecords.bandcamp.com` on
+  `/music/Two Lone Swordsmen/Tiny Reminders/17 - Foreververb.flac`, and `Visit
+  http://abelard.bandcamp.com` on an MP3. **It names the artist's or label's page, not the
+  album's.** The zip's own naming (`Artist - Album.zip`, tracks as `Artist - Album - NN Title.ext`)
+  is from memory and **has not been checked against a real download.** Point 7 makes checking it the
+  first step of the build.
+
+**`docs/ZERO-TOUCH.md` contradicts this on purpose, and that is recorded here rather than worked
+around.** Its section 3 removed zip import ("Direct zip upload import should be removed for
+zero-touch mode; the product promise stays cleaner if all adopted music already lives in a
+user-managed folder outside Familiar"). That reasoning holds for the default and is kept. This ADR
+adds one exception, which the listener must turn on themselves.
+
+**A design built around one installation was considered first and dropped.** It had a tool on the
+Mac reach the NAS over `ssh` and stage files beside the library on the same disk. That is how
+`soulseek-mcp`'s move works, and it is right for a personal tool. A newcomer has a Mac and a
+Downloads folder, not an ssh host, so it was the wrong shape for a feature meant to win users.
+
+**Hidden folders are not skipped today.** `_discover_files_sync` (`scanner.py:174`) descends into
+every directory, dot-folders included, and `folder_to_scan` (`library_watch.py:63`) does the same
+for the watcher. A partially copied album in a hidden staging folder would therefore be found by
+the two-hourly sync.
+
+## Decision
+
+1. **The default stays read-only, everywhere.** A new install, and any install where the listener
+   has not turned this on, behaves exactly as today. Nothing in this ADR changes the server.
+   `validate_library_path`, the `:ro` Docker mount and ADR-0140's Seatbelt profile all stay. The
+   server never writes the library under any setting.
+
+2. **The importer lives in the Mac player app, off until the listener turns it on.** The setting is
+   "Add Bandcamp downloads to my library", off by default and stored on that Mac. Turning it on asks
+   for two folders through the system's open panel. One is where downloads arrive (`~/Downloads` by
+   default), which the app only reads. The other is the library folder to add to, which may be on
+   this Mac or a mounted network share. The app keeps both as security-scoped bookmarks and adds the
+   matching sandbox entitlements (user-selected read-write and app-scope bookmarks). Today it has
+   only `app-sandbox` and `network.client`. Turning the setting off removes the write access.
+
+3. **The importer only adds.** It never modifies, renames, retags, re-encodes or deletes anything,
+   in the library or in Downloads.
+   - It refuses a destination `<Artist>/<Album>` that already exists, and says so.
+   - It leaves the downloaded zip where it is, and records it as done in its own list so it is not
+     imported twice. Clearing Downloads stays the listener's job.
+   - The files it adds are byte-for-byte the files in the zip, checked by hash after copying.
+
+4. **An album appears whole or not at all.** The app unpacks into a hidden folder
+   (`.familiar-import-<id>`) at the library root and checks it. Only then does it rename that
+   folder to `<Artist>/<Album>`: one rename on one filesystem, which is atomic locally and on an SMB
+   share. A failed import leaves only the hidden folder, which the app removes, since it is the
+   app's own.
+
+5. **The scanner and the watcher skip hidden folders.** Any path component beginning with `.` is
+   not descended into or scanned. Point 4 depends on this. It is right on its own too, since it stops
+   Familiar walking `.Trashes`, `.Spotlight-V100` and similar folders. It is the first slice and
+   ships independently.
+
+6. **Only Bandcamp downloads are recognised.** A file counts as Bandcamp's when its comment tag
+   reads `Visit http(s)://<name>.bandcamp.com`. Anything else in Downloads is ignored, not guessed
+   at. A new album reaches Pending Review by the ordinary rule (`docs/ZERO-TOUCH.md` section 3), as
+   anything new in the library does.
+
+7. **The build starts by checking a real download.** Before any code, a purchased (or free)
+   Bandcamp album is downloaded in FLAC and MP3, and its zip layout, file names, tags and
+   single-track form are recorded in this ADR's Implementation block and kept as test fixtures.
+   Points 3–6 are revised to match if the real layout differs.
+
+## Alternatives Considered
+
+- **Stay strictly read-only and never add files.** It is the cleanest promise, and it is still the
+  default. Rejected as the only option, because it leaves the step that loses a Bandcamp buyer
+  (the zip in Downloads) with no help at all, for a product whose stated audience is people who buy
+  files.
+- **A separate tool, like `soulseek-mcp`.** It keeps "Familiar never writes" literally true.
+  Rejected for this purpose, because every newcomer would have to find and install a second program
+  before the feature exists for them. It works against the goal of gaining users. A personal tool
+  is still fine for Jeff, and `soulseek-mcp` is one.
+- **Sync the fan's Bandcamp collection automatically** (as `bandcampsync` and
+  `bandcamp-collection-downloader` do). Rejected: it drives undocumented site endpoints with the
+  fan's session cookie, which is not above board, can break at any time, and is a poor thing to show
+  Bandcamp. A supported way to sync purchases is something to ask Bandcamp for, not build around it.
+- **Have the server import.** Rejected: the server may be a NAS that cannot see the listener's
+  Downloads folder, and giving it write access would undo ADR-0140 and `validate_library_path` for
+  everyone, not only for those who opted in.
+- **Put it in Familiar Server (the Mac menu-bar app).** Rejected as the home: it exists only where
+  the server runs on a Mac, so NAS listeners would not get it. The player is on the machine where
+  the listener downloads, whatever runs the server.
+- **Stage outside the library instead of in a hidden folder.** That needs a writable sibling folder
+  on the same filesystem, which a listener with only a mounted library share does not have. It was
+  the ssh design's assumption.
+
+## Consequences
+
+- **Positive:** a Bandcamp purchase can go from Downloads to Pending Review with no manual steps,
+  for anyone who turns it on, on a local library or a NAS share.
+- **Positive:** the server's guarantees are unchanged and still enforced in three places. A
+  listener who never opens the setting sees no difference.
+- **Tradeoff:** "Familiar never writes your music folder" becomes "Familiar never changes what is in
+  your music folder. With your permission, the Mac app adds new albums." `docs/ZERO-TOUCH.md`, the
+  README and the website must say that, and must say it is off by default.
+- **Tradeoff:** the Mac app gains file entitlements it does not have today, which App Review will
+  see and the privacy description must explain.
+- **Tradeoff:** the importer is Mac-only. The phone never touches files (ADR-0013 point 2 keeps
+  management off it), and the web app has no access to Downloads.
+- **Follow-up:** remembering each album's Bandcamp page, for a link back from Familiar, reads the
+  same tag but is a separate server change with its own ADR. It is not decided here.
+- **Follow-up:** asking Bandcamp for a supported way to sync purchases, once there are users to
+  show them.
+
+**Execution order:** point 5 (`familiar`, ordinary fix) → point 7 (check a real download) →
+points 2–4 and 6 (`familiar-apple`) → the documentation in the Tradeoff above.

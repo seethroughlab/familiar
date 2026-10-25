@@ -65,6 +65,8 @@ def folder_to_scan(path: Path, roots: list[Path]) -> Path | None:
     for root in roots:
         if path != root and root not in path.parents:
             continue
+        if any(part.startswith(".") for part in path.relative_to(root).parts):
+            return None  # hidden, as the scanner treats it (ADR-0155 point 5)
         if path.suffix.lower() in AUDIO_EXTENSIONS:
             return path.parent
         if path.is_dir():
