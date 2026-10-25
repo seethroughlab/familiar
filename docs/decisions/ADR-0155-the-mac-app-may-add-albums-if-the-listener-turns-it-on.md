@@ -12,6 +12,15 @@ Implementation:
   itself hidden (`~/.music`) is still watched. Pinned in `test_scanner.py::TestDiscoverySkipsHiddenEntries`
   and `test_library_watch.py`; both fail against the previous code. On the NAS no track sat under
   a hidden path (0 of 27,335), so no existing track changes state.
+- **Point 2's setting is two layers** (decided 2026-10-25, built in `familiar-apple` #235). A single
+  general switch ("allow limited write functionality") was considered and rejected: a listener
+  cannot judge it, and every later feature that writes would inherit a yes given to something
+  else. Instead Settings → Adding holds (1) the music folder, granted once and explained as
+  add-only, shared by every way of adding albums because macOS grants per folder anyway, and
+  (2) one switch per source under it, each off by default — "Add Bandcamp downloads" is the first.
+  A later source is another switch, never a broader permission. Turning the last switch off drops
+  the library bookmark, so no grant is kept as a dormant permission. Anything that would write
+  other than adding albums is outside this ADR and needs its own.
 - **Point 7 done 2026-10-25**, against two FLAC purchases: Bonobo, *Distance in Static* (830 MB,
   22 entries) and Max Cooper, *Feeling Is Structure* (670 MB, 11 entries). What a Bandcamp album
   download actually is:
