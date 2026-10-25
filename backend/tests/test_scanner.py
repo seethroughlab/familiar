@@ -88,6 +88,21 @@ async def clean_db():
     await engine.dispose()
 
 
+class TestDiscoverySkipsHiddenEntries:
+    """ADR-0155 point 5: an import in progress is staged in a hidden folder at the library root and
+    renamed into place once whole, so a sync that runs mid-copy must not find half an album."""
+
+    def test_hidden_folders_and_files_are_not_discovered(self, tmp_path):
+        from app.services.scanner import _discover_files_sync
+
+        for rel in ["Artist/Album/01 Song.mp3", ".familiar-import-1/Album/01 Song.mp3",
+                    "Artist/.Trashes/02 Gone.mp3", "Artist/Album/._01 Song.mp3"]:
+            (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+            (tmp_path / rel).write_bytes(b"x")
+        found = [p.relative_to(tmp_path).as_posix() for p, _ in _discover_files_sync(tmp_path)]
+        assert found == ["Artist/Album/01 Song.mp3"]
+
+
 class TestComputeFileHash:
     """Tests for the file hash computation function."""
 

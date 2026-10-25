@@ -198,6 +198,8 @@ def _discover_files_sync(library_path: Path, progress_callback=None) -> list[tup
                 for entry in it:
                     if entry.is_symlink(): # Skip symlinks to avoid loops
                          continue
+                    if entry.name.startswith("."):  # hidden: an import in progress, .Trashes, ._ files (ADR-0155 point 5)
+                         continue
                          
                     if entry.is_dir():
                         stack.append(entry.path)

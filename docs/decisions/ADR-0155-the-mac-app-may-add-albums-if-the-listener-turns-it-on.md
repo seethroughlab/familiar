@@ -1,8 +1,18 @@
 # ADR-0155: The Mac App May Add Albums If the Listener Turns It On
 
-Status: proposed
+Status: accepted
 
 Date: 2026-10-25
+
+Implementation:
+- **Accepted 2026-10-25.**
+- **Point 5 built 2026-10-25** on `docs/adr-0155-opt-in-add-only-import`. `_discover_files_sync`
+  skips any entry whose name begins with `.`, files as well as folders, so macOS `._` files go too.
+  `folder_to_scan` ignores a change under a hidden folder *below* a library root; a root that is
+  itself hidden (`~/.music`) is still watched. Pinned in `test_scanner.py::TestDiscoverySkipsHiddenEntries`
+  and `test_library_watch.py`; both fail against the previous code. On the NAS no track sat under
+  a hidden path (0 of 27,335), so no existing track changes state.
+- **Point 7 not started:** it needs a real Bandcamp download.
 
 Extends [ADR-0140](ADR-0140-familiar-server-enforces-zero-touch-with-a-seatbelt-profile.md) and
 [ADR-0154](ADR-0154-familiar-does-not-acquire-music.md).
