@@ -39,7 +39,7 @@ Implementation:
   - **Zip timestamps carry no time zone.** Extracted on the Mac and copied to the NAS, files landed
     four hours in the future. The importer should give added files the time of the import rather
     than the zip's.
-  - **The single-track form is still unverified:** no single was bought.
+  - **The single-track form is still unverified:** no single was bought. (Since verified; see below.)
 - **Built and shipped in 1.5.1 (68)** (`familiar-apple` #235, #236) and run on the reference Mac
   against the NAS share. The first run had `~/Downloads` chosen as both folders and faithfully
   added both albums into Downloads; #236 refuses that pairing and keys the import ledger to its
@@ -66,6 +66,19 @@ Implementation:
   layout alone was rejected, because nothing in the files would say who sold them. Chrome saved
   the second to fifth downloads as `Boards of Canada - Hi Scores (N).zip`. That broke the layout
   check a custom domain depends on, so #238 drops a browser's trailing `(N)` before comparing.
+- **The add itself had never run against the NAS, and failed every time** (found 2026-10-26, fixed
+  in #238). The earlier real runs only reached "already in your library", which is checked before
+  anything is written. In 1.5.1 (69) every *Hi Scores* zip and the single failed with
+  `NSPOSIXErrorDomain 45 "Operation not supported"`. On the SMB share, `renamex_np(RENAME_EXCL)`
+  is `ENOTSUP`. A plain `rename` works there, refuses a non-empty destination with `ENOTEMPTY`,
+  and replaces only an empty folder. So point 4's no-replace rule holds with a plain-rename
+  fallback. The staging folder was removed after each failure, as point 4 asks. Failures had been
+  kept in the ledger forever, with nothing in Settings to ask again, so they are now retried at the
+  next launch.
+- **The single-track form is verified** (Max Cooper, *Waves*, FLAC, 2026-10-26). Bandcamp saves it
+  as `Artist - Title.flac`, not with the album's prefix. It carries `TITLE`, `ARTIST`,
+  `ALBUMARTIST`, `ALBUM`, `TRACKNUMBER`, `DATE`, `ISRC` and `COMMENT=Visit
+  https://maxcooper.bandcamp.com`, and it is added as `Max Cooper/Emergence`.
 
 Extends [ADR-0140](ADR-0140-familiar-server-enforces-zero-touch-with-a-seatbelt-profile.md) and
 [ADR-0154](ADR-0154-familiar-does-not-acquire-music.md).
