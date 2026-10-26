@@ -40,6 +40,18 @@ Implementation:
     four hours in the future. The importer should give added files the time of the import rather
     than the zip's.
   - **The single-track form is still unverified:** no single was bought.
+- **Built and shipped in 1.5.1 (68)** (`familiar-apple` #235, #236) and run on the reference Mac
+  against the NAS share. The first run had `~/Downloads` chosen as both folders and faithfully
+  added both albums into Downloads; #236 refuses that pairing and keys the import ledger to its
+  library. The second run reported both albums "already in your library" and left them.
+- **Point 6 widened, with its evidence rule kept** (`familiar-apple` #237). Nathan Fake's
+  *Evaporator* reads `Visit https://nathanfake.com`: an artist selling on their own domain. The
+  wording alone is weak evidence for a domain anyone could own, so a custom domain counts only
+  inside Bandcamp's layout (`Artist - Album.zip` holding `Artist - Album - NN …` tracks);
+  `*.bandcamp.com` needs nothing more. A single track saved as itself is added as an album of one,
+  on `*.bandcamp.com` evidence only. Tags are now read from MP4, Ogg, AIFF and WAV as well, **to
+  their specifications only**: none of the reference library's 762 MP4, 8 WAV or 2 AIFF files carries
+  Bandcamp's comment, so the first real download in each format is the check still owed.
   - **Both albums were filed by hand the importer's way** (stage in `.familiar-import-<id>` at the
     library root, `sha256sum -c` against the unpacked files, one `mv -T`), into
     `Bonobo/Distance in Static` and `Max Cooper/Feeling Is Structure` on the NAS. The first attempt
