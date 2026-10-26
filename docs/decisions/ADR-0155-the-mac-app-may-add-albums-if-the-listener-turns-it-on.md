@@ -57,6 +57,15 @@ Implementation:
     `Bonobo/Distance in Static` and `Max Cooper/Feeling Is Structure` on the NAS. The first attempt
     failed at the copy (macOS `rsync` has no `--protect-args`), and the hash check then refused
     both albums with nothing reaching the library, which is the behaviour point 4 asks for.
+- **The formats checked against real downloads** (2026-10-25, `familiar-apple` #238): Boards of
+  Canada's *Hi Scores* in AAC, Ogg Vorbis, ALAC, WAV and AIFF, each passed to
+  `testARealDownloadIsRecognised`. Every zip has the same flat layout and `cover.jpg`, all entries
+  stored. AAC, Ogg Vorbis, ALAC and AIFF are recognised and added. **Bandcamp's WAV files carry no
+  tags at all**, only `fmt ` and `data` chunks, with no `LIST`/`INFO` and no `id3 `. So a WAV
+  download is never recognised, and Settings → Adding says so. Recognising a WAV by its zip's
+  layout alone was rejected, because nothing in the files would say who sold them. Chrome saved
+  the second to fifth downloads as `Boards of Canada - Hi Scores (N).zip`. That broke the layout
+  check a custom domain depends on, so #238 drops a browser's trailing `(N)` before comparing.
 
 Extends [ADR-0140](ADR-0140-familiar-server-enforces-zero-touch-with-a-seatbelt-profile.md) and
 [ADR-0154](ADR-0154-familiar-does-not-acquire-music.md).
