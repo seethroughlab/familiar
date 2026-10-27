@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-beta20] - 2026-10-27
+
+No migrations; the API contract stays at v1.
+
+### Library
+
+- **Hidden folders and files are no longer scanned** (ADR-0155 point 5). Library sync and the
+  folder watcher skip anything whose name begins with `.`. The Mac app's Bandcamp importer (1.5.1)
+  copies an album into a hidden folder before moving it into place, and a scan during the copy
+  could pick up a half-copied album. `.Trashes`, `.Spotlight-V100` and macOS `._` files stop being
+  walked too. A library root that is itself hidden is still watched.
+
+### MCP
+
+- **`search_library` finds a query whose words span fields.** "Inferno Boards of Canada" (an album
+  and an artist) found nothing, because the whole query had to appear in one field. A multi-word
+  query now also matches when every word appears in some field.
+
 ## [0.2.0-beta19] - 2026-10-25
 
 No migrations; the API contract stays at v1.
