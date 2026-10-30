@@ -5642,6 +5642,195 @@ export type RankedVisualizer = {
 };
 
 /**
+ * RecapAlbumStat
+ */
+export type RecapAlbumStat = {
+    /**
+     * Artist
+     */
+    artist: string | null;
+    /**
+     * Id
+     */
+    id: string | null;
+    /**
+     * Minutes
+     */
+    minutes: number;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Plays
+     */
+    plays: number;
+    /**
+     * Track Id
+     */
+    track_id: string;
+};
+
+/**
+ * RecapArtistStat
+ */
+export type RecapArtistStat = {
+    /**
+     * Id
+     */
+    id: string | null;
+    /**
+     * Minutes
+     */
+    minutes: number;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Plays
+     */
+    plays: number;
+    /**
+     * Track Id
+     */
+    track_id: string;
+};
+
+/**
+ * RecapResponse
+ *
+ * A summary of one window of play events.
+ *
+ * `window_start`/`window_end` are what was actually summarised: the year, clipped to the first
+ * trustworthy day and to now. A client labels the recap from these, never from the year alone.
+ */
+export type RecapResponse = {
+    /**
+     * Favorites Added
+     */
+    favorites_added: number;
+    /**
+     * First Listens
+     */
+    first_listens: number;
+    /**
+     * Insufficient
+     */
+    insufficient: boolean;
+    /**
+     * Listening Clock
+     */
+    listening_clock: Array<number>;
+    /**
+     * Minutes Listened
+     */
+    minutes_listened: number;
+    /**
+     * Peak Hour
+     */
+    peak_hour: number | null;
+    /**
+     * Plays
+     */
+    plays: number;
+    sound: RecapSoundStat;
+    /**
+     * Timezone
+     */
+    timezone: string;
+    top_album?: RecapAlbumStat;
+    /**
+     * Top Artists
+     */
+    top_artists: Array<RecapArtistStat>;
+    /**
+     * Top Month
+     */
+    top_month: number | null;
+    /**
+     * Top Tracks
+     */
+    top_tracks: Array<RecapTrackStat>;
+    /**
+     * Unique Artists
+     */
+    unique_artists: number;
+    /**
+     * Unique Tracks
+     */
+    unique_tracks: number;
+    /**
+     * Window End
+     */
+    window_end: string;
+    /**
+     * Window Start
+     */
+    window_start: string;
+    /**
+     * Year
+     */
+    year: number;
+};
+
+/**
+ * RecapSoundStat
+ */
+export type RecapSoundStat = {
+    /**
+     * Bpm
+     */
+    bpm: number | null;
+    /**
+     * Danceability
+     */
+    danceability: number | null;
+    /**
+     * Energy
+     */
+    energy: number | null;
+    /**
+     * Key
+     */
+    key: string | null;
+    /**
+     * Mood Tags
+     */
+    mood_tags: Array<string>;
+    /**
+     * Valence
+     */
+    valence: number | null;
+};
+
+/**
+ * RecapTrackStat
+ */
+export type RecapTrackStat = {
+    /**
+     * Artist
+     */
+    artist: string | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Minutes
+     */
+    minutes: number;
+    /**
+     * Plays
+     */
+    plays: number;
+    /**
+     * Title
+     */
+    title: string | null;
+};
+
+/**
  * RecommendationsResponse
  *
  * Recommendations response.
@@ -16933,6 +17122,59 @@ export type RadioSuggestionsResponses = {
 };
 
 export type RadioSuggestionsResponse = RadioSuggestionsResponses[keyof RadioSuggestionsResponses];
+
+export type PlaysGetRecapData = {
+    body?: never;
+    path: {
+        /**
+         * Year
+         */
+        year: number;
+    };
+    query?: {
+        /**
+         * Tz
+         *
+         * IANA time zone the year and the clock are read in
+         */
+        tz?: string;
+    };
+    url: '/api/v1/recap/{year}';
+};
+
+export type PlaysGetRecapErrors = {
+    /**
+     * Bad Request
+     */
+    400: ErrorEnvelope;
+    /**
+     * Unauthorized
+     */
+    401: ErrorEnvelope;
+    /**
+     * Not Found
+     */
+    404: ErrorEnvelope;
+    /**
+     * Unprocessable Entity
+     */
+    422: ErrorEnvelope;
+    /**
+     * Internal Server Error
+     */
+    500: ErrorEnvelope;
+};
+
+export type PlaysGetRecapError = PlaysGetRecapErrors[keyof PlaysGetRecapErrors];
+
+export type PlaysGetRecapResponses = {
+    /**
+     * Successful Response
+     */
+    200: RecapResponse;
+};
+
+export type PlaysGetRecapResponse = PlaysGetRecapResponses[keyof PlaysGetRecapResponses];
 
 export type BackupCancelBackupData = {
     body?: never;
