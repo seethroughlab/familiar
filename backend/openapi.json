@@ -7920,6 +7920,299 @@
         "title": "RankedVisualizer",
         "type": "object"
       },
+      "RecapAlbumStat": {
+        "properties": {
+          "artist": {
+            "title": "Artist",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "minutes": {
+            "title": "Minutes",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "plays": {
+            "title": "Plays",
+            "type": "integer"
+          },
+          "track_id": {
+            "format": "uuid",
+            "title": "Track Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "artist",
+          "plays",
+          "minutes",
+          "track_id"
+        ],
+        "title": "RecapAlbumStat",
+        "type": "object"
+      },
+      "RecapArtistStat": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "minutes": {
+            "title": "Minutes",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "plays": {
+            "title": "Plays",
+            "type": "integer"
+          },
+          "track_id": {
+            "format": "uuid",
+            "title": "Track Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "plays",
+          "minutes",
+          "track_id"
+        ],
+        "title": "RecapArtistStat",
+        "type": "object"
+      },
+      "RecapResponse": {
+        "description": "A summary of one window of play events.\n\n`window_start`/`window_end` are what was actually summarised: the year, clipped to the first\ntrustworthy day and to now. A client labels the recap from these, never from the year alone.",
+        "properties": {
+          "favorites_added": {
+            "title": "Favorites Added",
+            "type": "integer"
+          },
+          "first_listens": {
+            "title": "First Listens",
+            "type": "integer"
+          },
+          "insufficient": {
+            "title": "Insufficient",
+            "type": "boolean"
+          },
+          "listening_clock": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Listening Clock",
+            "type": "array"
+          },
+          "minutes_listened": {
+            "title": "Minutes Listened",
+            "type": "number"
+          },
+          "peak_hour": {
+            "title": "Peak Hour",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "plays": {
+            "title": "Plays",
+            "type": "integer"
+          },
+          "sound": {
+            "$ref": "#/components/schemas/RecapSoundStat"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "top_album": {
+            "$ref": "#/components/schemas/RecapAlbumStat"
+          },
+          "top_artists": {
+            "items": {
+              "$ref": "#/components/schemas/RecapArtistStat"
+            },
+            "title": "Top Artists",
+            "type": "array"
+          },
+          "top_month": {
+            "title": "Top Month",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "top_tracks": {
+            "items": {
+              "$ref": "#/components/schemas/RecapTrackStat"
+            },
+            "title": "Top Tracks",
+            "type": "array"
+          },
+          "unique_artists": {
+            "title": "Unique Artists",
+            "type": "integer"
+          },
+          "unique_tracks": {
+            "title": "Unique Tracks",
+            "type": "integer"
+          },
+          "window_end": {
+            "format": "date-time",
+            "title": "Window End",
+            "type": "string"
+          },
+          "window_start": {
+            "format": "date-time",
+            "title": "Window Start",
+            "type": "string"
+          },
+          "year": {
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "year",
+          "timezone",
+          "window_start",
+          "window_end",
+          "insufficient",
+          "plays",
+          "minutes_listened",
+          "unique_tracks",
+          "unique_artists",
+          "top_tracks",
+          "top_artists",
+          "sound",
+          "listening_clock",
+          "peak_hour",
+          "top_month",
+          "first_listens",
+          "favorites_added"
+        ],
+        "title": "RecapResponse",
+        "type": "object"
+      },
+      "RecapSoundStat": {
+        "properties": {
+          "bpm": {
+            "title": "Bpm",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "danceability": {
+            "title": "Danceability",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "energy": {
+            "title": "Energy",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "key": {
+            "title": "Key",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mood_tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Mood Tags",
+            "type": "array"
+          },
+          "valence": {
+            "title": "Valence",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "bpm",
+          "energy",
+          "valence",
+          "danceability",
+          "key",
+          "mood_tags"
+        ],
+        "title": "RecapSoundStat",
+        "type": "object"
+      },
+      "RecapTrackStat": {
+        "properties": {
+          "artist": {
+            "title": "Artist",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "minutes": {
+            "title": "Minutes",
+            "type": "number"
+          },
+          "plays": {
+            "title": "Plays",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "artist",
+          "plays",
+          "minutes"
+        ],
+        "title": "RecapTrackStat",
+        "type": "object"
+      },
       "RecommendationsResponse": {
         "description": "Recommendations response.",
         "properties": {
@@ -28306,6 +28599,108 @@
         "summary": "Suggestions",
         "tags": [
           "radio"
+        ]
+      }
+    },
+    "/api/v1/recap/{year}": {
+      "get": {
+        "description": "The current profile's recap for `year`.",
+        "operationId": "plays_get_recap",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "year",
+            "required": true,
+            "schema": {
+              "maximum": 2100,
+              "minimum": 2000,
+              "title": "Year",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "IANA time zone the year and the clock are read in",
+            "in": "query",
+            "name": "tz",
+            "required": false,
+            "schema": {
+              "default": "UTC",
+              "description": "IANA time zone the year and the clock are read in",
+              "title": "Tz",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecapResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "ProfileHeader": []
+          }
+        ],
+        "summary": "Get Recap",
+        "tags": [
+          "plays"
         ]
       }
     },

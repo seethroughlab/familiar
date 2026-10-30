@@ -45,6 +45,7 @@ from app.api.routes import (
     playlists,
     profiles,
     proposed_changes,
+    recap,
     s3_backup,
     smart_playlists,
     tracks,
@@ -91,6 +92,7 @@ api_router.include_router(download.router)
 api_router.include_router(updates.router)
 api_router.include_router(commands.router)
 api_router.include_router(listening.router)
+api_router.include_router(recap.router)
 api_router.include_router(external_albums.router)
 api_router.include_router(new_releases.router)
 api_router.include_router(admin_artists.router)
