@@ -10,6 +10,16 @@ Implementation:
   (`compute_recap`, `recap_window`, `RECAP_MIN_PLAYS`), `backend/app/api/routes/recap.py`, and
   `tests/test_recap.py`, which has 18 tests. Removing the cutoff or the `errored` filter fails 7 of
   them. The change is additive and the contract stays at version 1.
+- **First run against the NAS, 2026-10-30** (#421 deployed). The totals matched a SQL count
+  exactly: 2,066 plays and 9,773.2 minutes since August 1. Three defects were found and fixed:
+  - `first_listens` counted skipped tracks too, giving 1,457 against 1,322 `unique_tracks`. It now
+    counts only tracks played through, so it is a subset of `unique_tracks`.
+  - Point 6's "mood tags" counted every category in `mood_tags`, so the year read as "blues, rock,
+    country". Only `category == "mood"` is counted now.
+  - Top tracks showed the file's artist tag, not the canonical artist name.
+- **Point 6's raw medians are not yet meaningful on their own.** The whole library's median energy
+  is 0.83, valence 0.85 and danceability 0.15, so "0.85 energy" means "typical for this library".
+  A client must not present these values as absolutes.
 
 Extends [ADR-0004](ADR-0004-listening-feedback-is-event-sourced.md)
 
