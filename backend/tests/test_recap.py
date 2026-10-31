@@ -166,6 +166,22 @@ async def test_artists_are_grouped_by_canonical_artist_across_tracks(async_db):
     assert recap.unique_artists == 2
 
 
+@pytest.mark.asyncio
+async def test_a_top_track_shows_its_artists_canonical_spelling(async_db):
+    """Not "Boards Of Canada" on one slide and "Boards of Canada" on the next."""
+    profile = await insert_test_profile(async_db)
+    await insert_test_track(async_db, title="Roygbiv", artist="Boards of Canada", album="A")
+    track = await insert_test_track(
+        async_db, title="All Reason Departs", artist="Boards Of Canada", album="B"
+    )
+    await _plays(async_db, profile, track, 2)
+    await async_db.commit()
+
+    recap = await compute_recap(async_db, profile.id, 2026, UTC, now=NOW)
+
+    assert recap.top_tracks[0].artist == recap.top_artists[0].name == "Boards of Canada"
+
+
 # ── Time, sound, firsts (point 6) ──────────────────────────────────────
 
 
@@ -193,11 +209,18 @@ async def test_sound_is_weighted_by_how_often_each_track_was_played(async_db):
     quiet = await insert_test_track(async_db, title="Quiet")
     await insert_test_analysis(async_db, loud.id, {
         "bpm": 140.0, "energy": 0.9, "key": "A minor",
-        "mood_tags": [{"tag": "aggressive", "category": "mood", "confidence": 0.4}],
+        "mood_tags": [
+            {"tag": "aggressive", "category": "mood", "confidence": 0.4},
+            # Outnumbers both moods; a genre is not a mood, so it must not be counted.
+            {"tag": "blues", "category": "genre", "confidence": 0.5},
+        ],
     })
     await insert_test_analysis(async_db, quiet.id, {
         "bpm": 70.0, "energy": 0.1, "key": "C major",
-        "mood_tags": [{"tag": "calm", "category": "mood", "confidence": 0.4}],
+        "mood_tags": [
+            {"tag": "calm", "category": "mood", "confidence": 0.4},
+            {"tag": "blues", "category": "genre", "confidence": 0.5},
+        ],
     })
     await _plays(async_db, profile, loud, 3)
     await _plays(async_db, profile, quiet, 1)
@@ -226,6 +249,22 @@ async def test_a_first_listen_is_a_track_never_heard_before_the_window(async_db)
     recap = await compute_recap(async_db, profile.id, 2026, UTC, now=NOW)
 
     assert recap.first_listens == 1
+
+
+@pytest.mark.asyncio
+async def test_a_track_only_skipped_is_not_a_first_listen(async_db):
+    """First listens are a subset of the tracks played, never more of them."""
+    profile = await insert_test_profile(async_db)
+    played = await insert_test_track(async_db, title="Played")
+    skipped = await insert_test_track(async_db, title="Skipped")
+    await _plays(async_db, profile, played, 1)
+    await _plays(async_db, profile, skipped, 1, outcome="skipped", played_seconds=10)
+    await async_db.commit()
+
+    recap = await compute_recap(async_db, profile.id, 2026, UTC, now=NOW)
+
+    assert recap.first_listens == 1
+    assert recap.first_listens <= recap.unique_tracks
 
 
 @pytest.mark.asyncio
