@@ -8117,6 +8117,47 @@
         "title": "RecapResponse",
         "type": "object"
       },
+      "RecapSoundPercentilesStat": {
+        "description": "Each median's percentile rank in the whole library, 0-100; 50 is the library's middle.\n\nPresent these rather than the raw medians: the analysis scores most of a library alike, so\nan absolute value says little about one listener's year (ADR-0156 Implementation).",
+        "properties": {
+          "bpm": {
+            "title": "Bpm",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "danceability": {
+            "title": "Danceability",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "energy": {
+            "title": "Energy",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "valence": {
+            "title": "Valence",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "bpm",
+          "energy",
+          "valence",
+          "danceability"
+        ],
+        "title": "RecapSoundPercentilesStat",
+        "type": "object"
+      },
       "RecapSoundStat": {
         "properties": {
           "bpm": {
@@ -8147,6 +8188,9 @@
               "null"
             ]
           },
+          "library_percentile": {
+            "$ref": "#/components/schemas/RecapSoundPercentilesStat"
+          },
           "mood_tags": {
             "items": {
               "type": "string"
@@ -8168,7 +8212,8 @@
           "valence",
           "danceability",
           "key",
-          "mood_tags"
+          "mood_tags",
+          "library_percentile"
         ],
         "title": "RecapSoundStat",
         "type": "object"

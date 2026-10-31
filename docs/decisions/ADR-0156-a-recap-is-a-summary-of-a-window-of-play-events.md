@@ -20,6 +20,10 @@ Implementation:
 - **Point 6's raw medians are not yet meaningful on their own.** The whole library's median energy
   is 0.83, valence 0.85 and danceability 0.15, so "0.85 energy" means "typical for this library".
   A client must not present these values as absolutes.
+- **`sound.library_percentile` added, 2026-10-30.** For each median, it gives the percentile rank
+  among every analysed track in the library, 0-100, with ties counted as half. A slide says
+  "calmer than your library" from this, not "85% energetic". The change is additive and the
+  contract stays at version 1.
 
 Extends [ADR-0004](ADR-0004-listening-feedback-is-event-sourced.md)
 

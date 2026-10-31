@@ -47,6 +47,19 @@ class RecapAlbumStat(_FromService):
     track_id: UUID
 
 
+class RecapSoundPercentilesStat(_FromService):
+    """Each median's percentile rank in the whole library, 0-100; 50 is the library's middle.
+
+    Present these rather than the raw medians: the analysis scores most of a library alike, so
+    an absolute value says little about one listener's year (ADR-0156 Implementation).
+    """
+
+    bpm: int | None
+    energy: int | None
+    valence: int | None
+    danceability: int | None
+
+
 class RecapSoundStat(_FromService):
     bpm: float | None
     energy: float | None
@@ -54,6 +67,7 @@ class RecapSoundStat(_FromService):
     danceability: float | None
     key: str | None
     mood_tags: list[str]
+    library_percentile: RecapSoundPercentilesStat
 
 
 class RecapResponse(_FromService):
