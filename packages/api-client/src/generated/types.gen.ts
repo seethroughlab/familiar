@@ -5775,6 +5775,33 @@ export type RecapResponse = {
 };
 
 /**
+ * RecapSoundPercentilesStat
+ *
+ * Each median's percentile rank in the whole library, 0-100; 50 is the library's middle.
+ *
+ * Present these rather than the raw medians: the analysis scores most of a library alike, so
+ * an absolute value says little about one listener's year (ADR-0156 Implementation).
+ */
+export type RecapSoundPercentilesStat = {
+    /**
+     * Bpm
+     */
+    bpm: number | null;
+    /**
+     * Danceability
+     */
+    danceability: number | null;
+    /**
+     * Energy
+     */
+    energy: number | null;
+    /**
+     * Valence
+     */
+    valence: number | null;
+};
+
+/**
  * RecapSoundStat
  */
 export type RecapSoundStat = {
@@ -5794,6 +5821,7 @@ export type RecapSoundStat = {
      * Key
      */
     key: string | null;
+    library_percentile: RecapSoundPercentilesStat;
     /**
      * Mood Tags
      */

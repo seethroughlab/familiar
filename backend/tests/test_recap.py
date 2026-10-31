@@ -308,3 +308,23 @@ def test_endpoint_rejects_an_unknown_time_zone(client, test_profile):
 
 def test_endpoint_requires_a_profile(client):
     assert client.get("/api/v1/recap/2026").status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_the_sound_is_placed_within_the_whole_library(async_db):
+    """A raw 0.85 energy is typical of this analysis; the percentile is what a slide can say."""
+    profile = await insert_test_profile(async_db)
+    played = await insert_test_track(async_db, title="Played")
+    await insert_test_analysis(async_db, played.id, {"energy": 0.3, "valence": 0.5})
+    # The rest of the library, never played: three tracks above the played one, one below.
+    for title, energy in [("A", 0.9), ("B", 0.8), ("C", 0.7), ("D", 0.1)]:
+        other = await insert_test_track(async_db, title=title)
+        await insert_test_analysis(async_db, other.id, {"energy": energy, "valence": 0.5})
+    await _plays(async_db, profile, played, 3)
+    await async_db.commit()
+
+    percentile = (await compute_recap(async_db, profile.id, 2026, UTC, now=NOW)).sound.library_percentile
+
+    assert percentile.energy == 30  # one below, itself counted as half, of five
+    assert percentile.valence == 50  # level with everything: the middle
+    assert percentile.bpm is None  # no median, no rank

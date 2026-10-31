@@ -75,6 +75,21 @@ class RecapAlbum:
 
 
 @dataclass
+class RecapSoundPercentiles:
+    """Where each of the year's medians sits in the whole library, 0-100.
+
+    The raw medians cannot stand alone. The analysis scores this library high on energy and
+    valence and low on danceability throughout (library medians 0.83, 0.85 and 0.15 on the NAS,
+    2026-10-30), so "0.85 energy" means "typical", not "energetic". 50 is the library's middle.
+    """
+
+    bpm: int | None = None
+    energy: int | None = None
+    valence: int | None = None
+    danceability: int | None = None
+
+
+@dataclass
 class RecapSound:
     bpm: float | None = None
     energy: float | None = None
@@ -82,6 +97,7 @@ class RecapSound:
     danceability: float | None = None
     key: str | None = None
     mood_tags: list[str] = field(default_factory=list)
+    library_percentile: RecapSoundPercentiles = field(default_factory=RecapSoundPercentiles)
 
 
 @dataclass
@@ -308,7 +324,37 @@ async def _sound(db: AsyncSession, play_counts: Counter[UUID]) -> RecapSound:
     if keys:
         sound.key = keys.most_common(1)[0][0]
     sound.mood_tags = [tag for tag, _ in tags.most_common(TOP_MOOD_TAGS)]
+    sound.library_percentile = await _library_percentiles(db, sound)
     return sound
+
+
+async def _library_percentiles(db: AsyncSession, sound: RecapSound) -> RecapSoundPercentiles:
+    """Each median's percentile rank among every analysed track, ties counted as half.
+
+    The whole library, not this profile's plays: the question a slide answers is "was my year
+    calmer than my music", and the music is the library.
+    """
+    percentiles = RecapSoundPercentiles()
+    medians = {name: getattr(sound, name) for name in _SOUND_FEATURES}
+    present = {name: value for name, value in medians.items() if value is not None}
+    if not present:
+        return percentiles
+
+    columns = []
+    for name, value in present.items():
+        column = getattr(TrackAnalysis, name)
+        columns += [
+            func.count(column),
+            func.count().filter(column < value),
+            func.count().filter(column == value),
+        ]
+    row = (await db.execute(select(*columns))).one()
+
+    for i, name in enumerate(present):
+        total, below, equal = row[3 * i: 3 * i + 3]
+        if total:
+            setattr(percentiles, name, round(100 * (below + equal / 2) / total))
+    return percentiles
 
 
 async def _first_listens(
