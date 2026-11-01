@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-beta21] - 2026-10-31
+
+No migrations; the API contract stays at v1 (one endpoint added).
+
+### Listening
+
+- **A year in review: `GET /api/v1/recap/{year}?tz=`** (ADR-0156). A profile's year, summarised
+  from its play events: minutes and plays, top five tracks and artists, the top album, the hours
+  and month it listened most, tracks heard for the first time and favourites added. "Your sound"
+  places the year's median energy, valence, danceability and tempo within the listener's own
+  library as percentiles, because the analysis scores most of any library as energetic and
+  positive, so the raw medians mean little. The window is the year in the listener's time zone,
+  starting no earlier than 2026-08-01, when play events became trustworthy, and the response says
+  where it starts. A year with fewer than 50 completed plays answers `insufficient`. The Apple
+  apps turn it into a shareable video each December and January (ADR-0157); an older server
+  simply hides that row.
+
 ## [0.2.0-beta20] - 2026-10-27
 
 No migrations; the API contract stays at v1.
