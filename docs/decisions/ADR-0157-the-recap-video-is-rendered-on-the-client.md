@@ -5,8 +5,24 @@ Status: accepted
 Date: 2026-10-30
 
 Implementation:
-- **Accepted 2026-10-30.** Not yet built. It waits on ADR-0156's endpoint reaching `familiar-apple`
-  through `scripts/vendor-schema.sh --fetch`.
+- **Accepted 2026-10-30.**
+- **Built 2026-10-31 in `familiar-apple` #243.** FamiliarKit holds the decisions: `Recap`,
+  `RecapSeason`, `RecapStory` (every word on every card), `RecapFrameRenderer` and
+  `RecapVideoWriter`. `ServerRecapSource` follows ADR-0124's shape. The app has `RecapStore` and
+  `RecapView`, and `.recap` is a `SidebarItem`/`LibraryRoot` on both platforms. It is named on the
+  command channel but not offered, because `NAVIGATION_DESTINATIONS` does not list it.
+- **Measured on the real 2026 recap.** A 31 s, 1080×1920 video renders in about 5 s on an M-series
+  Mac, and the fades are applied by the audio mix while decoding (−20.7 → −8.4 dB over the first
+  second).
+- **Two findings shaped the build:**
+  - **The writer must feed whichever input is ready, not the earlier one.** It wanted audio 30 ms
+    ahead of the next frame and refused that frame until it came, so a loop that fed only the
+    earlier input hung forever.
+  - **The window's start is labelled at the nearest local midnight.** ADR-0156's cutoff is midnight
+    UTC, which is the evening of July 31 west of London, and the first render said "Since July 31".
+- **Point 2 held**, with one consequence: a SwiftUI `Canvas` is top-left with y down, so the preview
+  flips its `CGContext` before calling the same renderer the export uses.
+- **Not yet seen in the running app.** The destination exists only in December and January.
 
 Extends [ADR-0156](ADR-0156-a-recap-is-a-summary-of-a-window-of-play-events.md)
 
