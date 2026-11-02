@@ -31,14 +31,22 @@ jobs:
       - name: Record whether the demo is off
         # ADR-0158 point 3. Between App Store reviews the machine is stopped with autostart disabled.
         # A deploy rewrites the machine config from `fly.toml`, which is always-on, so without this
-        # every backend merge would quietly turn the demo back on for good. Off means every machine
-        # is stopped; a running machine means a review window, and the deploy leaves it running.
+        # every backend merge would quietly turn the demo back on for good.
+        #
+        # **Off is read from autostart, not from whether the machine is running.** Autostart is the
+        # flag the on and off commands set (familiar-apple/APP-REVIEW-NOTES.md), so it records the
+        # intent; the machine's state is only where it happens to be. The first version read the
+        # state, and on 2026-11-02 (run 41514101163) found the demo running for reasons the logs no
+        # longer showed, called it a review window, and left it on with autostart re-enabled. Read
+        # by intent, a demo that something woke is still off, and the deploy puts it back.
         id: power
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
+          flyctl machine list -a familiar-demo --json | jq -r \
+            '.[] | "machine \(.id): \(.state), autostart \([.config.services[]?.autostart] | map(tostring) | join(","))"'
           state=$(flyctl machine list -a familiar-demo --json | jq -r \
-            'if length == 0 then "on" elif all(.[]; .state == "stopped" or .state == "suspended") then "off" else "on" end')
+            'if length == 0 then "on" elif all(.[]; [.config.services[]?.autostart] | all(. == false)) then "off" else "on" end')
           echo "demo is $state before the deploy"
           echo "was=$state" >> "$GITHUB_OUTPUT"
 
