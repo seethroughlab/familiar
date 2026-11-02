@@ -62,11 +62,18 @@ jobs:
         # The demo had no artists for two months while every deploy went green: the seed's tracks
         # were never linked to canonical artists, and nothing here asked for an artist page.
         # `entrypoint.sh` now links them on boot; this is what proves it did.
+        #
+        # **A timeout is retried, not fatal.** Actions runs this under `bash -e`, so a bare `curl`
+        # that times out (exit 28) ended the step on the first attempt and the loop never retried.
+        # That never showed while the demo was always warm. Since ADR-0158 a deploy can start a cold
+        # machine a second before this runs, and the first real run, on 2026-11-02, failed exactly
+        # that way, 30 s after "has been started". `|| true` lets the loop do its job.
         run: |
           for attempt in $(seq 1 10); do
             code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
-              "https://familiar-demo.fly.dev/api/v1/library/artists/Kevin%20MacLeod")
-            [ "$code" = "200" ] && { echo "artist page: 200"; exit 0; }
+              "https://familiar-demo.fly.dev/api/v1/library/artists/Kevin%20MacLeod" || true)
+            [ "$code" = "200" ] && { echo "artist page: 200 (attempt $attempt)"; exit 0; }
+            echo "attempt $attempt: ${code:-no response}"
             sleep 15
           done
           echo "::error::The Kevin MacLeod artist page returned $code after deploy."
@@ -76,7 +83,7 @@ jobs:
         # A sidebar destination that 500'd on every request (`/data/videos` was never created).
         run: |
           code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
-            "https://familiar-demo.fly.dev/api/v1/videos?page=1&page_size=5")
+            "https://familiar-demo.fly.dev/api/v1/videos?page=1&page_size=5" || true)
           [ "$code" = "200" ] || { echo "::error::GET /videos returned $code after deploy."; exit 1; }
 
       - name: Put the demo back off

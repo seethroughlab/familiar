@@ -29,6 +29,13 @@ Implementation:
 - Both workflows pass `actionlint` 1.7.12. The off-detection and the final check were run against
   the live app; the workflows themselves first run on the next backend merge and on Sunday
   2026-11-08.
+- **The first real deploy (run `41508840614`, 2026-11-02, on the merge of #426) was red, and point
+  3 held.** The demo was recorded off, deployed, started, and put back off
+  (`stopped/autostart_off=true`, checked afterwards). But the artist check failed one curl in: Actions
+  runs steps under `bash -e`, so a `curl` timing out (exit 28) against a machine started one second
+  earlier ended the step before its retry loop could retry. The loop had never been exercised,
+  because the demo had always been warm. Both checks now tolerate a failed `curl`
+  (`fix/demo-deploy-cold-start`).
 - **Numbered 0158, not 0156**: drafted as 0156 on a local `main` 15 commits behind `origin`, where
   0156 and 0157 were already the recap ADRs.
 
