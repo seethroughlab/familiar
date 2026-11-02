@@ -36,6 +36,15 @@ Implementation:
   earlier ended the step before its retry loop could retry. The loop had never been exercised,
   because the demo had always been warm. Both checks now tolerate a failed `curl`
   (`fix/demo-deploy-cold-start`).
+- **The second deploy (run `41514101163`, on the merge of #427) was green and left the demo on.**
+  At 19:20 UTC the demo was checked `stopped` with autostart off. At 19:53 the deploy found it
+  running, took that as a review window, and kept it on with autostart re-enabled from `fly.toml`.
+  What started it in between is unknown: the machine's event log and Fly's log buffer both begin
+  at the deploy's own launch. It was stopped by hand the same evening. The fix is that both
+  workflows now read *off* from autostart, the flag the on and off commands set and so the record
+  of intent, not from the machine's state. A demo something woke is then still off, and the deploy
+  puts it back. Both steps also log each machine's state and autostart, so the next surprise can be
+  diagnosed (`fix/demo-off-means-autostart-off`).
 - **Numbered 0158, not 0156**: drafted as 0156 on a local `main` 15 commits behind `origin`, where
   0156 and 0157 were already the recap ADRs.
 

@@ -40,6 +40,8 @@ jobs:
     # stopped demo would either turn the demo back on or fail every Sunday until the next review.
     # A database nobody can reach does not need resetting, so the reset is skipped, and says so.
     # A manual run is skipped too: start the demo first (familiar-apple/APP-REVIEW-NOTES.md).
+    # Off is read from autostart, which records the intent, not from the machine's state (see
+    # fly-deploy-demo.yml).
     name: Is the demo on?
     runs-on: ubuntu-latest
     outputs:
@@ -50,8 +52,10 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
+          flyctl machine list -a familiar-demo --json | jq -r \
+            '.[] | "machine \(.id): \(.state), autostart \([.config.services[]?.autostart] | map(tostring) | join(","))"'
           state=$(flyctl machine list -a familiar-demo --json | jq -r \
-            'if length == 0 then "on" elif all(.[]; .state == "stopped" or .state == "suspended") then "off" else "on" end')
+            'if length == 0 then "on" elif all(.[]; [.config.services[]?.autostart] | all(. == false)) then "off" else "on" end')
           echo "state=$state" >> "$GITHUB_OUTPUT"
           if [ "$state" = "off" ]; then
             echo "::notice::The demo is off between reviews (ADR-0158). Nothing to reset; skipping."
