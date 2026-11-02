@@ -1,6 +1,6 @@
 # ADR-0038: The Demo Server Is Always On
 
-Status: accepted
+Status: accepted — point 1 superseded and point 4 qualified by ADR-0158
 
 Date: 2026-08-06
 

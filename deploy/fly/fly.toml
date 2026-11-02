@@ -24,11 +24,15 @@ primary_region = 'sjc'
 [http_service]
   internal_port = 8000
   force_https = true
-  # **Always on** (ADR-0038 point 1). An App Store reviewer who hits a cold machine sees timeouts,
-  # and one rejection costs more in calendar time than this machine costs in a year. The health
-  # check below has a 30s grace period, the container runs `alembic upgrade head` on boot, and the
-  # first request also has to warm Postgres — "Fly cold starts are usually quick" is doing far too
-  # much work in front of an audience holding a rejection form.
+  # **Always on while it is on** (ADR-0038 point 1, as qualified by ADR-0158). Between App Store
+  # reviews the machine is *stopped*, with autostart disabled on the machine itself, and these
+  # settings do not describe it then. `fly-deploy-demo.yml` puts it back off after deploying, and
+  # the weekly reset skips it. While a review is running they are what a reviewer meets: one who
+  # hits a cold machine sees timeouts, and one rejection costs more in calendar time than this
+  # machine costs in a year. The health check below has a 30s grace period, the container runs
+  # `alembic upgrade head` on boot, and the first request also has to warm Postgres — "Fly cold
+  # starts are usually quick" is doing far too much work in front of an audience holding a
+  # rejection form. Turning it on and off: `familiar-apple/APP-REVIEW-NOTES.md`.
   auto_stop_machines = 'off'
   auto_start_machines = true
   min_machines_running = 1

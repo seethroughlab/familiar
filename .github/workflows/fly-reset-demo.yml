@@ -34,8 +34,35 @@ env:
   SEED_FILE: deploy/fly/demo-seed.sql.gz
 
 jobs:
+  power:
+    # ADR-0158 point 4. Between App Store reviews the demo is stopped with autostart disabled. A
+    # reset ends by restarting the app and requiring it to serve music, so running it against a
+    # stopped demo would either turn the demo back on or fail every Sunday until the next review.
+    # A database nobody can reach does not need resetting, so the reset is skipped, and says so.
+    # A manual run is skipped too: start the demo first (familiar-apple/APP-REVIEW-NOTES.md).
+    name: Is the demo on?
+    runs-on: ubuntu-latest
+    outputs:
+      state: ${{ steps.check.outputs.state }}
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - id: check
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          state=$(flyctl machine list -a familiar-demo --json | jq -r \
+            'if length == 0 then "on" elif all(.[]; .state == "stopped" or .state == "suspended") then "off" else "on" end')
+          echo "state=$state" >> "$GITHUB_OUTPUT"
+          if [ "$state" = "off" ]; then
+            echo "::notice::The demo is off between reviews (ADR-0158). Nothing to reset; skipping."
+          else
+            echo "The demo is on; resetting."
+          fi
+
   reset:
     name: Restore familiar-demo from the committed seed
+    needs: power
+    if: needs.power.outputs.state == 'on'
     runs-on: ubuntu-latest
     concurrency: fly-demo-deploy
     steps:

@@ -1,9 +1,15 @@
 # The Demo Server
 
-`https://familiar-demo.fly.dev` — a public, always-on Familiar instance with a small library of
+`https://familiar-demo.fly.dev` — a public Familiar instance with a small library of
 CC-licensed music. It exists so an **App Store reviewer has a server to type into the setup screen**;
 without one the app is a setup screen, and a submission that reaches a reviewer in that state is
 rejected on functionality regardless of what shipped in it.
+
+**It is on only during App Store review** ([ADR-0158](decisions/ADR-0158-the-demo-server-is-on-only-for-review.md),
+since 2026-11-02). Between reviews the machine is stopped with autostart disabled, so it does not
+answer at all. Turn it on at least a day before a submission and off once the version is approved;
+the commands are at the top of `familiar-apple/APP-REVIEW-NOTES.md`, the file a submission is
+prepared from.
 
 It doubles as the public demo the website has never been able to link to.
 
@@ -23,11 +29,11 @@ uploads, no durability guarantee, and no growth into a service. Familiar is self
 | Fly app | `familiar-demo`, region `sjc` |
 | Config | `deploy/fly/fly.toml` — invoked from the repo root, see the comment at its top |
 | Image | `deploy/fly/Dockerfile` (not `docker/Dockerfile`) |
-| VM | `shared-cpu-1x`, 1 GB, one machine, **always on** |
+| VM | `shared-cpu-1x`, 1 GB, one machine — always on **during review**, stopped between (ADR-0158) |
 | Volume | `demo_data` mounted at `/data` |
 | Database | **Neon** Postgres with `pgvector` |
-| Deploy | `.github/workflows/fly-deploy-demo.yml` — on push to `main` under `backend/**` or `deploy/fly/**`, and by hand |
-| Reset | `.github/workflows/fly-reset-demo.yml` — weekly, Sunday 04:00 UTC |
+| Deploy | `.github/workflows/fly-deploy-demo.yml` — on push to `main` under `backend/**` or `deploy/fly/**`, and by hand. A demo that was off is started for the checks and put back off |
+| Reset | `.github/workflows/fly-reset-demo.yml` — weekly, Sunday 04:00 UTC; skipped while the demo is off |
 
 `deploy/fly/entrypoint.sh` ensures the `pgvector` extension and runs `alembic upgrade head` on every
 boot, so a deploy carries its own migrations.
@@ -69,8 +75,9 @@ refuses a pooler URL outright.
 
 ## Bringing it up
 
-The repository side is done — `fly.toml` is always-on and the deploy workflow is armed. What remains
-needs a Fly account:
+**For a review, start the existing machine** rather than redeploying; the commands are in
+`familiar-apple/APP-REVIEW-NOTES.md`. A deploy while the demo is off puts it back off afterwards.
+To deploy by hand from scratch:
 
 ```bash
 flyctl deploy . \
@@ -82,8 +89,8 @@ flyctl deploy . \
 Then verify:
 
 ```bash
-flyctl status -a familiar-demo                       # one machine, health checks passing
-curl https://familiar-demo.fly.dev/api/v1/health     # 200
+flyctl status -a familiar-demo                       # one machine; started during review, stopped otherwise
+curl https://familiar-demo.fly.dev/api/v1/health     # 200 while on; times out while off
 ```
 
 ### Secrets
