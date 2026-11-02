@@ -27,9 +27,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Record whether the demo is off
+        # ADR-0158 point 3. Between App Store reviews the machine is stopped with autostart disabled.
+        # A deploy rewrites the machine config from `fly.toml`, which is always-on, so without this
+        # every backend merge would quietly turn the demo back on for good. Off means every machine
+        # is stopped; a running machine means a review window, and the deploy leaves it running.
+        id: power
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          state=$(flyctl machine list -a familiar-demo --json | jq -r \
+            'if length == 0 then "on" elif all(.[]; .state == "stopped" or .state == "suspended") then "off" else "on" end')
+          echo "demo is $state before the deploy"
+          echo "was=$state" >> "$GITHUB_OUTPUT"
+
       - run: flyctl deploy . --remote-only --config deploy/fly/fly.toml --dockerfile deploy/fly/Dockerfile
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Start the demo for the checks
+        # Whether `fly deploy` starts a stopped machine is up to flyctl, so this does not depend on
+        # it either way: anything still stopped gets started, and the checks below prove the new
+        # build exactly as they would during a review.
+        if: steps.power.outputs.was == 'off'
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          for id in $(flyctl machine list -a familiar-demo --json | jq -r '.[] | select(.state != "started") | .id'); do
+            flyctl machine start "$id" -a familiar-demo
+          done
 
       - name: Confirm a reviewer can open an artist
         # The demo had no artists for two months while every deploy went green: the seed's tracks
@@ -51,3 +78,35 @@ jobs:
           code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
             "https://familiar-demo.fly.dev/api/v1/videos?page=1&page_size=5")
           [ "$code" = "200" ] || { echo "::error::GET /videos returned $code after deploy."; exit 1; }
+
+      - name: Put the demo back off
+        # ADR-0158 point 3: a deploy leaves the machine as it found it. This runs with `always()`
+        # because a failed check is exactly when nobody is watching, and a demo left running by a red
+        # deploy bills until someone notices. Autostart is disabled again because the deploy turned
+        # it back on from `fly.toml`, and with it on the Fly proxy wakes the machine on the next
+        # request.
+        if: always() && steps.power.outputs.was == 'off'
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        #
+        # **The update is retried.** On 2026-11-02 it failed on a stopped machine with "could not
+        # reserve resource for machine: insufficient memory available ... on the current host",
+        # a transient Fly capacity error. A failed update leaves the machine stopped *but
+        # wakeable*, which looks like success to a check that only reads the state, so the check
+        # below reads autostart too.
+        run: |
+          for id in $(flyctl machine list -a familiar-demo --json | jq -r '.[].id'); do
+            flyctl machine stop "$id" -a familiar-demo || true
+            for attempt in 1 2 3 4 5; do
+              flyctl machine update "$id" -a familiar-demo --autostart=false --skip-start -y && break
+              [ "$attempt" = 5 ] || { echo "update failed (attempt $attempt); retrying in 30s"; sleep 30; }
+            done
+          done
+          summary=$(flyctl machine list -a familiar-demo --json | jq -r \
+            '[.[] | "\(.state)/autostart_off=\([.config.services[]?.autostart] | all(. == false))"] | unique | join(",")')
+          echo "demo machines after the deploy: $summary"
+          [ "$summary" = "stopped/autostart_off=true" ] || {
+            echo "::error::The demo was off before this deploy and is now '$summary' (want stopped, autostart off)."
+            echo "::error::Stop it by hand: see familiar-apple/APP-REVIEW-NOTES.md."
+            exit 1
+          }

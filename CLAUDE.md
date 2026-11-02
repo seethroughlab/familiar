@@ -484,7 +484,9 @@ def upgrade():
 (ADR-0126 point 1). The listening screenshots are `mac-*.png`, taken from the Mac app by hand;
 there is no script for those, because the browser cannot render them.
 
-1. Backend with a library. Against the demo server: `familiar-demo.fly.dev` (~32 tracks).
+1. Backend with a library. Against the demo server: `familiar-demo.fly.dev` (~32 tracks) — **only
+   while it is on**, which since 2026-11-02 is during App Store review only (`ADR-0158`); otherwise a
+   local backend.
 2. Frontend pointed at it: `cd packages/web && VITE_API_TARGET=https://familiar-demo.fly.dev pnpm dev`
 3. `cd packages/web && BASE_URL=http://localhost:3000 npx playwright test --grep="screenshot"`
 
