@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-beta22] - 2026-11-02
+
 One migration (it deletes a health row); the API contract stays at v1.
 
 ### Removed
