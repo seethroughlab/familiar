@@ -144,14 +144,14 @@ def test_partial_update(
         "/api/v1/settings",
         json={
             "acoustid_api_key": "acoustid-key1",
-            "community_cache_enabled": True,
+            "discovery_enabled": True,
         },
     )
 
     # Update only one setting
     client.put(
         "/api/v1/settings",
-        json={"community_cache_enabled": False},
+        json={"discovery_enabled": False},
     )
 
     # Verify both are preserved
@@ -159,7 +159,7 @@ def test_partial_update(
     data = response.json()
 
     assert data["acoustid_api_key"] is not None  # Still set
-    assert data["community_cache_enabled"] is False  # Updated
+    assert data["discovery_enabled"] is False  # Updated
 
 
 class TestSoulseekSettingsAreGone:
@@ -190,3 +190,37 @@ class TestSoulseekSettingsAreGone:
     def test_the_response_no_longer_mentions_it(self, client: TestClient, mock_settings_service) -> None:
         data = client.get("/api/v1/settings").json()
         assert not {k for k in data if k.startswith("soulseek")}
+
+
+class TestCommunityCacheSettingsAreGone:
+    """ADR-0159 point 2. Same hazard as `TestSoulseekSettingsAreGone`: an installation that
+    used the Clapback commons has these keys in its settings.json, and it must still load whole."""
+
+    OLD_KEYS = {
+        "community_cache_enabled": True,
+        "community_cache_contribute": True,
+        "community_cache_url": "https://clapback.seethroughlab.com",
+        "community_cache_client_id": "6f1c1f9e-0000-4000-8000-000000000000",
+    }
+
+    def test_an_old_settings_file_loads_with_everything_else_intact(self, tmp_path) -> None:
+        import json
+
+        path = tmp_path / "settings.json"
+        path.write_text(json.dumps({"lastfm_api_key": "kept", **self.OLD_KEYS}))
+        service = AppSettingsService(settings_path=path)
+        assert service.get().lastfm_api_key == "kept"
+        service.update(lastfm_api_key="still kept")
+        saved = json.loads(path.read_text())
+        assert not set(self.OLD_KEYS) & set(saved), "dropped on the next save"
+
+    def test_the_response_no_longer_mentions_it(self, client: TestClient, mock_settings_service) -> None:
+        data = client.get("/api/v1/settings").json()
+        assert not {k for k in data if k.startswith("community_cache")}
+
+    def test_an_older_client_that_still_sends_them_is_not_refused(
+        self, client: TestClient, mock_settings_service
+    ) -> None:
+        """familiar-apple builds generated before ADR-0159 still send these on save."""
+        response = client.put("/api/v1/settings", json={"community_cache_enabled": False})
+        assert response.status_code == 200

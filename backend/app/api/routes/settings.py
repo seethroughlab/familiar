@@ -56,13 +56,10 @@ class SettingsResponse(BaseModel):
     # clients also opt in per device, and this rejects session traffic when off.
     queue_sync_enabled: bool
 
-    # Community cache
+    # Discovery
     discovery_enabled: bool
     discovery_musicbrainz_enabled: bool
     discovery_listenbrainz_enabled: bool
-    community_cache_enabled: bool
-    community_cache_contribute: bool
-    community_cache_url: str
     # ADR-0115: resolve recording ids through AcoustID in the background. Off by default.
     recording_backfill_enabled: bool
 
@@ -106,13 +103,10 @@ class SettingsUpdateRequest(BaseModel):
     # Server-owned playback queue (ADR-0003)
     queue_sync_enabled: bool | None = None
 
-    # Community cache
+    # Discovery
     discovery_enabled: bool | None = None
     discovery_musicbrainz_enabled: bool | None = None
     discovery_listenbrainz_enabled: bool | None = None
-    community_cache_enabled: bool | None = None
-    community_cache_contribute: bool | None = None
-    community_cache_url: str | None = None
     recording_backfill_enabled: bool | None = None
 
     # Playlist generation

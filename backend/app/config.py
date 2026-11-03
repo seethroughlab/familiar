@@ -281,7 +281,7 @@ FEATURES_VERSION = 8
 # This constant is the identity of the embedding *pipeline*, not of the checkpoint.
 # ADR-0104 point 6: windowing, pooling, mel parameters, truncation and precision all
 # belong to it, and any change moving vectors by more than ~1e-6 must bump it — the
-# community cache keys on this value, and vectors from two pipelines are not
+# community cache keyed on this value until ADR-0159, and vectors from two pipelines are not
 # comparable. `laion/clap-htsat-unfused:v1` staying fixed does not make them so.
 #
 # **v8 is the exception to that rule, and it is deliberate rather than an oversight.**

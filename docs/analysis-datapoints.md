@@ -2,7 +2,7 @@
 
 Comprehensive inventory of every analysis datapoint generated for tracks in Familiar, covering generation method, confidence, subjectivity, and external dependencies.
 
-**Source files**: `analysis.py`, `track_analysis/analyzers.py`, `track_analysis/pipeline.py`, `track_analysis/constants.py`, `external_features.py`, `community_cache.py`, `metadata/reader.py`, `db/models/tracks.py`, `vocal_detection.py`, `mood_tags.py`
+**Source files**: `analysis.py`, `track_analysis/analyzers.py`, `track_analysis/pipeline.py`, `track_analysis/constants.py`, `external_features.py`, `metadata/reader.py`, `db/models/tracks.py`, `vocal_detection.py`, `mood_tags.py`
 
 ---
 
@@ -441,19 +441,11 @@ Each descriptor has a natural-language description (e.g., "happy uplifting joyfu
 | **3rd party** | ReccoBeats free API (no auth), requires Spotify track ID match |
 | **Source tracking** | `features_source = "reccobeats"` |
 
-### 7.4 Community Cache
+### 7.4 Community Cache (removed)
 
-| | |
-|---|---|
-| **Service** | `community_cache.py:CommunityCacheService` |
-| **Server** | `https://clapback.seethroughlab.com` (was `familiar-cache.fly.dev`, retired when the service left Fly) |
-| **Key** | SHA256 hash of AcoustID fingerprint (privacy-preserving) |
-| **Data types** | Embeddings (512-dim CLAP), features (all scalar columns), analysis_detail (full structured data) |
-| **Versioning** | Matched by `EMBEDDING_VERSION`, `FEATURES_VERSION`, and CLAP model version |
-| **Confidence** | `contributor_count` indicates how many users contributed (more = higher trust) |
-| **Source tracking** | `features_source = "community_cache"`, `embedding_source = "community_cache"` |
-| **Privacy** | Fingerprints are SHA256-hashed before transmission; no metadata or file info shared |
-| **Opt-in** | Both lookup and contribution are controlled by app settings |
+Removed by ADR-0159 with the Clapback commons, 2026-11-02. Rows analysed while it ran may still
+carry `features_source = "community_cache"` and `embedding_source = "community_cache:hash"` or
+`"community_cache:recording"`, as history. Every track since is analysed locally.
 
 ### 7.5 Spotify (via SpotifyFavorite matching)
 
@@ -492,8 +484,8 @@ These columns manage the analysis lifecycle rather than store analysis results:
 | `track_analysis.mood_tags_version` | `Integer` | Current `MOOD_TAGS_VERSION` (1) |
 | `track_analysis.has_melodic` | `Boolean` | Whether Phase 3 completed successfully |
 | `track_analysis.midi_path` | `String(500)` | Path to saved MIDI transcription |
-| `track_analysis.features_source` | `String(50)` | "local", "reccobeats", "community_cache" |
-| `track_analysis.embedding_source` | `String(50)` | "local", "community_cache" |
+| `track_analysis.features_source` | `String(50)` | "local"; older rows may say "reccobeats" or "community_cache" |
+| `track_analysis.embedding_source` | `String(50)` | "local"; older rows may say "community_cache:hash" or "community_cache:recording" |
 | `track_analysis.analysis_detail` | `JSONB` | Full structured data from deep analysis (Sections 3.1–3.5 + melodic) |
 | `track_analysis.feature_confidence` | `JSONB` | Per-feature confidence scores and cross-validation results (see [2.12](#212-feature-confidence-scores)) |
 | `track_analysis.local_features` | `JSONB` | Locally-computed feature values when external features are primary (see [7.6](#76-cross-validation)) |

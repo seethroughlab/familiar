@@ -1,6 +1,6 @@
 # ADR-0144: A Community Cache Hit Is Trusted, and Checked by Sample
 
-Status: accepted
+Status: accepted — points 1–3 and 5 superseded by ADR-0159
 
 Date: 2026-10-02
 

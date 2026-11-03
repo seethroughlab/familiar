@@ -195,11 +195,10 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
                 replace_existing=True,
             )
 
-            # Names the library's recordings through AcoustID and tells the corpus
-            # (ADR-0115). Each phase gates itself — the resolve half on
-            # `recording_backfill_enabled`, the claim half on
-            # `community_cache_contribute` — so registering it unconditionally is
-            # right: a disabled phase returns at once and records nothing.
+            # Names the library's recordings through AcoustID (ADR-0115). The phase
+            # gates itself on `recording_backfill_enabled`, so registering it
+            # unconditionally is right: a disabled phase returns at once and records
+            # nothing.
             self._scheduler.add_job(
                 self._recording_backfill,
                 IntervalTrigger(minutes=RECORDING_BACKFILL_INTERVAL_MINUTES),

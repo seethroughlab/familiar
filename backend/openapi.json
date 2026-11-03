@@ -9115,18 +9115,6 @@
           "clap_status": {
             "$ref": "#/components/schemas/ClapStatus"
           },
-          "community_cache_contribute": {
-            "title": "Community Cache Contribute",
-            "type": "boolean"
-          },
-          "community_cache_enabled": {
-            "title": "Community Cache Enabled",
-            "type": "boolean"
-          },
-          "community_cache_url": {
-            "title": "Community Cache Url",
-            "type": "string"
-          },
           "discovery_enabled": {
             "title": "Discovery Enabled",
             "type": "boolean"
@@ -9236,9 +9224,6 @@
           "discovery_enabled",
           "discovery_musicbrainz_enabled",
           "discovery_listenbrainz_enabled",
-          "community_cache_enabled",
-          "community_cache_contribute",
-          "community_cache_url",
           "recording_backfill_enabled",
           "playlist_discovery_mode",
           "s3_backup_enabled",
@@ -9269,27 +9254,6 @@
             "title": "Clap Embeddings Enabled",
             "type": [
               "boolean",
-              "null"
-            ]
-          },
-          "community_cache_contribute": {
-            "title": "Community Cache Contribute",
-            "type": [
-              "boolean",
-              "null"
-            ]
-          },
-          "community_cache_enabled": {
-            "title": "Community Cache Enabled",
-            "type": [
-              "boolean",
-              "null"
-            ]
-          },
-          "community_cache_url": {
-            "title": "Community Cache Url",
-            "type": [
-              "string",
               "null"
             ]
           },

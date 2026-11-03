@@ -54,7 +54,6 @@
     <li><strong>Wikipedia, Wikidata, Wikimedia Commons and Spotify's public embed service</strong> — artist names or identifiers, for artist pictures and photo galleries.</li>
     <li><strong>LRCLIB</strong> (<code>lrclib.net</code>) — title, artist, album and duration, for synced lyrics.</li>
     <li><strong>ListenBrainz</strong> — a request for its public list of new releases, for Discover. Nothing about your library is sent. It can be turned off.</li>
-    <li><strong>The community cache</strong> (<code>clapback.seethroughlab.com</code>) — a one-way hash of a track's audio fingerprint, and its MusicBrainz recording id when known, to skip analysing music that has been analysed elsewhere. No file names, titles or listening history.</li>
     <li><strong>GitHub</strong> — to check for new releases, and the first time it starts to download the analysis model. Familiar Server on a Mac also reads its update feed there.</li>
   </ul>
 </section>
@@ -62,7 +61,6 @@
 <section>
   <h2>What is sent only if you turn it on</h2>
   <ul>
-    <li><strong>Contributing to the community cache</strong> — the analysis of tracks your server worked out itself, under the same hash, with an installation identifier that is not linked to you. Off unless you turn it on.</li>
     <li><strong>Last.fm</strong> — if you connect an account, what you play (artist, title, duration) is scrobbled to <code>ws.audioscrobbler.com</code>, and artist information is fetched from it.</li>
     <li><strong>AcoustID</strong> — with a key, audio fingerprints of tracks Familiar cannot otherwise identify.</li>
     <li><strong>fanart.tv</strong> — with a key, an artist's MusicBrainz identifier, for more artist photos.</li>

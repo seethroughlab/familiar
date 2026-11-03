@@ -31,7 +31,6 @@ const SOURCE_LABELS: Record<string, string> = {
   acoustid: 'AcoustID',
   fanarttv: 'fanart.tv',
   bandcamp: 'Bandcamp',
-  community_cache_claims: 'Community cache',
   discovery_batch: 'Nightly discovery',
 };
 
@@ -40,8 +39,6 @@ const SOURCE_LABELS: Record<string, string> = {
  *
  * Keys are environment variables the web app cannot set — `ApiKeyStatus` said "Configured via
  * environment variables" under a heading that implied otherwise. The card names the variable.
- * `community_cache_claims` is not here: the cache is the analysis pipeline's concern and sits
- * with its toggles under Analysis → Configuration (point 5).
  */
 const PROVIDERS: readonly {
   source: string;

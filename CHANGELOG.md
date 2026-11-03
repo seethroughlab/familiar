@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+One migration (it deletes a health row); the API contract stays at v1.
+
+### Removed
+
+- **The community cache is gone** (ADR-0159). Familiar no longer looks tracks up in the Clapback
+  commons at `clapback.seethroughlab.com` or contributes to it, because the commons is closing
+  (clapback's ADR-0023). Every track is analysed locally, as a cache miss always was. The four
+  `community_cache_*` settings, the Analysis → Configuration toggles for them, the recording
+  backfill's claim phase and its health row are removed. A `settings.json` that still holds the
+  old keys loads as before, and the next save drops them. AcoustID recording naming stays, under
+  its own switch. Tracks filled from the cache keep their `features_source` as history.
+
 ## [0.2.0-beta21] - 2026-10-31
 
 No migrations; the API contract stays at v1 (one endpoint added).

@@ -574,18 +574,16 @@ def _source_state(row: Any, now: datetime, enabled: bool = True) -> str:
 def _row_enabled(source: str, discovery_source_enabled: Any) -> bool:
     """Which switch a health row answers to.
 
-    ADR-0115's two rows are not discovery sources — the backfill enriches music you
-    own, which ADR-0099 scoped out of discovery — so they must not read `disabled`
-    because `discovery_enabled` is off, nor `working` after their own gate is closed.
-    Each answers to the gate its phase checks.
+    ADR-0115's row is not a discovery source — the backfill enriches music you own,
+    which ADR-0099 scoped out of discovery — so it must not read `disabled` because
+    `discovery_enabled` is off, nor `working` after its own gate is closed. It answers
+    to the gate its phase checks.
     """
     from app.services.app_settings import get_app_settings_service
-    from app.services.tasks.recording_backfill import SOURCE_ACOUSTID, SOURCE_CLAIMS
+    from app.services.tasks.recording_backfill import SOURCE_ACOUSTID
 
     if source == SOURCE_ACOUSTID:
         return bool(get_app_settings_service().get().recording_backfill_enabled)
-    if source == SOURCE_CLAIMS:
-        return bool(get_app_settings_service().get().community_cache_contribute)
     return bool(discovery_source_enabled(source))
 
 

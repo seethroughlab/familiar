@@ -6489,18 +6489,6 @@ export type SettingsResponse = {
     clap_embeddings_enabled: boolean | null;
     clap_status: ClapStatus;
     /**
-     * Community Cache Contribute
-     */
-    community_cache_contribute: boolean;
-    /**
-     * Community Cache Enabled
-     */
-    community_cache_enabled: boolean;
-    /**
-     * Community Cache Url
-     */
-    community_cache_url: string;
-    /**
      * Discovery Enabled
      */
     discovery_enabled: boolean;
@@ -6597,18 +6585,6 @@ export type SettingsUpdateRequest = {
      * Clap Embeddings Enabled
      */
     clap_embeddings_enabled?: boolean | null;
-    /**
-     * Community Cache Contribute
-     */
-    community_cache_contribute?: boolean | null;
-    /**
-     * Community Cache Enabled
-     */
-    community_cache_enabled?: boolean | null;
-    /**
-     * Community Cache Url
-     */
-    community_cache_url?: string | null;
     /**
      * Device Stream Base Url
      */

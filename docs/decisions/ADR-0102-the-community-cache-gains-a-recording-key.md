@@ -1,6 +1,6 @@
 # ADR-0102: The Community Cache Gains a Recording Key
 
-Status: accepted
+Status: accepted — points 1–3 superseded by ADR-0159
 
 Date: 2026-08-31
 

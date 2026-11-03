@@ -8,7 +8,26 @@ Implementation:
 
 - **Point 6 done 2026-11-02.** `PUT /api/v1/settings` set `community_cache_enabled` and
   `community_cache_contribute` to `false` on the maintainer's installation; both had been `true`.
-  Read back through the same API. Points 1–5 and 8 are outstanding.
+  Read back through the same API.
+- **Points 1–5 and 8 built 2026-11-02**, in one change:
+  - `community_cache.py`, `scripts/backfill_community_cache.py`, `scripts/claim_recordings.py` and
+    five test files are deleted. Both analysis phases analyse every track locally, and the
+    sampled-hit helpers (`features_path`, `is_sampled_hit`, `_compute_disagreements`) went with
+    the hit path they served.
+  - **`canonical_fingerprint` moved, not deleted**, to `app/services/analysis.py`. The context
+    above missed that the resolve phase (point 3, kept) borrowed it from the cache client to undo
+    the column's hex escaping before asking AcoustID. `test_canonical_fingerprint.py` keeps its
+    decode cases.
+  - The settings and their route fields are gone. A `settings.json` with the four old keys
+    loads, the next save drops them, and a client that still sends them gets a 200
+    (`TestCommunityCacheSettingsAreGone`). `openapi.json` and `contract.lock.json` were re-locked
+    at contract v1, as for `ADR-0154`'s removal, because no shipped client reads the fields.
+  - The web admin's Community Cache panel became `RecordingNames.tsx`, which keeps only the
+    AcoustID switch, with AcoustID's health beside it.
+  - Migration `20261102_drop_claims_health_row` deletes the `community_cache_claims` row.
+  - The site's home, FAQ and privacy pages no longer mention the cache, and `site/e2e/pages.spec.ts`
+    checks that none does. `docs/SITE-CLAIMS.md` strikes the rows.
+  - The superseded records' `Status:` lines name their points.
 
 Supersedes [ADR-0108](ADR-0108-a-contribution-names-the-installation-that-made-it.md),
 [ADR-0114](ADR-0114-a-contribution-is-keyed-on-the-fingerprint-not-the-column.md),
@@ -40,8 +59,10 @@ this library's vectors and features, which Familiar already keeps in `TrackAnaly
   holds to the corpus every ten minutes, gated by `community_cache_contribute`, with its own health
   row, `community_cache_claims` (`ADR-0115` points 6, 7 and 9).
 - **In total:** `backend/app/services/community_cache.py`, 964 lines, and 8 test files that
-  reference it. No client UI exposes the settings. Only the OpenAPI schema `familiar-apple`
-  generates from mentions them.
+  reference it. ~~No client UI exposes the settings.~~ **Corrected while building:** the web
+  admin did, in a Community Cache panel under Analysis → Configuration, and the public site's
+  home, FAQ and privacy pages described the cache. `familiar-apple` does not generate the
+  `settings` operations, so no shipped app build reads these fields.
 
 **Familiar never depended on it.** A miss, or a lookup that did not answer, is analysed locally
 (`ADR-0144` point 4), and the CLAP runtime is the `clapback-embed` package (`ADR-0105`), which

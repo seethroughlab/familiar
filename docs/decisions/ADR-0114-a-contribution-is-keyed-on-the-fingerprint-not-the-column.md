@@ -1,6 +1,6 @@
 # ADR-0114: A Contribution Is Keyed on the Fingerprint, Not the Column
 
-Status: accepted
+Status: superseded by ADR-0159
 
 Date: 2026-09-10
 

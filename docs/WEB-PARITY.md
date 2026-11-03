@@ -84,7 +84,7 @@ rename/delete, remove and move up/down controls. Smart playlists stay Mac-only b
 | **Backup / restore** | ✅ | ❌ | ❌ | Export with options, restore with preview and merge modes |
 | Create a profile | ✅ | ✅ | ✅ | `SetupView.createProfile` (#104), on the setup screen where a server with no profiles is discovered |
 | **Last.fm OAuth link** | ✅ | ❌ | ❌ | |
-| **Community cache, update channel, diagnostics** | ✅ | ❌ | ❌ | |
+| **Update channel, diagnostics** | ✅ | ❌ | ❌ | |
 | **Listening history / stats** | ✅ | ❌ | ❌ | The clients *write* play events and never read any back |
 
 ## Configuration
@@ -187,7 +187,7 @@ numbered PR — #103, #104, #105, #106, #119, #123 — and none of them updated 
 **That means ADR-0050 point 6's condition is met.** It said "settings only" is not reachable until
 the Apple clients can edit playlists, edit track metadata, trigger a scan, and create a profile.
 All four are done. The remaining browser-only capabilities are the ones in genuinely ungenerated
-tags — artist cleanup, analysis, backup and restore, Last.fm OAuth, community cache, diagnostics,
+tags — artist cleanup, analysis, backup and restore, Last.fm OAuth, diagnostics,
 listening history. Listen-together used to be on that list, web-only by decision since ADR-0037 was
 rejected; ADR-0070 deleted it instead, so nothing is browser-only by decision any more.
 
