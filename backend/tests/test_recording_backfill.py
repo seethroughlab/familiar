@@ -78,8 +78,6 @@ def analysis(fp="AQADfingerprint", lookup=None):
 def settings(**over):
     base = {
         "recording_backfill_enabled": True,
-        "community_cache_contribute": True,
-        "community_cache_url": "https://corpus.invalid",
     }
     base.update(over)
     return SimpleNamespace(**base)
@@ -96,9 +94,6 @@ def world(monkeypatch):
         session=None,
         lookups=[],
         lookup=lambda key, fp, dur: {"results": []},
-        outcomes=[],
-        claims=[],
-        minted=0,
     )
 
     def make_session():
@@ -112,11 +107,6 @@ def world(monkeypatch):
         w.lookups.append((fp, dur))
         return w.lookup(key, fp, dur)
 
-    class Cache:
-        async def claim_recording_outcome(self, fp, mbid):
-            w.claims.append((fp, mbid))
-            return w.outcomes.pop(0)
-
     class AppSettingsService:
         def get(self):
             return w.settings
@@ -124,18 +114,12 @@ def world(monkeypatch):
         def get_effective(self, key):
             return w.api_key if key == "acoustid_api_key" else None
 
-        def ensure_community_cache_client_id(self):
-            w.minted += 1
-            return "install-1"
-
     monkeypatch.setattr("app.db.session.create_task_engine_session", make_session)
     monkeypatch.setattr("app.services.discovery.get_recorder", lambda: w.recorder)
     monkeypatch.setattr(
         "app.services.app_settings.get_app_settings_service", lambda: AppSettingsService()
     )
-    monkeypatch.setattr("app.services.community_cache.get_community_cache_service", lambda **kw: Cache())
     monkeypatch.setattr(rb, "_resolve_candidates", candidates)
-    monkeypatch.setattr(rb, "_claim_candidates", candidates)
     monkeypatch.setattr(rb, "_lookup", fake_lookup)
 
     async def no_sleep(_):
@@ -279,76 +263,27 @@ def test_dry_run_decides_and_writes_nothing(world):
     assert world.session.commits == 0 and world.recorder.successes == []
 
 
-# --- claim ---------------------------------------------------------------------
-
-
-def test_claims_are_gated_by_contribute(world):
-    world.settings = settings(community_cache_contribute=False)
-    world.rows = [(track(mbid=A), analysis())]
-    out = asyncio.run(rb.run_claim_phase())
-    assert out["status"] == "disabled" and world.claims == []
-
-
-def test_claims_run_when_resolution_is_off(world):
-    """Point 8: the flag stops fingerprints leaving; ids the library holds still go."""
-    world.settings = settings(recording_backfill_enabled=False)
-    world.rows = [(track(mbid=A), analysis())]
-    world.outcomes = ["claimed"]
-    out = asyncio.run(rb.run_claim_phase())
-    assert out["claimed"] == 1
-
-
-def test_each_outcome_leaves_the_marker_the_next_tick_reads(world):
-    claimed, not_held = (track(title="c", mbid=A), analysis()), (track(title="n", mbid=B), analysis())
-    world.rows = [claimed, not_held]
-    world.outcomes = ["claimed", "not_held"]
-    out = asyncio.run(rb.run_claim_phase())
-    assert out["claimed"] == 1 and out["not_held"] == 1 and out["errors"] == 0
-    assert claimed[1].acoustid_lookup["claimed_at"]
-    assert "claimed_at" not in not_held[1].acoustid_lookup
-    assert not_held[1].acoustid_lookup["claim_outcome"] == "not_held"
-    assert not_held[1].acoustid_lookup["claim_checked_at"]
-    assert world.claims == [("AQADfingerprint", A), ("AQADfingerprint", B)]
-    assert world.recorder.successes == [(rb.SOURCE_CLAIMS, 1)]
-
-
-def test_a_corpus_that_is_down_stops_the_phase(world):
-    world.rows = [(track(title=str(i), mbid=A), analysis()) for i in range(10)]
-    world.outcomes = ["failed"] * 10
-    out = asyncio.run(rb.run_claim_phase())
-    assert out["status"] == "upstream_failed"
-    assert len(world.claims) == rb.UPSTREAM_FAILURE_LIMIT
-    assert world.recorder.failures == [(rb.SOURCE_CLAIMS, "http_error")] * rb.UPSTREAM_FAILURE_LIMIT
-    for _, a in world.rows:
-        assert a.acoustid_lookup is None
-
-
-def test_claim_dry_run_mints_no_client_id_and_sends_nothing(world):
-    world.rows = [(track(mbid=A), analysis())]
-    out = asyncio.run(rb.run_claim_phase(dry_run=True))
-    assert out["claimed"] == 1 and world.claims == [] and world.minted == 0
-
-
 # --- the tick, and the arithmetic behind it -----------------------------------
 
 
-def test_a_tick_is_resolve_then_claim(world):
-    world.settings = settings(recording_backfill_enabled=False, community_cache_contribute=False)
+def test_a_tick_is_the_resolve_phase_alone(world):
+    """The claim phase went with the commons (ADR-0159 point 3)."""
+    world.settings = settings(recording_backfill_enabled=False)
     out = asyncio.run(rb.run_recording_backfill())
-    assert out["resolve"]["status"] == "disabled" and out["claim"]["status"] == "disabled"
+    assert out == {"resolve": out["resolve"]} and out["resolve"]["status"] == "disabled"
+    assert not hasattr(rb, "run_claim_phase")
 
 
 def test_a_tick_finishes_well_inside_its_interval():
     """`max_instances=1` drops ticks silently if a tick outruns the trigger."""
     from app.services.background.manager import RECORDING_BACKFILL_INTERVAL_MINUTES
 
-    worst = rb.RESOLVE_BATCH * rb.ACOUSTID_PACE_SECONDS + rb.CLAIM_BATCH * rb.CLAIM_PACE_SECONDS
+    worst = rb.RESOLVE_BATCH * rb.ACOUSTID_PACE_SECONDS
     assert worst < RECORDING_BACKFILL_INTERVAL_MINUTES * 60 * 0.8
 
 
-def test_the_paces_stay_under_both_documented_limits():
+def test_the_pace_stays_under_acoustids_documented_limit():
     assert 1 / rb.ACOUSTID_PACE_SECONDS < 3, "AcoustID: no more than 3 requests a second"
-    assert 60 / rb.CLAIM_PACE_SECONDS < 30, "the corpus: 30 writes a minute, and a claim is one"
 
 
 def test_the_backfill_finishes_in_days_not_weeks():
@@ -391,9 +326,8 @@ def test_the_acoustid_request_carries_a_timeout(monkeypatch):
     assert 0 < rb.ACOUSTID_TIMEOUT_SECONDS <= 60
 
 
-def test_a_tick_that_overruns_is_recorded_against_the_active_phase(world, monkeypatch):
+def test_a_tick_that_overruns_is_recorded_against_acoustid(world, monkeypatch):
     async def slow_resolve(**kw):
-        rb._active_phase = rb.SOURCE_ACOUSTID
         await asyncio.sleep(10)
 
     monkeypatch.setattr(rb, "run_resolve_phase", slow_resolve)

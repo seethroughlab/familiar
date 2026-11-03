@@ -77,7 +77,7 @@ Add new optional group after existing `analysis` group:
 ```toml
 # Lightweight deps for API-only deployment (no torch/librosa/transformers)
 api = [
-    "numpy>=1.24.0",          # embedding_map, ego_map, community_cache
+    "numpy>=1.24.0",          # embedding_map, ego_map
     "scikit-learn>=1.3.0",     # ego_map cosine_similarity (top-level import)
     "umap-learn>=0.5.0",       # music map visualization (lazy import in embedding_map)
 ]

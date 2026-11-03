@@ -1,6 +1,6 @@
 """Every fingerprint is decoded the way the Docker image decodes it.
 
-The community cache keys on the fingerprint's hash (ADR-0114), and the decoder is part of the
+The community cache keyed on the fingerprint's hash (ADR-0114, until ADR-0159), and the decoder is part of the
 fingerprint: over 21 files from the NAS library, a Mac agreed with the image on 20 when the ffmpeg
 command decoded the audio and on 11 when CoreAudio did, which is audioread's default on a Mac. So the
 child that fingerprints names its decoders, and identification fingerprints through the same child.

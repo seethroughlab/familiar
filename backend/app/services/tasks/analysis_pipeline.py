@@ -5,7 +5,6 @@ and all queue_* functions for the background analysis pipeline.
 """
 
 import gc
-import hashlib
 import logging
 from datetime import timedelta
 from pathlib import Path
@@ -56,14 +55,9 @@ def run_track_features(track_id: str) -> dict[str, Any]:
     Phase 1 of analysis: artwork, librosa features, AcoustID, MusicBrainz.
     This is separated from embedding extraction to reduce peak memory usage.
     Each phase runs in its own subprocess that exits after completion.
-
-    Community cache (ADR-0144):
-    A features hit at the current ``FEATURES_VERSION`` is trusted and the track is not decoded for
-    features. One hit in ``HIT_SAMPLE_RATE``, chosen from the fingerprint, is also analysed locally
-    and its disagreements recorded. A miss, or a lookup that did not answer, is analysed locally.
+    Every track is analysed locally (ADR-0159).
     """
     # Configure logging for subprocess (spawned processes don't inherit parent's config)
-    import asyncio
     import logging
 
     from app.logging_config import CHILD_LOG_FORMAT
@@ -85,9 +79,7 @@ def run_track_features(track_id: str) -> dict[str, Any]:
         identify_track,
         precompute_shared,
     )
-    from app.services.app_settings import get_app_settings_service
     from app.services.artwork import album_key_for_track, extract_and_save_artwork
-    from app.services.community_cache import get_community_cache_service
     from app.services.track_analysis import run_cheap_sections
 
     log_memory("features_start")
@@ -153,169 +145,44 @@ def run_track_features(track_id: str) -> dict[str, Any]:
             )
             log_memory("after_artwork")
 
-            # Generate AcoustID fingerprint first (needed for community cache)
+            # AcoustID fingerprint: stored for identification and the recording backfill
+            # (ADR-0115). It stopped being a corpus key with ADR-0159.
             acoustid_fingerprint = None
             fp_result = generate_fingerprint(file_path)
             if fp_result:
                 _, acoustid_fingerprint = fp_result
 
-            features: dict[str, Any] = {}
+            # Every track is analysed locally (ADR-0159: the community cache, the one outside
+            # source of features, is gone).
             features_source = "local"
-            app_settings = get_app_settings_service().get()
-
-            # The community cache is the only outside source of features (ADR-0144's Context:
-            # the ReccoBeats lookup this once sat behind is gone).
+            analysis_detail: dict[str, Any] | None = None
             deep_scalars: dict[str, Any] = {}
-            cached_analysis_detail: dict[str, Any] | None = None
-            if app_settings.community_cache_enabled and acoustid_fingerprint:
+
+            # Unified pipeline: shared precomputation → features + cheap sections
+            y, sr, shared = precompute_shared(file_path)
+            features, local_confidence = derive_features(y, sr, shared, file_path)
+            feature_confidence: dict[str, Any] = dict(local_confidence)
+
+            # Cheap analysis sections (harmonic, rhythmic, spectral, structural, energy),
+            # only for a track long enough for them to mean anything.
+            if track.duration_seconds and track.duration_seconds >= 30:
                 try:
-                    cache_service = get_community_cache_service(
-                        cache_url=app_settings.community_cache_url
+                    analysis_detail, deep_scalars, section_errors = run_cheap_sections(
+                        y, sr, shared, str(file_path), track_id
                     )
-                    cached_features = asyncio.run(
-                        cache_service.lookup_features(acoustid_fingerprint)
-                    )
-                    if cached_features:
-                        # Split cached dict into basic features and deep scalars
-                        # using ANALYSIS_FEATURE_COLUMNS as source of truth
-                        _BASIC_KEYS = {
-                            "bpm", "key", "energy", "danceability", "valence",
-                            "acousticness", "instrumentalness", "speechiness",
-                            "liveness", "loudness_lufs",
-                        }
-                        cached = cached_features.features
-                        features = {
-                            k: cached[k] for k in _BASIC_KEYS
-                            if k in cached and cached[k] is not None
-                        }
-                        deep_scalars = {
-                            k: cached[k] for k in ANALYSIS_FEATURE_COLUMNS
-                            if k not in _BASIC_KEYS
-                            and k in cached and cached[k] is not None
-                        }
-
-                        # Try to fetch analysis_detail from cache too
-                        try:
-                            cached_detail = asyncio.run(
-                                cache_service.lookup_analysis_detail(acoustid_fingerprint)
-                            )
-                            if cached_detail:
-                                cached_analysis_detail = cached_detail.detail
-                                logger.info(
-                                    f"Community cache analysis detail hit for "
-                                    f"{track.title}"
-                                )
-                        except Exception as e:
-                            logger.debug(
-                                f"Community cache analysis detail lookup failed: {e}"
-                            )
-
-                        features_source = "community_cache"
-                        logger.info(
-                            f"Community cache features hit for {track.title} "
-                            f"(contributed by {cached_features.contributor_count} "
-                            f"users, {len(deep_scalars)} deep scalars)"
+                    if section_errors:
+                        logger.warning(
+                            f"Analysis section errors for {track.title}: {section_errors}"
                         )
-                except Exception as e:
-                    logger.warning(f"Community cache features lookup failed: {e}")
-
-            # ADR-0144: trust a hit, check one in fifty, analyse a miss.
-            #
-            # This used to decode and analyse every track, hit or not ("always run local
-            # librosa analysis for features + cross-validation"), a rule from when the outside
-            # source was ReccoBeats, a different algorithm. It cost a hit ~28 of its ~35 s and
-            # raised the worker from 110 MB to 870 MB, for values nothing read. It also threw away
-            # the cache's section analysis: it was fetched into `analysis_detail`, which this
-            # block then reset to None and recomputed.
-            cache_hit = features_source == "community_cache" and bool(features.get("bpm"))
-            path = features_path(cache_hit, acoustid_fingerprint)
-            computed_locally = False
-            analysis_detail = cached_analysis_detail
-            feature_confidence: dict[str, Any] = {}
-            local_features_dict: dict[str, Any] | None = None
-
-            if path != "hit":
-                # Unified pipeline: shared precomputation → features + cheap sections
-                y, sr, shared = precompute_shared(file_path)
-                local_feats, local_confidence = derive_features(y, sr, shared, file_path)
-                feature_confidence = dict(local_confidence)
-
-                if path == "local":
-                    features = local_feats
-                    features_source = "local"
-                    computed_locally = True
-                else:
-                    # A sampled hit: the cache's values stay primary; the local ones are kept to
-                    # compare, and never contributed (point 2 — the cache already holds the track,
-                    # and a second submission from the same algorithm is manufactured agreement).
-                    local_features_dict = local_feats
-                    disagreements = _compute_disagreements(local_feats, features)
-                    for feat_key, disagreement_val in disagreements.items():
-                        feature_confidence[f"{feat_key}_cross_validated"] = True
-                        if disagreement_val is not None:
-                            feature_confidence[f"{feat_key}_disagreement"] = disagreement_val
-
-                # Cheap analysis sections (harmonic, rhythmic, spectral, structural, energy),
-                # only for a track long enough for them to mean anything.
-                if track.duration_seconds and track.duration_seconds >= 30:
-                    try:
-                        local_detail, local_deep, section_errors = run_cheap_sections(
-                            y, sr, shared, str(file_path), track_id
-                        )
-                        if section_errors:
-                            logger.warning(
-                                f"Analysis section errors for {track.title}: {section_errors}"
-                            )
-                        if path == "local":
-                            analysis_detail, deep_scalars = local_detail, local_deep
-                        else:
-                            # The cache's stay primary where it had them.
-                            analysis_detail = cached_analysis_detail or local_detail
-                            deep_scalars = {**local_deep, **deep_scalars}
-                        if analysis_detail:
-                            structural = analysis_detail.get("structural", {})
-                            if structural.get("boundary_confidence") is not None:
-                                feature_confidence["structural"] = structural["boundary_confidence"]
-                    except Exception as e:
-                        logger.warning(f"Cheap sections failed for {track.title}: {e}")
-
-                del y, shared
-                gc.collect()
-            # A trusted hit without cached section analysis keeps `analysis_detail` None, and the
-            # backfill phase (rows with `analysis_detail IS NULL`) computes it later (point 3).
-
-            # Point 5: which path, beside the per-line times, so the saving is measured.
-            logger.info(f"Features path for {track.title}: {path}")
-
-            # Contribute features to community cache if computed locally
-            if (
-                computed_locally
-                and app_settings.community_cache_contribute
-                and acoustid_fingerprint
-                and features.get("bpm")
-            ):
-                try:
-                    cache_service = get_community_cache_service(
-                        cache_url=app_settings.community_cache_url
-                    )
-                    # Send all available features (basic + deep scalars)
-                    all_cache_features = {**features, **deep_scalars}
-                    asyncio.run(
-                        cache_service.contribute_features(
-                            acoustid_fingerprint, all_cache_features
-                        )
-                    )
-                    # Also contribute analysis_detail if available
                     if analysis_detail:
-                        asyncio.run(
-                            cache_service.contribute_analysis_detail(
-                                acoustid_fingerprint, analysis_detail
-                            )
-                        )
+                        structural = analysis_detail.get("structural", {})
+                        if structural.get("boundary_confidence") is not None:
+                            feature_confidence["structural"] = structural["boundary_confidence"]
                 except Exception as e:
-                    logger.warning(
-                        f"Failed to contribute features to community cache: {e}"
-                    )
+                    logger.warning(f"Cheap sections failed for {track.title}: {e}")
+
+            del y, shared
+            gc.collect()
 
             log_memory("after_features")
 
@@ -364,8 +231,6 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                     existing_analysis.analysis_detail = analysis_detail
                 if feature_confidence:
                     existing_analysis.feature_confidence = feature_confidence
-                if local_features_dict is not None:
-                    existing_analysis.local_features = local_features_dict
                 # Keep existing embedding if present
             else:
                 analysis = TrackAnalysis(
@@ -376,7 +241,6 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                     acoustid=acoustid_fingerprint,
                     analysis_detail=analysis_detail,
                     feature_confidence=feature_confidence or None,
-                    local_features=local_features_dict,
                 )
                 # Set typed columns from features
                 for col in ANALYSIS_FEATURE_COLUMNS:
@@ -409,7 +273,6 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                 "artwork_extracted": artwork_hash is not None,
                 "features_extracted": bool(all_features.get("bpm")),
                 "features_source": features_source,
-                "features_path": path,
                 "bpm": all_features.get("bpm"),
                 "key": all_features.get("key"),
             }
@@ -498,13 +361,7 @@ def run_track_embedding(track_id: str) -> dict[str, Any]:
     Phase 2 of analysis: CLAP embedding for similarity search.
     This runs in a separate subprocess from feature extraction to reduce peak memory.
     The CLAP model uses ~2-3GB of memory, so isolating it prevents OOM kills.
-
-    Community Cache:
-    Before running expensive CLAP extraction, checks if embedding is available in
-    the community cache (keyed by AcoustID fingerprint hash). If contribution is
-    enabled and we compute locally, the embedding is shared with other users.
     """
-    import asyncio
     import logging
 
     from app.logging_config import CHILD_LOG_FORMAT
@@ -521,11 +378,8 @@ def run_track_embedding(track_id: str) -> dict[str, Any]:
     from app.db.session import sync_session_maker
     from app.services.analysis import (
         AnalysisError,
-        embedding_pipeline_version,
         extract_embedding,
     )
-    from app.services.app_settings import get_app_settings_service
-    from app.services.community_cache import get_community_cache_service
 
     log_memory("embedding_start")
 
@@ -546,87 +400,15 @@ def run_track_embedding(track_id: str) -> dict[str, Any]:
 
             logger.info(f"Extracting embedding: {track.title} by {track.artist}")
 
-            # Get app settings for community cache
-            app_settings = get_app_settings_service().get()
             embedding_source = "local"
-            embedding: list[float] | None = None
-            acoustid_fingerprint: str | None = None
-
-            # Get the analysis record to get AcoustID fingerprint
             analysis_result = db.execute(
                 select(TrackAnalysis)
                 .where(TrackAnalysis.track_id == track.id)
             )
             existing_analysis = analysis_result.scalar_one_or_none()
 
-            if existing_analysis and existing_analysis.acoustid:
-                acoustid_fingerprint = existing_analysis.acoustid
-
-            # The recording id, when the track has one — `ADR-0115` names ~90% of the
-            # library, after analysis, so at first analysis this is usually None and at
-            # re-analysis usually not. Asked first because the hash is exact only within
-            # one fingerprinting path and the id is the same on every path (ADR-0119).
-            recording_mbid = track.musicbrainz_track_id or None
-
-            # Try community cache first if enabled
-            if app_settings.community_cache_enabled and acoustid_fingerprint:
-                try:
-                    cache_service = get_community_cache_service(
-                        cache_url=app_settings.community_cache_url
-                    )
-                    cached = asyncio.run(
-                        cache_service.lookup(acoustid_fingerprint, recording_mbid=recording_mbid)
-                    )
-                    if cached:
-                        embedding = cached.embedding
-                        # `community_cache:recording` or `community_cache:hash`, so the
-                        # next re-analysis can report how often the id found a row the
-                        # hash would have missed, rather than guessing.
-                        embedding_source = f"community_cache:{cached.via}"
-                        logger.info(
-                            f"Community cache hit for {track.title} via {cached.via} "
-                            f"(contributed by {cached.contributor_count} users)"
-                        )
-                except Exception as e:
-                    logger.warning(f"Community cache lookup failed: {e}")
-
-            # Fall back to local CLAP extraction if no cache hit
-            if embedding is None:
-                embedding = extract_embedding(file_path)
-                embedding_source = "local"
-                gc.collect()
-
-                # Contribute to community cache if enabled and we have a fingerprint
-                if (
-                    embedding is not None
-                    and app_settings.community_cache_contribute
-                    and acoustid_fingerprint
-                ):
-                    try:
-                        # Generated here rather than at install time, so an installation that
-                        # never contributes is never assigned one (clapback's `ADR-0004`).
-                        cache_service = get_community_cache_service(
-                            cache_url=app_settings.community_cache_url,
-                            client_id=get_app_settings_service().ensure_community_cache_client_id(),
-                        )
-                        asyncio.run(
-                            cache_service.contribute(
-                                acoustid_fingerprint,
-                                embedding,
-                                # **This branch is the one place that can honestly
-                                # declare a pipeline.** It is reached only when
-                                # `extract_embedding` above just computed the vector
-                                # locally — a cache hit returns before here — so the
-                                # installed embedder is provably the thing that
-                                # produced it. Phase 2 of clapback's `ADR-0006`.
-                                pipeline_version=embedding_pipeline_version(),
-                                # A claim in the same request when the track is already
-                                # named (ADR-0119 point 3); the backfill claims the rest.
-                                recording_mbid=recording_mbid,
-                            )
-                        )
-                    except Exception as e:
-                        logger.debug(f"Community cache contribution failed: {e}")
+            embedding = extract_embedding(file_path)
+            gc.collect()
 
             log_memory("after_embedding")
 
@@ -708,81 +490,6 @@ def run_track_analysis(track_id: str) -> dict[str, Any]:
         "embedding_generated": embedding_result.get("embedding_generated", False),
     }
 
-
-HIT_SAMPLE_RATE = 50
-"""One community cache hit in this many is also analysed locally (ADR-0144 point 2)."""
-
-
-def is_sampled_hit(fingerprint: str | None, rate: int = HIT_SAMPLE_RATE) -> bool:
-    """Whether a hit is one of the few also analysed locally.
-
-    Chosen from the fingerprint rather than at random, so a track is or is not sampled on every
-    installation and every run, and a disagreement can be reproduced.
-    """
-    if not fingerprint:
-        return False
-    digest = hashlib.sha256(fingerprint.encode()).digest()
-    return int.from_bytes(digest[:8], "big") % rate == 0
-
-
-def features_path(cache_hit: bool, fingerprint: str | None) -> str:
-    """``hit`` (trusted, not decoded), ``hit (sampled)`` (also analysed), or ``local``."""
-    if not cache_hit:
-        return "local"
-    return "hit (sampled)" if is_sampled_hit(fingerprint) else "hit"
-
-
-def _compute_disagreements(
-    local: dict[str, Any], external: dict[str, Any]
-) -> dict[str, str | None]:
-    """Compare local and external features and flag disagreements.
-
-    Returns dict keyed by feature name, value is disagreement type or None if agreement.
-    """
-    disagreements: dict[str, str | None] = {}
-
-    # BPM: flag half/double tempo
-    local_bpm = local.get("bpm")
-    ext_bpm = external.get("bpm")
-    if local_bpm and ext_bpm and ext_bpm > 0:
-        ratio = local_bpm / ext_bpm
-        if abs(ratio - 0.5) < 0.1:
-            disagreements["bpm"] = "half_tempo"
-        elif abs(ratio - 2.0) < 0.2:
-            disagreements["bpm"] = "double_tempo"
-        elif abs(ratio - 1.0) > 0.15:
-            disagreements["bpm"] = "different"
-        else:
-            disagreements["bpm"] = None
-    else:
-        disagreements["bpm"] = None
-
-    # Key: flag if root pitch class differs
-    local_key = local.get("key", "")
-    ext_key = external.get("key", "")
-    if local_key and ext_key:
-        local_root = local_key.rstrip("m")
-        ext_root = ext_key.rstrip("m")
-        if local_root != ext_root:
-            disagreements["key"] = "different_root"
-        elif local_key != ext_key:
-            disagreements["key"] = "different_mode"
-        else:
-            disagreements["key"] = None
-    else:
-        disagreements["key"] = None
-
-    # Numeric features: flag if difference > 0.3
-    for feat in ("energy", "valence", "danceability"):
-        local_val = local.get(feat)
-        ext_val = external.get(feat)
-        if local_val is not None and ext_val is not None:
-            diff = abs(float(local_val) - float(ext_val))
-            disagreements[feat] = "large_difference" if diff > 0.3 else None
-        else:
-            disagreements[feat] = None
-
-    return disagreements
 
 
 def run_track_mood_tags(track_id: str) -> dict[str, Any]:

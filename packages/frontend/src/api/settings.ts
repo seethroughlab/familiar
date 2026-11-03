@@ -17,11 +17,9 @@ export interface AppSettingsResponse {
   acoustid_configured: boolean;
   /** fanart.tv, for artist photos beyond Wikimedia Commons (ADR-0149). Optional. */
   fanarttv_configured?: boolean;
-  // Community cache
   /** Server-owned playback queue (ADR-0003). Session endpoints 503 while this is off. */
   queue_sync_enabled: boolean;
-  community_cache_enabled: boolean;
-  community_cache_contribute: boolean;
+  /** Name recordings through AcoustID in the background (ADR-0115). */
   recording_backfill_enabled: boolean;
   // Analysis settings
   clap_embeddings_enabled: boolean | null;
@@ -43,10 +41,7 @@ export interface AppSettingsUpdate {
   lastfm_api_key?: string;
   lastfm_api_secret?: string;
   // LLM provider
-  // Community cache
   queue_sync_enabled?: boolean;
-  community_cache_enabled?: boolean;
-  community_cache_contribute?: boolean;
   recording_backfill_enabled?: boolean;
   // Analysis settings
   clap_embeddings_enabled?: boolean | null;

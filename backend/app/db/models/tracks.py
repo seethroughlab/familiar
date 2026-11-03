@@ -313,7 +313,9 @@ class TrackAnalysis(Base):
     # Cached AcoustID API lookup results (list of candidates with scores/recording IDs)
     acoustid_lookup: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
-    # Source tracking: "local", "reccobeats", "community_cache:hash", "community_cache:recording", etc.
+    # Source tracking: "local" for everything analysed since ADR-0159. Older rows may still say
+    # "reccobeats", "community_cache", "community_cache:hash" or "community_cache:recording":
+    # where a value came from, kept as history (ADR-0159 point 5).
     features_source: Mapped[str | None] = mapped_column(String(50))
     embedding_source: Mapped[str | None] = mapped_column(String(50))
 

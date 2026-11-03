@@ -240,7 +240,8 @@ ceiling, and the first sync after it ships is the thing to watch. Plan in
 `familiar-apple/PLAN-lossy-downloads.md`.
 
 **`ADR-0119` asks the corpus by recording before it asks by hash** (accepted 2026-09-16, built
-the same day). clapback's `ADR-0019` measured the corpus key as a function of the fingerprinting
+the same day; **points 1–4 superseded by `ADR-0159`**, which removed the community cache with
+the Clapback commons on 2026-11-02, so the paragraph below is history). clapback's `ADR-0019` measured the corpus key as a function of the fingerprinting
 path — `fpcalc` and pyacoustid agree on 24 of 56 FLACs — so a miss by hash does not mean the
 corpus lacks the recording. `CommunityCacheService.lookup(…, recording_mbid=)` asks
 `GET /v1/recordings/{mbid}` first and the hash only on a 404; **an unanswered recording request

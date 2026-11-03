@@ -7,7 +7,8 @@ import { join } from 'node:path';
  *
  * Each case here was a defect on the live site: three different navs, one with an "Ask" link to
  * the features section; a FAQ that linked the App Store review demo and said "One compose up"; a
- * privacy page naming a community-cache host the server stopped using; and a visualizer page
+ * privacy page naming a community-cache host the server stopped using (the cache itself went
+ * with ADR-0159, and the pages now say nothing of it); and a visualizer page
  * whose renderer split every sentence into its own paragraph and linked ADRs at paths that 404.
  */
 const PAGES = ['index.html', 'faq.html', 'privacy.html', 'visualizers.html'];
@@ -40,11 +41,17 @@ test('the FAQ links no demo, says nothing of compose, and answers Windows and An
   await expect(answer.locator('a[href*="ADR-0147"]')).toHaveCount(1);
 });
 
-test('the privacy page names the community cache the server actually uses', async ({ page }) => {
-  const source = readFileSync(join(__dirname, '..', '..', 'backend', 'app', 'services', 'community_cache.py'), 'utf8');
-  const host = new URL(/DEFAULT_CACHE_URL = "([^"]+)"/.exec(source)![1]).host;
+test('no page offers the community cache, which the server no longer has', async ({ page }) => {
+  // ADR-0159 removed it. The privacy page listed its host as somewhere the server sends data, so
+  // a page still naming it would be a privacy claim about code that does not exist.
+  const source = readFileSync(join(__dirname, '..', '..', 'backend', 'app', 'services', 'app_settings.py'), 'utf8');
+  expect(source).not.toMatch(/^\s*community_cache_\w+\s*:/m);
+  for (const name of PAGES) {
+    await page.goto(name);
+    await expect(page.locator('main')).not.toContainText(/community (analysis )?cache/i);
+    await expect(page.locator('main')).not.toContainText('clapback.seethroughlab.com');
+  }
   await page.goto('privacy.html');
-  await expect(page.locator('main')).toContainText(host);
   await expect(page.locator('main')).not.toContainText('familiar-demo');
 });
 

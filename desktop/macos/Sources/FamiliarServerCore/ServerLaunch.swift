@@ -57,7 +57,8 @@ public struct ServerLaunch: Equatable, Sendable {
         env["FAMILIAR_DATA_DIR"] = layout.serverData.path
         env["MUSIC_LIBRARY_PATH"] = musicFolder.path
         // AcoustID fingerprints through the same library the Docker image uses, not `fpcalc`: the
-        // community cache keys on the result (`analysis._FINGERPRINT_CHILD`).
+        // community cache keyed on the result until ADR-0159, and a stored fingerprint should not
+        // depend on which machine made it (`analysis._FINGERPRINT_CHILD`).
         env["FAMILIAR_CHROMAPRINT_LIBRARY"] = layout.chromaprintLibrary.path
         // ADR-0138 point 4: one analysis worker on a machine someone is using.
         env["MAX_ANALYSIS_WORKERS"] = "1"

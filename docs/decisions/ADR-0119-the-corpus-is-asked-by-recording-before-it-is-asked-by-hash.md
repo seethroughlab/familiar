@@ -1,6 +1,6 @@
 # ADR-0119: The Corpus Is Asked by Recording Before It Is Asked by Hash
 
-Status: accepted
+Status: accepted — points 1–4 superseded by ADR-0159
 
 Date: 2026-09-16
 

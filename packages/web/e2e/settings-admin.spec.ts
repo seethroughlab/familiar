@@ -35,18 +35,15 @@ test.describe('Settings', () => {
     await expect(page.getByText('AcoustID', { exact: true })).toBeVisible({ timeout: 5000 });
   });
 
-  test('community cache is under Analysis → Configuration', async ({ page }) => {
+  test('recording naming is under Analysis → Configuration, and the community cache is gone', async ({ page }) => {
     // ADR-0126 point 5: the pipeline's configuration is one page.
     await navigateToDestination(page, 'Analysis');
     await navigateToSection(page, 'Configuration');
 
-    // Should see the Community Cache section
-    const cacheHeading = page.getByText('Community Cache', { exact: true });
-    await expect(cacheHeading).toBeVisible({ timeout: 5000 });
-
-    // Should show both toggles
-    await expect(page.getByText('Use community cache', { exact: true })).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText('Contribute to cache', { exact: true })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Name recordings through AcoustID', { exact: true })).toBeVisible({ timeout: 5000 });
+    // ADR-0159: the Clapback commons is closed, and nothing offers to use it.
+    await expect(page.getByText('Community Cache', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Use community cache', { exact: true })).toHaveCount(0);
   });
 });
 

@@ -1,6 +1,6 @@
 # ADR-0115: The Library Names Its Recordings Through AcoustID
 
-Status: accepted
+Status: accepted — points 6 and 7, and the claim halves of 1 and 9, superseded by ADR-0159
 
 Date: 2026-09-14
 

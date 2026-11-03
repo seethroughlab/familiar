@@ -127,7 +127,7 @@ fi
 
 # --- Chromaprint (LGPL) -------------------------------------------------------------------------
 # The library, not `fpcalc`: the Docker image fingerprints through pyacoustid's library path, and the
-# community cache keys on the result, so the Mac must take the same path (measured in
+# community cache keyed on the result until ADR-0159, so the Mac takes the same path (measured in
 # `analysis._FINGERPRINT_CHILD`, which also decodes with the ffmpeg above, as the image does).
 # kissfft is the image's FFT; vDSP measured identical, and this keeps the two builds alike.
 if [ ! -f "$OUT/lib/libchromaprint.1.dylib" ]; then

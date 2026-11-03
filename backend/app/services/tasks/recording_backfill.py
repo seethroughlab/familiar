@@ -1,11 +1,14 @@
-"""Name the library's recordings through AcoustID, and tell the corpus (ADR-0115).
+"""Name the library's recordings through AcoustID (ADR-0115).
 
-Two bounded phases per tick, under ADR-0099's discipline: **resolve** sends stored
-fingerprints to AcoustID and writes back an id when the four tiers name one;
-**claim** sends every id the library holds and has not yet claimed to the corpus.
-Each phase has its own health row, its own gate, and its own resumption state in
-``TrackAnalysis.acoustid_lookup`` — so a rate-limited window costs one batch, a
-restart costs nothing, and one bad track costs one track.
+One bounded phase per tick, under ADR-0099's discipline: **resolve** sends stored
+fingerprints to AcoustID and writes back an id when the four tiers name one. It has
+its own health row and its own resumption state in ``TrackAnalysis.acoustid_lookup``,
+so a rate-limited window costs one batch, a restart costs nothing, and one bad track
+costs one track.
+
+There used to be a second phase, **claim**, which told the Clapback commons which
+recordings the library held. ADR-0159 removed it with the commons. The ``claimed_at``
+and ``claim_*`` keys it wrote stay in ``acoustid_lookup`` as history.
 
 No file is opened anywhere in this module. The fingerprint and the duration are
 already in the database, which is the entire reason the backfill is affordable.
@@ -27,26 +30,19 @@ from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
-#: Health rows. One per upstream, because they fail and cost differently: AcoustID
-#: is 3 requests a second and answers at once; the corpus is 30 writes a minute.
+#: Health row.
 SOURCE_ACOUSTID = "acoustid"
-SOURCE_CLAIMS = "community_cache_claims"
 
-#: Per tick. At the paces below a resolve phase is about a minute and a claim
-#: phase six, on a ten-minute interval (ADR-0115 point 1).
+#: Per tick. At the pace below a resolve phase is about a minute, on a ten-minute
+#: interval (ADR-0115 point 1).
 RESOLVE_BATCH = 150
-CLAIM_BATCH = 150
 
 #: AcoustID's documented ceiling is 3/s; 0.34 s between requests stays under it,
 #: and measured 200 lookups in 116–120 s on 2026-09-14.
 ACOUSTID_PACE_SECONDS = 0.34
 
-#: A claim is a write against the corpus's 30/minute limit. Pacing *at* the limit
-#: lost 9% of the 2026-09-13 run to exhausted retries; 25 leaves room for them.
-CLAIM_PACE_SECONDS = 60.0 / 25
-
-#: A track AcoustID could not name, or the corpus did not hold, is asked about
-#: again after this long (ADR-0115 point 5). Both grow.
+#: A track AcoustID could not name is asked about again after this long
+#: (ADR-0115 point 5). The library grows, and so does AcoustID.
 RECHECK_DAYS = 180
 
 #: Consecutive upstream failures within one phase before the phase stops and
@@ -61,13 +57,9 @@ UPSTREAM_FAILURE_LIMIT = 3
 ACOUSTID_TIMEOUT_SECONDS = 30
 
 #: A phase stops taking new tracks once it has run this long, so a tick always
-#: fits inside its interval whatever the upstreams do. Resolve is sized to about
-#: a minute and claim to six; together they must finish under ten.
+#: fits inside its interval whatever the upstream does. It is sized to about a
+#: minute and must finish under ten.
 PHASE_DEADLINE_SECONDS = 240
-
-#: Which phase a tick is in, so a tick that overruns can be recorded against the
-#: upstream that was actually being waited on.
-_active_phase: str | None = None
 
 #: Indirection so a test can move this module's clock without moving asyncio's.
 _clock = time.monotonic
@@ -169,8 +161,8 @@ async def run_resolve_phase(
 ) -> dict[str, Any]:
     """Ask AcoustID about up to ``limit`` unnamed tracks and write what it names."""
     from app.db.session import create_task_engine_session
+    from app.services.analysis import canonical_fingerprint
     from app.services.app_settings import get_app_settings_service
-    from app.services.community_cache import CommunityCacheService
     from app.services.discovery import get_recorder
     from app.services.recording_resolution import candidates_as_json, resolve
 
@@ -202,8 +194,6 @@ async def run_resolve_phase(
         stats["status"] = "backing_off"
         return stats
 
-    global _active_phase
-    _active_phase = SOURCE_ACOUSTID
     engine, session_maker = create_task_engine_session()
     started = _clock()
     upstream_failures = 0
@@ -215,7 +205,7 @@ async def run_resolve_phase(
                     stats["status"] = "deadline"
                     break
                 stats["considered"] += 1
-                fingerprint = CommunityCacheService.canonical_fingerprint(analysis.acoustid).decode()
+                fingerprint = canonical_fingerprint(analysis.acoustid).decode()
                 try:
                     data = await asyncio.get_running_loop().run_in_executor(
                         _acoustid_executor, _lookup, api_key, fingerprint, int(track.duration_seconds)
@@ -288,7 +278,6 @@ async def run_resolve_phase(
                 await asyncio.sleep(ACOUSTID_PACE_SECONDS)
     finally:
         await engine.dispose()
-        _active_phase = None
 
     if stats["status"] in ("ok", "deadline") and stats["considered"] and not dry_run:
         await health.record_success(SOURCE_ACOUSTID, items=stats["resolved"])
@@ -297,153 +286,21 @@ async def run_resolve_phase(
     return stats
 
 
-# --- claim ----------------------------------------------------------------
-
-
-async def _claim_candidates(db: Any, limit: int) -> list[tuple[Any, Any]]:
-    """Tracks with a fingerprint and an id that no analysis row says is claimed,
-    or was found not held within the recheck window."""
-    from app.db.models import Track, TrackAnalysis, TrackStatus
-
-    other = aliased(TrackAnalysis)
-    settled = exists().where(
-        other.track_id == Track.id,
-        (other.acoustid_lookup["claimed_at"].astext.is_not(None))
-        | (other.acoustid_lookup["claim_checked_at"].astext > _cutoff_iso()),
-    )
-    stmt = (
-        select(Track, TrackAnalysis)
-        .join(TrackAnalysis, TrackAnalysis.track_id == Track.id)
-        .where(
-            Track.status == TrackStatus.ACTIVE,
-            Track.musicbrainz_track_id.is_not(None),
-            TrackAnalysis.acoustid.is_not(None),
-            ~settled,
-        )
-        .distinct(Track.id)
-        .order_by(Track.id, TrackAnalysis.features_version.desc())
-        .limit(limit)
-    )
-    return [(row.Track, row.TrackAnalysis) for row in (await db.execute(stmt)).all()]
-
-
-async def run_claim_phase(*, limit: int = CLAIM_BATCH, dry_run: bool = False) -> dict[str, Any]:
-    """Send up to ``limit`` unclaimed ids to the corpus, paced under its write limit."""
-    from app.db.session import create_task_engine_session
-    from app.services.app_settings import get_app_settings_service
-    from app.services.community_cache import get_community_cache_service
-    from app.services.discovery import get_recorder
-
-    stats: dict[str, Any] = {
-        "phase": "claim",
-        "status": "ok",
-        "considered": 0,
-        "claimed": 0,
-        "not_held": 0,
-        "errors": 0,
-    }
-    app_settings = get_app_settings_service()
-    current = app_settings.get()
-    # A claim discloses which recording this installation holds — the same consent
-    # `community_cache_contribute` asks for, so it is the same gate (ADR-0115 §7).
-    if not current.community_cache_contribute:
-        stats["status"] = "disabled"
-        return stats
-
-    health = get_recorder()
-    if await health.should_skip(SOURCE_CLAIMS):
-        stats["status"] = "backing_off"
-        return stats
-
-    cache = get_community_cache_service(
-        cache_url=current.community_cache_url,
-        client_id=app_settings.ensure_community_cache_client_id() if not dry_run else None,
-    )
-    global _active_phase
-    _active_phase = SOURCE_CLAIMS
-    engine, session_maker = create_task_engine_session()
-    started = _clock()
-    upstream_failures = 0
-    try:
-        async with session_maker() as db:
-            rows = await _claim_candidates(db, limit)
-            for track, analysis in rows:
-                if _clock() - started > PHASE_DEADLINE_SECONDS * 2:
-                    stats["status"] = "deadline"
-                    break
-                stats["considered"] += 1
-                if dry_run:
-                    stats["claimed"] += 1
-                    continue
-                outcome = await cache.claim_recording_outcome(
-                    analysis.acoustid, track.musicbrainz_track_id
-                )
-                try:
-                    if outcome == "claimed":
-                        stats["claimed"] += 1
-                        upstream_failures = 0
-                        analysis.acoustid_lookup = _merged(
-                            analysis.acoustid_lookup, claimed_at=_now_iso()
-                        )
-                        await db.commit()
-                    elif outcome == "not_held":
-                        stats["not_held"] += 1
-                        upstream_failures = 0
-                        analysis.acoustid_lookup = _merged(
-                            analysis.acoustid_lookup,
-                            claim_checked_at=_now_iso(),
-                            claim_outcome="not_held",
-                        )
-                        await db.commit()
-                    else:
-                        stats["errors"] += 1
-                        upstream_failures += 1
-                        await health.record_failure(
-                            SOURCE_CLAIMS,
-                            kind="http_error",
-                            detail=f"claim failed for {track.musicbrainz_track_id}",
-                        )
-                        if upstream_failures >= UPSTREAM_FAILURE_LIMIT:
-                            stats["status"] = "upstream_failed"
-                            break
-                except Exception:
-                    await db.rollback()
-                    stats["errors"] += 1
-                    logger.warning(
-                        "recording_backfill_claim_write_failed",
-                        extra={"track_id": str(track.id)},
-                        exc_info=True,
-                    )
-                await asyncio.sleep(CLAIM_PACE_SECONDS)
-    finally:
-        await engine.dispose()
-        _active_phase = None
-
-    if stats["status"] in ("ok", "deadline") and stats["considered"] and not dry_run:
-        await health.record_success(SOURCE_CLAIMS, items=stats["claimed"])
-    stats["seconds"] = round(_clock() - started, 1)
-    logger.info("recording_backfill_claim", extra=stats)
-    return stats
-
-
 async def run_recording_backfill(
     *,
     resolve_limit: int = RESOLVE_BATCH,
-    claim_limit: int = CLAIM_BATCH,
     dry_run: bool = False,
     deadline_seconds: float | None = None,
 ) -> dict[str, Any]:
-    """One tick: resolve, then claim. Each phase decides for itself whether to run.
+    """One tick: the resolve phase.
 
     `deadline_seconds` bounds the whole tick. A tick that overruns is recorded as
-    a `timeout` failure against the phase that was active — the state the health
-    surface could not see on 2026-09-14 — and the next tick is free to run.
+    a `timeout` failure against AcoustID — the state the health surface could not
+    see on 2026-09-14 — and the next tick is free to run.
     """
 
     async def tick():
-        resolved = await run_resolve_phase(limit=resolve_limit, dry_run=dry_run)
-        claimed = await run_claim_phase(limit=claim_limit, dry_run=dry_run)
-        return {"resolve": resolved, "claim": claimed}
+        return {"resolve": await run_resolve_phase(limit=resolve_limit, dry_run=dry_run)}
 
     if deadline_seconds is None:
         return await tick()
@@ -452,9 +309,11 @@ async def run_recording_backfill(
     except TimeoutError:
         from app.services.discovery import get_recorder
 
-        phase = _active_phase or SOURCE_ACOUSTID
-        logger.warning("recording_backfill_tick_overran", extra={"phase": phase, "seconds": deadline_seconds})
-        await get_recorder().record_failure(
-            phase, kind="timeout", detail=f"tick exceeded {deadline_seconds:.0f}s"
+        logger.warning(
+            "recording_backfill_tick_overran",
+            extra={"phase": SOURCE_ACOUSTID, "seconds": deadline_seconds},
         )
-        return {"status": "overran", "phase": phase}
+        await get_recorder().record_failure(
+            SOURCE_ACOUSTID, kind="timeout", detail=f"tick exceeded {deadline_seconds:.0f}s"
+        )
+        return {"status": "overran", "phase": SOURCE_ACOUSTID}

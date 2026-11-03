@@ -34,7 +34,7 @@ cp .env.example .env
 FRONTEND_URL=http://myserver:4400
 ```
 
-API keys and the library path are environment variables in your `.env` file (see below) — the web app shows them, with the variable named, but cannot set them. Everything else (community cache, CLAP, providers, backup schedule) is configured in the web app: Analysis → Configuration for the pipeline, Server → Providers for the services it talks to.
+API keys and the library path are environment variables in your `.env` file (see below) — the web app shows them, with the variable named, but cannot set them. Everything else (CLAP, providers, backup schedule) is configured in the web app: Analysis → Configuration for the pipeline, Server → Providers for the services it talks to.
 
 ## Getting API Keys
 
@@ -97,28 +97,6 @@ tailscale cert your-server.<tailnet-name>.ts.net
 This creates `.crt` and `.key` files (you're responsible for renewal every 90 days).
 
 See [Tailscale HTTPS docs](https://tailscale.com/kb/1153/enabling-https) for more details.
-
-## Community Cache
-
-Familiar includes an optional community cache that shares pre-computed audio analysis between users.
-
-**How it works:**
-1. When you scan a track, Familiar generates an AcoustID fingerprint
-2. The fingerprint is hashed (SHA256) - one-way, anonymous, not reversible
-3. The hash is used to look up pre-computed CLAP embeddings and audio features
-4. If found, analysis is instant. If not, Familiar computes locally and optionally contributes back
-
-**Privacy guarantees:**
-- Only hashed fingerprints are transmitted - no track names, artists, or file paths
-- Fingerprint hashes are one-way - your library contents cannot be determined
-- Contribution is opt-in (lookup is enabled by default)
-
-**Benefits:**
-- New installations can skip hours of audio analysis
-- Popular tracks are analyzed once across the community
-- Your processing helps future users
-
-Configure in **Settings** (gear icon) under **Library > Community Cache**.
 
 ## Cloud Backup
 

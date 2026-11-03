@@ -150,8 +150,8 @@ def extract_embedding(file_path: Path, target_sr: int = 48000) -> list[float] | 
 
     The windowing, mel front-end, pooling and precision all live in
     `clapback-embed` now (ADR-0105). That is not a refactor for tidiness: the
-    community cache can only tell "two contributors disagree about the audio" from
-    "two contributors ran different code" if there is exactly one implementation,
+    community cache (until ADR-0159) could only tell "two contributors disagree about the
+    audio" from "two contributors ran different code" if there was exactly one implementation,
     and Familiar running its own copy defeated that by construction.
 
     Behaviour is unchanged from ADR-0104 — consecutive 480,000-sample windows,
@@ -751,10 +751,11 @@ def extract_features(file_path: Path) -> dict[str, float | str | None]:
 #: Run in a child interpreter by `fingerprint_or_raise`. The decoder is part of the fingerprint:
 #: over 21 files from the NAS library, the same chromaprint agreed with the Docker image on 20 when
 #: audio was decoded by the ffmpeg command and on 11 when macOS's CoreAudio decoded it, which is what
-#: audioread picks on a Mac by default. `fpcalc` agreed on 10. The community cache keys on this
-#: string's hash (ADR-0114), so every installation decodes the way the image always has: WAV and
-#: AIFF by the standard library, everything else by `ffmpeg`. On Linux that is audioread's own
-#: choice, so nothing changes there.
+#: audioread picks on a Mac by default. `fpcalc` agreed on 10. The community cache keyed on this
+#: string's hash (ADR-0114, until ADR-0159 removed it), so every installation decodes the way the
+#: image always has: WAV and AIFF by the standard library, everything else by `ffmpeg`. That still
+#: holds, so a fingerprint stored on a Mac is the one the server would have stored. On Linux it is
+#: audioread's own choice, so nothing changes there.
 #:
 #: `FAMILIAR_CHROMAPRINT_LIBRARY` names a libchromaprint that is on no search path, which is how
 #: Familiar Server ships it (and where Homebrew puts it). pyacoustid opens the library only by its
@@ -828,6 +829,36 @@ def fingerprint_or_raise(file_path: Path) -> tuple[float, str]:
         f"Failed to generate audio fingerprint: {stderr.splitlines()[-1] if stderr else 'no output'}",
         error_type="fingerprint_error",
     )
+
+
+def canonical_fingerprint(acoustid_fingerprint: str | bytes) -> bytes:
+    """A stored fingerprint as chromaprint produced it.
+
+    `track_analysis.acoustid` is a `text` column that once held `bytea`, so on a library
+    analysed before that changed, many rows render as `\\x` followed by hex while the rest
+    hold the base64 string itself (14,284 and 11,364 on 2026-09-10). They are the same
+    fingerprint; decoding the first gives the second. AcoustID wants the second.
+
+    The check is deliberately narrow: `\\x`, an even length, and a decode to printable ASCII. A
+    chromaprint fingerprint is base64 and cannot begin with a backslash, so this cannot misfire
+    on a real one, and anything unrecognised is left alone rather than guessed at.
+
+    Moved here from the community cache client when ADR-0159 removed it; the recording
+    backfill (ADR-0115) is the caller that remains.
+    """
+    raw = (
+        acoustid_fingerprint
+        if isinstance(acoustid_fingerprint, bytes)
+        else acoustid_fingerprint.encode()
+    )
+    if raw.startswith(b"\\x") and len(raw) % 2 == 0:
+        try:
+            decoded = bytes.fromhex(raw[2:].decode("ascii"))
+        except (ValueError, UnicodeDecodeError):
+            return raw
+        if decoded and all(32 <= b < 127 for b in decoded):
+            return decoded
+    return raw
 
 
 def generate_fingerprint(file_path: Path) -> tuple[int, str] | None:

@@ -56,7 +56,7 @@ construction); the topic was matched rather than the assertion; and nothing was 
 | Smart playlists — rules over tags, features, history | true | `WEB-PARITY.md:33` Web ✅ Mac ✅ iPhone ❌ |
 | Find similar | true | Native `DownloadControls.swift:168` "Play similar"; web `useTrackDiscovery.tsx` |
 | Musical features — BPM, key, energy, danceability, acousticness | true | All in `ANALYSIS_FEATURE_COLUMNS`, `db/models/tracks.py` |
-| Community cache | true | `routes/settings.py:59`; UI `components/Settings/CommunityCache.tsx` |
+| ~~Community cache~~ | **removed 2026-11-02** | ADR-0159 removed the cache with the Clapback commons; `e2e/pages.spec.ts` checks no page mentions it |
 | Web app for setup | true | ADR-0050 point 3 |
 
 ## Install and remote access — `index.html`
@@ -71,7 +71,7 @@ installs on a given platform.
 | ~~Installs on macOS~~ (with Docker) | **moved off the page 2026-10-02** | ADR-0143 point 3: the Mac path is Familiar Server. Docker on a Mac is still true (`docker/start.sh:86` detects `Darwin`) and lives in `docs/INSTALLATION.md` and `docs/MACOS_BEGINNER.md` |
 | Installs on a Mac with no Docker and no terminal (Familiar Server) | true | **Run 2026-10-02** on Jeff's Mac: `v0.2.0-beta10` from the `.dmg`, healthy on a 27k-file SMB library, then updated itself to beta11 and beta12. Every step on the panel is a menu item in `FamiliarServerApp.swift`. Apple Silicon and macOS 14: `lipo -archs` gives `arm64` only, `LSMinimumSystemVersion` is `14.0`. **Not yet run on any other Mac** |
 | Every install path ends signed in | partly run | Mac: **Open Admin** opens the admin with `#token=` (`ServerController.openAdmin`), run 2026-10-02. Linux: `docker logs familiar-api 2>&1 \| grep '#token='` is run on the real image by CI's macOS Compose Integration step "A new server starts with a token" (ADR-0141). **Not run:** Synology's log path (taken from `INSTALLATION.md`'s "Container Manager → Container → familiar-api → Log"), OpenMediaVault's, and Windows' `Select-String` |
-| Analysis takes days rather than hours on a large library, and pauses on a Mac on battery | true | 2026-10-02 on Familiar Server, one worker (ADR-0138 point 4): minutes per track, even when the community cache answered. Pausing: `Background work paused: On battery` in `server.log`. Replaced "roughly 1 second per track … ~6 hours", which was measured nowhere |
+| Analysis takes days rather than hours on a large library, and pauses on a Mac on battery | true | 2026-10-02 on Familiar Server, one worker (ADR-0138 point 4): minutes per track. Pausing: `Background work paused: On battery` in `server.log`. Replaced "roughly 1 second per track … ~6 hours", which was measured nowhere |
 | faq: hardware, analysis time, away from home, the iOS app, local features | **corrected 2026-10-02** | Brought into line with ADR-0143's install section: no "1 second per track"; "Listening away from home" links `#remote`, not `#install`; "Mood Grid" and "3D Explorer" removed (gone with the library browsers, ADR-0050/0057; only comments mention them in `packages/frontend/src`); the first-launch "asks for your server's address" sentence replaced, since a new server needs pairing (ADR-0134, ADR-0141). Guarded by `toggle.spec.ts` "the FAQ says what the install section says" |
 | Opening the player from Familiar Server connects it ("Open in Familiar") | true by the code; **not yet run end to end** | `ServerController.openInFamiliar` opens a `familiar://pair` link for `127.0.0.1:4400` with the token (ADR-0134 point 5), or the App Store if no player answers; shown only when the server chosen is the Mac. **Pairing a player with a server on another machine is deliberately not on the page** until run end to end (ADR-0143 point 8) |
 | Installs on Linux, and on OpenMediaVault | true | `docker-compose.prod.yml` needs only `./init-pgvector.sql` locally, and every other variable has a default — `MUSIC_LIBRARY_PATH` falls back to `/data/music`. OMV walkthrough at `INSTALLATION.md:72` |
@@ -129,7 +129,7 @@ The table now carries the date it was checked and an invitation to correct it.
 | MCP server | Yes | true |
 | Semantic audio search | Yes (CLAP) | true — via MCP; the row above establishes the mechanism |
 | Audio feature analysis | BPM, key, energy, mood | true |
-| Community analysis cache | Yes | true |
+| ~~Community analysis cache~~ | Yes | **removed 2026-11-02**, ADR-0159 |
 | Self-hosted / no cloud | Yes | true |
 | Smart playlists | Rules-based | true |
 | ~~Music video playback~~ | — | **removed**, browser-only |
@@ -150,9 +150,9 @@ Rewritten 2026-10-03 for a Mac owner (ADR-0146), with the shared nav and footer.
 | Downloaded music plays without the server | true | offline downloads, Feature blocks row |
 | Windows server and apps, and an Android app, are planned, with no dates | **intent** | ADR-0147 (accepted); the answer links it. If a platform is dropped, ADR-0147 is superseded and this goes |
 | No API key, and no AI assistant needed | true | ADR-0048 |
-| What leaves the network: names to public metadata services, a fingerprint hash to the cache; audio and history never | true | the privacy rows below |
+| What leaves the network: names to public metadata services; audio and history never | true | the privacy rows below. "A fingerprint hash to the cache" removed 2026-11-02 (ADR-0159) |
 | ~~Analysis ≈1s/track, 20k library ≈6h~~ | **removed 2026-10-02** | Never measured; on Familiar Server a track took minutes. "Days rather than hours" replaced it (Install row) |
-| ~~Nothing leaves the network without opt-in~~ | **false — corrected 2026-10-03** | MusicBrainz, Cover Art Archive, Wikipedia/Wikidata/Commons, Spotify oEmbed, LRCLIB, ListenBrainz and cache lookups are on by default |
+| ~~Nothing leaves the network without opt-in~~ | **false — corrected 2026-10-03** | MusicBrainz, Cover Art Archive, Wikipedia/Wikidata/Commons, Spotify oEmbed, LRCLIB, ListenBrainz and (until ADR-0159) cache lookups were on by default |
 | ~~"Try the demo" → familiar-demo.fly.dev; "One `compose up`"~~ | **removed 2026-10-03** | The demo exists for App Store review (ADR-0038), and index.html had already removed its link; `compose up` was the Docker-only pitch |
 | A reverse proxy does not make Familiar safe to publish | true | the Install and remote access row (ADR-0145) |
 | iPhone app on the App Store | true | link resolves 200; native, not Capacitor |
@@ -169,9 +169,9 @@ Rewritten 2026-10-03 for two apps. Every host below is in the backend's source (
 | By default: Wikipedia, Wikidata, Wikimedia Commons, Spotify oEmbed for artist pictures | true | `services/artist_image.py` |
 | By default: LRCLIB | true | `services/lyrics.py` |
 | By default: ListenBrainz's public new-release list, which can be turned off | true | `services/discovery/listenbrainz.py`; `discovery_listenbrainz_enabled = True` |
-| By default: cache lookups send a fingerprint hash and the recording id when known | true | `community_cache_enabled = True`; `DEFAULT_CACHE_URL = "https://clapback.seethroughlab.com"` (`services/community_cache.py`, checked by `e2e/pages.spec.ts`); ADR-0119 |
+| ~~By default: cache lookups send a fingerprint hash and the recording id when known~~ | **removed 2026-11-02** | ADR-0159 removed the cache; `e2e/pages.spec.ts` checks no page names it or its host |
 | By default: GitHub for release checks, the analysis model, and Familiar Server's update feed | true | `services/update_checker.py`; ADR-0132 point 8; ADR-0135 point 3 |
-| Contributing to the cache is opt-in, under an installation id | true | `community_cache_contribute = False`; ADR-0108 |
+| ~~Contributing to the cache is opt-in, under an installation id~~ | **removed 2026-11-02** | ADR-0159 |
 | fanart.tv only with a key, sending an artist's MusicBrainz identifier | true | `services/artist_gallery.py` `fanart_candidates`, called only when `fanarttv_api_key` is set (ADR-0149) |
 | Last.fm, AcoustID only when set up; YouTube only on a video search or download | true | key-gated in `app_settings`; `services/video.py` runs only from `/videos` routes |
 | ~~`familiar-cache.fly.dev`; the demo server; "only when you opt in"~~ | **false — corrected 2026-10-03** | The host moved to `clapback.seethroughlab.com`; the demo is for App Store review; several services are on by default |

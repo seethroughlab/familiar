@@ -8,8 +8,6 @@
 
 **Your music, your server, your data.** Runs entirely on your hardware - no cloud dependency, no subscriptions, no data leaving your network.
 
-**Community-powered analysis.** Share anonymized audio fingerprints with other users. New installations benefit instantly from pre-computed analysis, skipping hours of processing.
-
 ## How Familiar Compares
 
 | | Familiar | Navidrome | Jellyfin | Plex |
@@ -17,7 +15,6 @@
 | AI chat + playlist creation | Yes | — | — | — |
 | Semantic audio search | Yes (CLAP) | — | — | — |
 | Audio feature analysis | BPM, key, energy, mood | — | Basic | Basic |
-| Community analysis cache | Yes | — | — | — |
 | Self-hosted / no cloud | Yes | Yes | Yes | Partial |
 | Music video playback | Yes | — | Yes | Yes |
 | Smart playlists | Rules-based | — | — | Yes |
@@ -123,7 +120,6 @@ with one card per provider.
 - **Multi-profile support** - Each household member gets their own favorites and history
 
 ### Library Management
-- **Fast scanning with community cache** - Pre-computed analysis from other users speeds up initial scan
 - **Audio analysis** - BPM, key detection, energy, danceability, and more via librosa
 - **CLAP embeddings** - Semantic audio search powered by LAION's CLAP model
 - **Smart playlists** - Dynamic playlists with rules for BPM, key, energy, genre, and more

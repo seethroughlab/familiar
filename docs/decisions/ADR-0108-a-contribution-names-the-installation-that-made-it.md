@@ -1,6 +1,6 @@
 # ADR-0108: A Contribution Names the Installation That Made It
 
-Status: accepted
+Status: superseded by ADR-0159
 
 Date: 2026-09-04
 
