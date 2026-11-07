@@ -204,7 +204,8 @@ export function DocumentVisualizer({
   // Audio frames, on the host's animation loop.
   //
   // **Interpolated rather than raw.** Frames arrive from a native host at 10 Hz and `getAudioData`
-  // already reconstructs a 60 Hz signal from them. ADR-0087's Consequences anticipated handing the
+  // glides toward each one at the screen's rate (`NATIVE_GLIDE_SECONDS`). Until the 1.7 work this
+  // comment said so and the code copied each frame in, so every visualizer stepped at 10 Hz. ADR-0087's Consequences anticipated handing the
   // plugin the raw feed and making it own that; sending the reconstructed value instead costs
   // nothing here and spares every plugin author the same piece of work.
   useEffect(() => {
