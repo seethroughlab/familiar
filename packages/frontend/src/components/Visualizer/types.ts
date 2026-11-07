@@ -67,12 +67,6 @@ export interface AudioSpecs {
 
 /**
  * Props passed to all visualizer components.
- *
- * Use the provided hooks for enhanced functionality:
- * - useAudioAnalyser() - Real-time audio data (bass, mid, treble, frequency bins)
- * - useArtworkPalette(artworkUrl) - Extract dominant colors from artwork
- * - useBeatSync(bpm) - Sync animations to detected BPM
- * - useLyricTiming(lyrics, currentTime) - Get current/next lyric lines
  */
 export interface VisualizerProps {
   // === Playback State ===
