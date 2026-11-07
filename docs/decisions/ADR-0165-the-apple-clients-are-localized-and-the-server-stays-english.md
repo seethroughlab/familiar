@@ -1,6 +1,6 @@
 # ADR-0165: The Apple Clients Are Localized and the Server Stays English
 
-Status: proposed
+Status: accepted
 
 Date: 2026-11-07
 
