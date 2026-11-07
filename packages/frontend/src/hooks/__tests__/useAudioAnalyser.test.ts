@@ -9,7 +9,7 @@ vi.mock('../../audio/engineInstance', () => ({
 
 import { getAudioAnalysisDiagnosticsSnapshot, setVisualizerDebugEnabled } from '../../audio/analysisDiagnostics';
 import { clearNativeAnalysisBuffers, setNativeAnalysisBuffers } from '../../audio/nativeAnalysisBuffers';
-import { getAudioData, resetOnsetDetectorForTesting, useAudioAnalyser } from '../useAudioAnalyser';
+import { getAudioData, glideToward, resetOnsetDetectorForTesting, useAudioAnalyser } from '../useAudioAnalyser';
 
 describe('useAudioAnalyser native buffer integration', () => {
   beforeEach(() => {
@@ -113,5 +113,35 @@ describe('useAudioAnalyser native buffer integration', () => {
     });
 
     expect(getAudioData()?.beat ?? 0).toBeGreaterThan(0.5);
+  });
+});
+
+describe('glideToward (native frames at 10 Hz, drawn at 60)', () => {
+  it('moves part of the way, not all of it, in one screen frame', () => {
+    const current = new Uint8Array([0, 200]);
+    glideToward(current, new Uint8Array([200, 0]), 1 / 60);
+    expect(current[0]).toBeGreaterThan(0);
+    expect(current[0]).toBeLessThan(200);
+    expect(current[1]).toBeGreaterThan(0);
+  });
+
+  it('is most of the way there by the next native frame', () => {
+    const current = new Uint8Array([0]);
+    for (let i = 0; i < 6; i++) glideToward(current, new Uint8Array([200]), 1 / 60);
+    expect(current[0]).toBeGreaterThan(150);
+  });
+
+  it('does not depend on the frame rate', () => {
+    const at60 = new Uint8Array([0]);
+    for (let i = 0; i < 6; i++) glideToward(at60, new Uint8Array([200]), 1 / 60);
+    const at30 = new Uint8Array([0]);
+    for (let i = 0; i < 3; i++) glideToward(at30, new Uint8Array([200]), 1 / 30);
+    expect(Math.abs(at60[0] - at30[0])).toBeLessThanOrEqual(2);
+  });
+
+  it('stays put with no time elapsed', () => {
+    const current = new Uint8Array([10]);
+    glideToward(current, new Uint8Array([200]), 0);
+    expect(current[0]).toBe(10);
   });
 });

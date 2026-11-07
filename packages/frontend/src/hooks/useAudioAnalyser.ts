@@ -37,6 +37,33 @@ let lastAnalyseTime = 0;
 // Persistent output object (mutated in place, buffers reused every frame)
 let sharedData: AudioAnalysisData | null = null;
 let lastBinCount = 0;
+let lastGlideTime = 0;
+
+/**
+ * How quickly a bin moves toward the newest native frame. A native host sends about ten frames a
+ * second (an `AVAudioEngine` tap delivers 100 ms, whatever is asked for), and copying each one in
+ * made every visualizer step at 10 Hz on a 60 Hz screen. 60 ms gets a bin about 80% of the way by
+ * the next frame: smooth, and still late by less than a frame. The player's own meter does the same
+ * (`Spectrum.glide`).
+ */
+export const NATIVE_GLIDE_SECONDS = 0.06;
+
+/**
+ * Move `current` toward `target` by the share of the gap that `elapsedSeconds` covers, in place.
+ * Exponential, so the result does not depend on the frame rate it is called at.
+ */
+export function glideToward(
+  current: Uint8Array,
+  target: Uint8Array,
+  elapsedSeconds: number,
+  timeConstant: number = NATIVE_GLIDE_SECONDS,
+): void {
+  const share = elapsedSeconds <= 0 ? 0 : 1 - Math.exp(-elapsedSeconds / timeConstant);
+  for (let i = 0; i < current.length; i++) {
+    const goal = target[i] ?? 0;
+    current[i] = Math.round(current[i] + (goal - current[i]) * share);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Native analysis data (set from CapacitorEngine via bridge events)
@@ -262,7 +289,12 @@ function analyseLoop() {
       };
     }
 
-    sharedData.frequencyData.set(nativeBuffers.frequency);
+    // Glided, not copied: see `NATIVE_GLIDE_SECONDS`. The bands and every plugin read this, so all
+    // of them move at the screen's rate rather than the channel's. The waveform is copied as it
+    // is: it is a shape, and easing it would draw a shape that never happened.
+    const elapsed = lastGlideTime ? Math.min((now - lastGlideTime) / 1000, 0.25) : 1;
+    lastGlideTime = now;
+    glideToward(sharedData.frequencyData, nativeBuffers.frequency, elapsed);
     sharedData.timeDomainData.set(nativeBuffers.timeDomain);
     computeBands(sharedData.frequencyData);
 

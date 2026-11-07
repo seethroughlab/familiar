@@ -20,8 +20,14 @@ function verdict(m: ReturnType<typeof getMetrics>): { text: string; tone: string
   if (m.analysisFps > 0 && m.analysisFps < 6) {
     return { text: 'analysis arriving slowly; motion will look stepped', tone: 'text-warning' };
   }
-  if (m.pluginFps !== null && m.pluginFps < 30) {
+  // **Thirty was called healthy.** A 60 Hz screen at 30 fps is visibly half-speed, and on the phone
+  // the 1.7 frame-rate gate is a 55 fps median. Two bands, so a page held near 30 by WebKit's
+  // throttle of an untouched cross-origin frame reads differently from a scene that cannot keep up.
+  if (m.pluginFps !== null && m.pluginFps < 28) {
     return { text: 'the plugin itself is slow — its scene, not the pipeline', tone: 'text-warning' };
+  }
+  if (m.pluginFps !== null && m.pluginFps < 55) {
+    return { text: 'the plugin is held near 30 fps — throttled, or a heavy scene', tone: 'text-warning' };
   }
   if (m.hostFps > 0 && m.hostFps < 45) {
     return { text: 'the host loop is slow; a debug build does this', tone: 'text-warning' };
