@@ -337,7 +337,7 @@ packages/
 │   └── src/generated/     # Only packages/frontend/src/api/ may import it.
 ├── frontend/              # Shared React code (components, hooks, stores, types)
 ├── visualizer-sdk/        # The bridge and helpers the first-party visualizers share (ADR-0125)
-├── visualizers/           # The four first-party visualizer sources, each building to its own dist/;
+├── visualizers/           # The two first-party visualizer sources (ADR-0161), each building to its own dist/;
 │                          # vendored into familiar-apple's Visualizers.bundle by hand (ADR-0092)
 │   └── src/
 │       ├── components/    # React components
