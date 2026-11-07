@@ -19,7 +19,8 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ORIGIN = 'http://familiar.test';
-const DOCUMENTS = ['beat-tiles', 'lyric-storm', 'lyrics', 'reactive-terrain'] as const;
+// Two since ADR-0161: lyrics became a native player mode (ADR-0160) and Spectrum duplicated the meter.
+const DOCUMENTS = ['beat-tiles', 'reactive-terrain'] as const;
 
 const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',

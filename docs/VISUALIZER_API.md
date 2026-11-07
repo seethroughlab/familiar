@@ -276,6 +276,7 @@ the four events keep the shapes above for as long as `apiVersion` is 1.
 **Not guaranteed:** anything about libraries. Familiar ships no THREE, no React, no drei for you to
 borrow, and there is no shared folder to load them from
 ([ADR-0087](decisions/ADR-0087-a-visualizer-is-a-document-not-a-component.md) point 7). Bundle what
-you need. The visualizers Familiar ships do exactly that, and are worth reading as worked examples —
-`spectrum` is 106 lines of canvas with no build step at all; `beat-tiles` is a three.js scene that
-carries its own copy.
+you need. The visualizers Familiar ships do exactly that, and are worth reading as worked examples:
+`beat-tiles` is a three.js scene that carries its own copy. For the smallest possible document, one
+file of canvas with no build step at all, read `familiar-apple`'s
+`e2e/fixtures/vanilla-document/index.html`, which the contract test runs.
