@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { AudioVisualizer } from '../Visualizer/AudioVisualizer';
 import { getVisualizerState, subscribeToVisualizerState } from '../../services/visualizerSink';
 import { useTrackDetail } from '../../hooks/useTrackDetail';
+import { useSyncedLyrics } from '../../hooks/useSyncedLyrics';
 import { tracksApi } from '../../api/tracks';
 import type { Track } from '../../types';
 
@@ -25,6 +26,11 @@ export function EmbedVisualizer() {
   // rather than pushed, so the analysis is fetched the same way (ADR-0064 point 9).
   const detail = useTrackDetail(state.track?.id ?? null);
 
+  // For plugins, which ADR-0087 promises lyrics on `familiar:track` (ADR-0164 point 3). This hook had
+  // no caller from the day the web player was deleted, and the embed never had one, so every
+  // lyric document said "no synced lyrics" for every track while the comments above said otherwise.
+  const lyrics = useSyncedLyrics(state.track?.id ?? null);
+
   // Until that resolves — and if it never does, because the page is offline — fall back to the
   // frame's own fields. Partial, and cast as such; it is what this surface has always drawn with.
   const fallback: Track | null = state.track
@@ -43,6 +49,8 @@ export function EmbedVisualizer() {
       track={track}
       features={detail?.features ?? null}
       artworkUrl={state.track ? tracksApi.getArtworkUrl(state.track.id) : null}
+      lyrics={lyrics}
+      duration={detail?.duration_seconds ?? 0}
       isPlaying={state.playing}
       currentTime={state.position}
       className="absolute inset-0"

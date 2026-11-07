@@ -694,6 +694,11 @@ def create_app(settings: Settings, services: Services) -> FastAPI:
             "http://localhost:3000",
             "http://localhost:5173",
             "http://localhost:4400",
+            # The Apple app's embedded visualizer page (ADR-0164 point 2). It loads from the app
+            # bundle over this custom scheme, so its origin is this, not the server's. Without it
+            # every API call the page made was refused at preflight, invisibly: artwork is exempt
+            # (`_OPAQUE_ORIGIN_READABLE`), so the page drew fine with no features and no ranking.
+            "familiar-visualizer://bundle",
         ]
         # Add configured frontend URL (for production)
         if app_config.frontend_url:
