@@ -28,12 +28,16 @@ def _patch_lyrics_service(monkeypatch, *, result):
     Returns a list that records each ``search()`` call so tests can assert
     whether LRCLIB was consulted (vs. served from the DB cache).
     """
+    from app.services.lyrics import LyricsOutcome, LyricsStatus, plain_outcome
+
     calls: list[dict] = []
 
     class _FakeLyricsService:
-        async def search(self, **kwargs):
+        async def resolve(self, **kwargs):
             calls.append(kwargs)
-            return result
+            if isinstance(result, LyricsOutcome):
+                return result
+            return plain_outcome(result) if result else LyricsOutcome(LyricsStatus.NOT_FOUND)
 
     monkeypatch.setattr(
         "app.services.lyrics.get_lyrics_service", lambda: _FakeLyricsService()
@@ -44,6 +48,168 @@ def _patch_lyrics_service(monkeypatch, *, result):
 # ---------------------------------------------------------------------------
 # Track IDs & batch
 # ---------------------------------------------------------------------------
+
+
+def _lyrics(text: str = "la", *, synced: bool = True):
+    from app.services.lyrics import LyricLine, LyricsResult
+
+    return LyricsResult(
+        synced=synced,
+        lines=[LyricLine(time=1.0 if synced else 0.0, text=text)],
+        plain_text=text,
+        source="lrclib",
+        source_id="lrclib:7",
+    )
+
+
+class TestLyricsStatusAndCaching:
+    """ADR-0163: an answer says what kind it is, and "couldn't ask" is never remembered as "none"."""
+
+    @pytest.mark.asyncio
+    async def test_a_miss_is_remembered_and_not_asked_again(self, async_db, client, monkeypatch):
+        t = await insert_test_track(async_db, title="Nothing", artist="Band")
+        await async_db.commit()
+        calls = _patch_lyrics_service(monkeypatch, result=None)
+
+        assert client.get(f"/api/v1/tracks/{t.id}/lyrics").json()["status"] == "not_found"
+        assert client.get(f"/api/v1/tracks/{t.id}/lyrics").json()["status"] == "not_found"
+        assert len(calls) == 1
+
+    @pytest.mark.asyncio
+    async def test_unavailable_is_never_remembered(self, async_db, client, monkeypatch):
+        from app.services.lyrics import LyricsOutcome, LyricsStatus
+
+        t = await insert_test_track(async_db, title="Later", artist="Band")
+        await async_db.commit()
+        calls = _patch_lyrics_service(monkeypatch, result=LyricsOutcome(LyricsStatus.UNAVAILABLE))
+
+        assert client.get(f"/api/v1/tracks/{t.id}/lyrics").json()["status"] == "unavailable"
+        assert client.get(f"/api/v1/tracks/{t.id}/lyrics").json()["status"] == "unavailable"
+        assert len(calls) == 2
+        await async_db.refresh(t)
+        assert t.synced_lyrics is None
+
+    @pytest.mark.asyncio
+    async def test_instrumental_is_stored_as_an_answer(self, async_db, client, monkeypatch):
+        from app.services.lyrics import LyricsOutcome, LyricsStatus
+
+        t = await insert_test_track(async_db, title="No Words", artist="Band")
+        await async_db.commit()
+        calls = _patch_lyrics_service(monkeypatch, result=LyricsOutcome(LyricsStatus.INSTRUMENTAL))
+
+        assert client.get(f"/api/v1/tracks/{t.id}/lyrics").json()["status"] == "instrumental"
+        body = client.get(f"/api/v1/tracks/{t.id}/lyrics").json()
+        assert (body["status"], body["lines"]) == ("instrumental", [])
+        assert len(calls) == 1
+
+    @pytest.mark.asyncio
+    async def test_plain_lyrics_are_kept_and_served(self, async_db, client, monkeypatch):
+        t = await insert_test_track(async_db, title="Plain", artist="Band")
+        await async_db.commit()
+        calls = _patch_lyrics_service(monkeypatch, result=_lyrics("words", synced=False))
+
+        client.get(f"/api/v1/tracks/{t.id}/lyrics")
+        body = client.get(f"/api/v1/tracks/{t.id}/lyrics").json()
+        assert (body["status"], body["synced"], body["plain_text"]) == ("plain_only", False, "words")
+        assert len(calls) == 1
+
+    @pytest.mark.asyncio
+    async def test_storing_lyrics_does_not_move_updated_at(self, async_db, client, monkeypatch):
+        # `updated_at` is the library delta's cursor: moving it re-sends the track to every phone.
+        t = await insert_test_track(async_db, title="Quiet", artist="Band")
+        await async_db.commit()
+        await async_db.refresh(t)
+        before = t.updated_at
+        _patch_lyrics_service(monkeypatch, result=_lyrics())
+
+        client.get(f"/api/v1/tracks/{t.id}/lyrics")
+
+        await async_db.refresh(t)
+        assert t.synced_lyrics["status"] == "found"
+        assert t.updated_at == before
+
+    @pytest.mark.asyncio
+    async def test_a_retag_asks_again(self, async_db, client, monkeypatch):
+        t = await insert_test_track(async_db, title="Wrong Title", artist="Band")
+        await async_db.commit()
+        calls = _patch_lyrics_service(monkeypatch, result=_lyrics())
+        client.get(f"/api/v1/tracks/{t.id}/lyrics")
+
+        t.title = "Right Title"
+        await async_db.commit()
+        client.get(f"/api/v1/tracks/{t.id}/lyrics")
+
+        assert [call["track_name"] for call in calls] == ["Wrong Title", "Right Title"]
+
+    @pytest.mark.asyncio
+    async def test_a_sidecar_answers_without_asking_lrclib(self, async_db, client, monkeypatch, tmp_path):
+        audio = tmp_path / "song.flac"
+        audio.write_bytes(b"")
+        audio.with_suffix(".lrc").write_text("[00:01.00]mine", encoding="utf-8")
+        t = await insert_test_track(async_db, title="Song", artist="Band", file_path=str(audio))
+        await async_db.commit()
+        calls = _patch_lyrics_service(monkeypatch, result=_lyrics("theirs"))
+
+        body = client.get(f"/api/v1/tracks/{t.id}/lyrics").json()
+        assert (body["status"], body["source"], body["lines"][0]["text"]) == ("found", "sidecar", "mine")
+        assert calls == []
+
+    @pytest.mark.asyncio
+    async def test_an_edit_is_read_though_nothing_else_reads_it(self, async_db, client, monkeypatch):
+        # ADR-0051: an edit outranks the file. The route never read `Track.lyrics` at all.
+        t = await insert_test_track(async_db, title="Song", artist="Band")
+        t.lyrics = "[00:02.00]edited"
+        await async_db.commit()
+        calls = _patch_lyrics_service(monkeypatch, result=_lyrics("lrclib"))
+
+        body = client.get(f"/api/v1/tracks/{t.id}/lyrics").json()
+        assert (body["source"], body["lines"][0]["text"]) == ("edited", "edited")
+        assert calls == []
+
+    @pytest.mark.asyncio
+    async def test_synced_from_lrclib_beats_an_edited_plain_text(self, async_db, client, monkeypatch):
+        t = await insert_test_track(async_db, title="Song", artist="Band")
+        t.lyrics = "edited words"
+        await async_db.commit()
+        _patch_lyrics_service(monkeypatch, result=_lyrics("timed"))
+
+        assert client.get(f"/api/v1/tracks/{t.id}/lyrics").json()["status"] == "found"
+
+    @pytest.mark.asyncio
+    async def test_an_edited_plain_text_beats_lrclibs_plain(self, async_db, client, monkeypatch):
+        t = await insert_test_track(async_db, title="Song", artist="Band")
+        t.lyrics = "edited words"
+        await async_db.commit()
+        _patch_lyrics_service(monkeypatch, result=_lyrics("theirs", synced=False))
+
+        body = client.get(f"/api/v1/tracks/{t.id}/lyrics").json()
+        assert (body["status"], body["plain_text"]) == ("plain_only", "edited words")
+
+    @pytest.mark.asyncio
+    async def test_a_row_from_before_statuses_is_asked_about_once_more(
+        self, async_db, client, monkeypatch
+    ):
+        t = await insert_test_track(async_db, title="Old", artist="Band")
+        t.synced_lyrics = {"synced": True, "lines": [{"time": 0.0, "text": "old"}],
+                           "plain_text": "old", "source": "lrclib"}
+        await async_db.commit()
+        calls = _patch_lyrics_service(monkeypatch, result=_lyrics("new"))
+
+        assert client.get(f"/api/v1/tracks/{t.id}/lyrics").json()["lines"][0]["text"] == "new"
+        assert len(calls) == 1
+
+    @pytest.mark.asyncio
+    async def test_a_row_from_before_statuses_survives_an_outage(self, async_db, client, monkeypatch):
+        from app.services.lyrics import LyricsOutcome, LyricsStatus
+
+        t = await insert_test_track(async_db, title="Old", artist="Band")
+        t.synced_lyrics = {"synced": True, "lines": [{"time": 0.0, "text": "old"}],
+                           "plain_text": "old", "source": "lrclib"}
+        await async_db.commit()
+        _patch_lyrics_service(monkeypatch, result=LyricsOutcome(LyricsStatus.UNAVAILABLE))
+
+        body = client.get(f"/api/v1/tracks/{t.id}/lyrics").json()
+        assert (body["status"], body["lines"][0]["text"]) == ("found", "old")
 
 
 class TestListTrackIds:
@@ -535,32 +701,8 @@ class TestStreamAndArtwork:
         body = resp.json()
         assert body["synced"] is False
         assert body["lines"] == []
+        assert body["status"] == "not_found"
         assert len(calls) == 1  # LRCLIB was consulted
-
-    @pytest.mark.asyncio
-    async def test_lyrics_cached_in_db_avoids_lrclib(self, async_db, client, monkeypatch):
-        """Once synced lyrics are cached on the track, the endpoint serves them
-        without calling LRCLIB again."""
-        t = await insert_test_track(async_db, title="Cached", artist="Band")
-        t.synced_lyrics = {
-            "synced": True,
-            "lines": [{"time": 0.0, "text": "hello"}, {"time": 1.5, "text": "world"}],
-            "plain_text": "hello\nworld",
-            "source": "lrclib",
-        }
-        await async_db.commit()
-
-        calls = _patch_lyrics_service(monkeypatch, result=None)
-
-        resp = client.get(f"/api/v1/tracks/{t.id}/lyrics")
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["synced"] is True
-        assert body["lines"] == [
-            {"time": 0.0, "text": "hello"},
-            {"time": 1.5, "text": "world"},
-        ]
-        assert calls == []  # cache hit — LRCLIB was NOT consulted
 
     @pytest.mark.asyncio
     async def test_lyrics_fetched_then_persisted(self, async_db, client, monkeypatch):
@@ -582,6 +724,7 @@ class TestStreamAndArtwork:
         resp1 = client.get(f"/api/v1/tracks/{t.id}/lyrics")
         assert resp1.status_code == 200
         assert resp1.json()["synced"] is True
+        assert resp1.json()["status"] == "found"
         assert len(calls) == 1  # first request hit LRCLIB
 
         # Second request should be served from the persisted cache.
@@ -591,6 +734,7 @@ class TestStreamAndArtwork:
             {"time": 0.0, "text": "la"},
             {"time": 2.0, "text": "la la"},
         ]
+        assert resp2.json()["status"] == "found"
         assert len(calls) == 1  # still 1 — second request was a cache hit
 
 
