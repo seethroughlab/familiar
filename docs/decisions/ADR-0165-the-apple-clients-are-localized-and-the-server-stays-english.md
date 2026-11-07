@@ -12,13 +12,13 @@ more listeners, and a listing and an app in a listener's own language serve that
 nothing in either repository is set up for a second language, and the cost of adding one depends
 almost entirely on where the line is drawn. This record draws it.
 
-What exists today, counted on `familiar-apple` at `c650915` and `familiar` at `98550f78`:
+What exists today, counted on `familiar-apple` at `8faedad` and `familiar` at `98550f78`:
 
 - **No localization at all in the Apple clients.** `knownRegions` is `Base, en`; there is no
   `.xcstrings` or `.lproj`; `SWIFT_EMIT_LOC_STRINGS = NO` appears four times in
   `Familiar.xcodeproj/project.pbxproj`; `Package.swift` declares no `defaultLocalization`. The only
   localization API in use is the `LocalizedStringResource` title of `CancelDownloadsIntent`.
-- **About 530 literal sites Xcode would extract on its own**, all in `App/Shared` and the widget
+- **About 540 literal sites Xcode would extract on its own**, all in `App/Shared` and the widget
   (`Text` 170, `Button` 135, `Label` 49, `accessibilityLabel` 38, and smaller counts of the rest).
 - **Several hundred user-facing strings it would not.** These are built in code: `var title: String`
   on models in `FamiliarKit` (`QueueOrigin`, `ShufflePreset`, `SmartRule.summary`, `AwayCause`),
@@ -44,8 +44,8 @@ What exists today, counted on `familiar-apple` at `c650915` and `familiar` at `9
    the Info.plist usage strings, plus the App Store listing. English remains the development
    language and the fallback. String Catalogs (`.xcstrings`) are the format: one for the app targets,
    one per package target that shows text, and one for `InfoPlist`.
-2. **English literals are the catalog keys.** `Button("End session")` stays as it is written. Twenty-two
-   tests read Swift source as text through `AppSource.swift` and `EngineSource.swift` and match such
+2. **English literals are the catalog keys.** `Button("End session")` stays as it is written. Eighteen
+   test files read Swift source as text through `AppSource.swift` and `EngineSource.swift` and match such
    literals. Opaque keys would break every one of them and make the source harder to read.
 3. **The server stays English and locale-blind.** Clients localize from structured data. Where a
    client must explain a server error in the listener's language, the server gains an `ErrorCode`
