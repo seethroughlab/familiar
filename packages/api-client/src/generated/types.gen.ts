@@ -3792,6 +3792,12 @@ export type LyricsResponse = {
      */
     source: string;
     /**
+     * Status
+     *
+     * found, plain_only, instrumental, not_found or unavailable. `unavailable` says nothing about the track: the lyrics service could not be asked, so try again later.
+     */
+    status?: string | null;
+    /**
      * Synced
      */
     synced: boolean;

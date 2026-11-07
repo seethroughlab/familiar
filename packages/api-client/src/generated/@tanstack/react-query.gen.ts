@@ -5672,11 +5672,12 @@ export const tracksGetTrackLyricsQueryKey = (options: Options<TracksGetTrackLyri
 /**
  * Get Track Lyrics
  *
- * Get lyrics for a track.
+ * Get lyrics for a track (ADR-0163).
  *
- * Returns synced lyrics with timestamps when available. Results are cached on
- * the track (``synced_lyrics``) so repeat requests don't re-hit LRCLIB. A
- * genuine miss returns an empty 200 response (not a 404).
+ * The listener's own lyrics first (an edit, a `.lrc` sidecar, the file's tags), then LRCLIB. The
+ * first synced source wins, otherwise the first plain one. `status` says which kind of answer this
+ * is; `unavailable` means LRCLIB could not be asked and says nothing about the track. Found, plain
+ * and instrumental answers are stored on the track, and a miss is remembered for about two weeks.
  */
 export const tracksGetTrackLyricsOptions = (options: Options<TracksGetTrackLyricsData>) => queryOptions<TracksGetTrackLyricsResponse, AxiosError<TracksGetTrackLyricsError>, TracksGetTrackLyricsResponse, ReturnType<typeof tracksGetTrackLyricsQueryKey>>({
     queryFn: async ({ queryKey, signal }) => {
