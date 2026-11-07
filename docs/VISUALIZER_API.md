@@ -102,7 +102,9 @@ parent.postMessage({ type: 'familiar:ready', apiVersion: 1 }, '*');
       bpm?: number, key?: string, energy?: number, valence?: number,
       danceability?: number, acousticness?: number, /* … */
     } | null,
-    lyrics: Array<{ text: string, startTime: number, endTime?: number }> | null,
+    // `time` and `startTime` are the same number; `endTime` is the next line's start, absent on
+    // the last. Synced lines only: a track with plain lyrics, or none, sends null.
+    lyrics: Array<{ text: string, time: number, startTime: number, endTime?: number }> | null,
   }
 }
 ```

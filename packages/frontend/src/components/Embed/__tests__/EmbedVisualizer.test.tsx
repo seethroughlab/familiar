@@ -13,10 +13,15 @@ import { tracksApi } from '../../../api/tracks';
 import type { Track } from '../../../types';
 
 vi.mock('../../../api/tracks', () => ({
-  tracksApi: { get: vi.fn(), getArtworkUrl: (id: string) => `/artwork/${id}` },
+  tracksApi: {
+    get: vi.fn(),
+    getLyrics: vi.fn(() => Promise.resolve({ synced: false, lines: [], plain_text: '', source: 'none' })),
+    getArtworkUrl: (id: string) => `/artwork/${id}`,
+  },
 }));
 
 const get = tracksApi.get as ReturnType<typeof vi.fn>;
+const getLyrics = tracksApi.getLyrics as ReturnType<typeof vi.fn>;
 
 // Same capture harness as AudioVisualizer.test.tsx: a stub visualizer that records its props, so
 // the assertion is on what actually reached a visualizer rather than on an intermediate component.
@@ -127,5 +132,23 @@ describe('EmbedVisualizer', () => {
     expect(lastProps?.track).toBeNull();
     expect(lastProps?.features).toBeNull();
     expect(get).not.toHaveBeenCalled();
+  });
+});
+
+describe('EmbedVisualizer lyrics (ADR-0164 point 3)', () => {
+  // Nothing in any shipped app ever asked for lyrics: this hook had no caller, and every test of
+  // a lyric visualizer injected lines past the seam that was missing.
+  it('fetches the playing track’s lyrics and hands them to the visualizer', async () => {
+    get.mockResolvedValue({ id: 'T1', title: 'Song', duration_seconds: 200 } as Track);
+    getLyrics.mockResolvedValueOnce({
+      synced: true, lines: [{ time: 1, text: 'first' }], plain_text: 'first', source: 'lrclib',
+    });
+
+    render(<EmbedVisualizer />);
+    act(() => send(frame({ id: 'T1', title: 'Song' })));
+
+    await waitFor(() => expect(lastProps?.lyrics).toEqual([{ time: 1, text: 'first' }]));
+    expect(getLyrics).toHaveBeenCalledWith('T1');
+    expect(lastProps?.duration).toBe(200);
   });
 });
