@@ -1,15 +1,18 @@
 """Track streaming, artwork, and lyrics endpoints."""
 
 import asyncio
+import hashlib
 import logging
+import random
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from sqlalchemy import update
 
 from app.api.concurrency import encoder_limiter
 from app.api.deps import DbSession, release_connection
@@ -18,11 +21,22 @@ from app.config import settings
 from app.db.models import Track
 from app.services.artwork import album_key_for_track, get_artwork_path
 from app.services.flac_remux import AAC, FLAC, TranscodeTarget, transcode_to_file
+from app.services.lyrics import (
+    LyricLine,
+    LyricsOutcome,
+    LyricsResult,
+    LyricsStatus,
+)
 from app.services.quality import is_lossless_source
 
 from . import AUDIO_MIME_TYPES
 
 logger = logging.getLogger(__name__)
+
+#: ADR-0163 point 7. LRCLIB is user-contributed and grows, so a miss is not forever; the jitter keeps
+#: a library's worth of misses from all expiring in the same hour.
+LYRICS_MISS_TTL_SECONDS = 14 * 24 * 3600
+LYRICS_MISS_TTL_JITTER_SECONDS = 2 * 24 * 3600
 
 # Per-(track, target) locks to prevent redundant concurrent transcodes. Keyed on the target too,
 # since ADR-0118: a track's FLAC remux and its AAC encode are different files and may run at once.
@@ -65,6 +79,15 @@ class LyricsResponse(BaseModel):
     lines: list[LyricLineResponse]
     plain_text: str
     source: str
+    #: ADR-0163 point 5. A plain string, not an enum: a generated client's enum is closed, and one
+    #: new value would fail the whole decode. Optional, so a client built before it still decodes.
+    status: str | None = Field(
+        default=None,
+        description=(
+            "found, plain_only, instrumental, not_found or unavailable. `unavailable` says nothing "
+            "about the track: the lyrics service could not be asked, so try again later."
+        ),
+    )
 
 
 @router.get(
@@ -424,10 +447,112 @@ async def delete_track_artwork(
     )
 
 
-def _empty_lyrics() -> LyricsResponse:
-    """An empty (no-lyrics) response — returned on a genuine miss so the client
-    can distinguish 'no lyrics for this track' from an actual error."""
-    return LyricsResponse(synced=False, lines=[], plain_text="", source="none")
+def _lyrics_response(status: LyricsStatus, result: LyricsResult | None = None) -> LyricsResponse:
+    if result is None:
+        return LyricsResponse(
+            synced=False, lines=[], plain_text="", source="none", status=status.value
+        )
+    return LyricsResponse(
+        synced=result.synced,
+        lines=[LyricLineResponse(time=line.time, text=line.text) for line in result.lines],
+        plain_text=result.plain_text,
+        source=result.source,
+        status=status.value,
+    )
+
+
+def _lyrics_identity(track: Track) -> str:
+    """What the stored answer was an answer to (ADR-0163 point 8).
+
+    Compared on read, so a retag, an edit or a new sidecar re-resolves with nothing hooked into any of
+    the paths that write those. The file's mtime covers its embedded tags.
+    """
+    from app.services.lyrics_local import sidecar_path
+
+    def mtime(path: Path | None) -> int:
+        try:
+            return int(path.stat().st_mtime) if path else 0
+        except OSError:
+            return 0
+
+    audio = Path(track.file_path) if track.file_path else None
+    parts = [
+        track.title or "",
+        track.artist or "",
+        track.album or "",
+        track.album_artist or "",
+        str(round(track.duration_seconds or 0)),
+        hashlib.sha1((track.lyrics or "").encode()).hexdigest(),
+        str(mtime(audio)),
+        str(mtime(sidecar_path(audio) if audio else None)),
+    ]
+    return hashlib.sha1("\x1f".join(parts).encode()).hexdigest()[:16]
+
+
+def _miss_key(track_id: UUID, identity: str) -> str:
+    return f"lyrics:miss:{track_id}:{identity}"
+
+
+async def _remembered_miss(key: str) -> bool:
+    """Fails open: a store that cannot answer costs one more lookup, never a wrong answer."""
+    from app.services.redis_client import get_redis
+
+    try:
+        return bool(await asyncio.to_thread(get_redis().exists, key))
+    except Exception:
+        logger.warning("Could not read the lyrics miss cache", exc_info=True)
+        return False
+
+
+async def _remember_miss(key: str) -> None:
+    from app.services.redis_client import get_redis
+
+    seconds = LYRICS_MISS_TTL_SECONDS + random.randint(0, LYRICS_MISS_TTL_JITTER_SECONDS)
+    try:
+        await asyncio.to_thread(get_redis().setex, key, seconds, "1")
+    except Exception:
+        logger.warning("Could not write the lyrics miss cache", exc_info=True)
+
+
+async def _store_lyrics(
+    db: DbSession, track_id: UUID, identity: str, status: LyricsStatus, result: LyricsResult | None
+) -> None:
+    """Persist an answer **without moving `updated_at`**.
+
+    `updated_at` is the library delta's cursor, and an ORM write would bump it through `onupdate`,
+    re-sending the track to every phone for a change that is not in its payload.
+    """
+    payload = {
+        "v": 2,
+        "status": status.value,
+        "identity": identity,
+        "synced": bool(result and result.synced),
+        "lines": [{"time": line.time, "text": line.text} for line in result.lines] if result else [],
+        "plain_text": result.plain_text if result else "",
+        "source": result.source if result else "none",
+        "source_id": result.source_id if result else None,
+    }
+    await db.execute(
+        update(Track)
+        .where(Track.id == track_id)
+        .values(synced_lyrics=payload, updated_at=Track.updated_at)
+    )
+    await db.commit()
+
+
+def _cached(cached: dict[str, Any]) -> tuple[LyricsStatus, LyricsResult | None]:
+    lines = [LyricLine(time=line["time"], text=line["text"]) for line in cached.get("lines", [])]
+    synced = bool(cached.get("synced"))
+    status = LyricsStatus(cached.get("status") or ("found" if synced else "plain_only"))
+    if status == LyricsStatus.INSTRUMENTAL:
+        return status, None
+    return status, LyricsResult(
+        synced=synced,
+        lines=lines,
+        plain_text=cached.get("plain_text", ""),
+        source=cached.get("source", "cache"),
+        source_id=cached.get("source_id"),
+    )
 
 
 @router.get("/{track_id}/lyrics", tags=["tracks"], response_model=LyricsResponse)
@@ -436,69 +561,73 @@ async def get_track_lyrics(
     track_id: UUID,
 ) -> LyricsResponse:
     """
-    Get lyrics for a track.
+    Get lyrics for a track (ADR-0163).
 
-    Returns synced lyrics with timestamps when available. Results are cached on
-    the track (``synced_lyrics``) so repeat requests don't re-hit LRCLIB. A
-    genuine miss returns an empty 200 response (not a 404).
+    The listener's own lyrics first (an edit, a `.lrc` sidecar, the file's tags), then LRCLIB. The
+    first synced source wins, otherwise the first plain one. `status` says which kind of answer this
+    is; `unavailable` means LRCLIB could not be asked and says nothing about the track. Found, plain
+    and instrumental answers are stored on the track, and a miss is remembered for about two weeks.
     """
+    # Imported here like the other handlers' `select`: a module-level one shadows theirs, and mypy
+    # then cannot type this module's `router` through the package's import cycle.
     from sqlalchemy import select
 
     from app.services.lyrics import get_lyrics_service
+    from app.services.lyrics_local import read_local_lyrics
 
-    # Get track from database
-    query = select(Track).where(Track.id == track_id)
-    result = await db.execute(query)
-    track = result.scalar_one_or_none()
-
+    track = (await db.execute(select(Track).where(Track.id == track_id))).scalar_one_or_none()
     if not track:
         raise TrackNotFoundError()
 
-    # Serve from cache when we've already fetched synced lyrics for this track.
-    if track.synced_lyrics:
-        cached = track.synced_lyrics
-        return LyricsResponse(
-            synced=cached.get("synced", False),
-            lines=[
-                LyricLineResponse(time=line["time"], text=line["text"])
-                for line in cached.get("lines", [])
-            ],
-            plain_text=cached.get("plain_text", ""),
-            source=cached.get("source", "cache"),
+    identity = await asyncio.to_thread(_lyrics_identity, track)
+    cached = track.synced_lyrics
+    if cached and cached.get("v") == 2 and cached.get("identity") == identity:
+        return _lyrics_response(*_cached(cached))
+
+    # A row stored before statuses existed is asked about once more, and kept if that cannot happen.
+    legacy = _cached(cached) if cached and cached.get("v") is None and cached.get("lines") else None
+
+    miss_key = _miss_key(track.id, identity)
+    if legacy is None and await _remembered_miss(miss_key):
+        return _lyrics_response(LyricsStatus.NOT_FOUND)
+
+    title, artist, album = track.title, track.artist, track.album
+    album_artist, duration = track.album_artist, track.duration_seconds
+    file_path, edited = track.file_path, track.lyrics
+    # Nothing below needs the row, and LRCLIB can take seconds: give the connection back first.
+    # The stores below take a fresh one for their one statement.
+    await release_connection(db)
+
+    local = await asyncio.to_thread(read_local_lyrics, file_path, edited)
+    if local.synced is not None:
+        await _store_lyrics(db, track_id, identity, LyricsStatus.FOUND, local.synced)
+        return _lyrics_response(LyricsStatus.FOUND, local.synced)
+
+    if not title or not artist:
+        outcome = LyricsOutcome(LyricsStatus.NOT_FOUND)
+    else:
+        outcome = await get_lyrics_service().resolve(
+            track_name=title,
+            artist_name=artist,
+            album_name=album,
+            duration=duration,
+            album_artist=album_artist,
         )
 
-    # Need title + artist to search; treat as a miss rather than erroring out.
-    if not track.title or not track.artist:
-        return _empty_lyrics()
+    if outcome.status == LyricsStatus.FOUND or outcome.status == LyricsStatus.INSTRUMENTAL:
+        await _store_lyrics(db, track_id, identity, outcome.status, outcome.result)
+        return _lyrics_response(outcome.status, outcome.result)
 
-    # Search for lyrics
-    lyrics_service = get_lyrics_service()
-    lyrics = await lyrics_service.search(
-        track_name=track.title,
-        artist_name=track.artist,
-        album_name=track.album,
-        duration=track.duration_seconds
-    )
+    # The listener's own words outrank LRCLIB's when neither has timing.
+    plain = local.plain or (outcome.result if outcome.status == LyricsStatus.PLAIN_ONLY else None)
+    if plain is not None:
+        await _store_lyrics(db, track_id, identity, LyricsStatus.PLAIN_ONLY, plain)
+        return _lyrics_response(LyricsStatus.PLAIN_ONLY, plain)
 
-    if not lyrics:
-        return _empty_lyrics()
+    if outcome.status == LyricsStatus.UNAVAILABLE:
+        if legacy is not None:
+            return _lyrics_response(*legacy)
+        return _lyrics_response(LyricsStatus.UNAVAILABLE)
 
-    response = LyricsResponse(
-        synced=lyrics.synced,
-        lines=[LyricLineResponse(time=line.time, text=line.text) for line in lyrics.lines],
-        plain_text=lyrics.plain_text,
-        source=lyrics.source
-    )
-
-    # Cache only positive *synced* results — the visualizer needs the timing,
-    # and a negative result shouldn't be pinned in case lyrics appear later.
-    if lyrics.synced and lyrics.lines:
-        track.synced_lyrics = {
-            "synced": lyrics.synced,
-            "lines": [{"time": line.time, "text": line.text} for line in lyrics.lines],
-            "plain_text": lyrics.plain_text,
-            "source": lyrics.source,
-        }
-        await db.commit()
-
-    return response
+    await _remember_miss(miss_key)
+    return _lyrics_response(LyricsStatus.NOT_FOUND)
