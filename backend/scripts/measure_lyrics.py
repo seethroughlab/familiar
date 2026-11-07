@@ -33,8 +33,6 @@ from pathlib import Path
 
 import httpx
 
-USER_AGENT = "Familiar/lyrics-measure (https://github.com/seethroughlab/familiar)"
-
 #: LRCLIB allows about 90 a minute to an identified client; this stays well under it.
 MIN_INTERVAL_SECONDS = 1.0
 
@@ -125,6 +123,7 @@ def summarize(outcomes: Sequence[str]) -> dict[str, float]:
         "miss": counts["miss"],
         "transient": counts["transient"],
         "skipped": counts["skipped"],
+        "instrumental": counts["instrumental"],
         "synced_rate": round(counts["synced"] / total, 3),
         "valid": counts["transient"] / total < 0.01,
     }
@@ -134,11 +133,7 @@ async def run(sample: Path, out: Path) -> dict[str, float]:
     from app.services.lyrics import LyricsService
 
     transport = RecordingTransport(httpx.AsyncHTTPTransport())
-    service = LyricsService()
-    await service.client.aclose()
-    service.client = httpx.AsyncClient(
-        transport=transport, timeout=10.0, headers={"User-Agent": USER_AGENT}
-    )
+    service = LyricsService(transport=transport)
 
     with sample.open(newline="") as handle:
         rows = list(csv.DictReader(handle))
@@ -160,15 +155,19 @@ async def run(sample: Path, out: Path) -> dict[str, float]:
                 continue
 
             duration = float(row["duration_seconds"]) if row["duration_seconds"] else None
-            result = await service.search(
+            resolved = await service.resolve(
                 track_name=row["title"],
                 artist_name=row["artist"],
                 album_name=row["album"] or None,
                 duration=duration,
+                album_artist=row.get("album_artist") or None,
             )
+            result = resolved.result
             exchanges = transport.take()
             has_lines = bool(result and result.lines)
             outcome = classify(has_lines, bool(result and result.synced), exchanges)
+            if resolved.status == "instrumental":
+                outcome = "instrumental"
             outcomes.append(outcome)
 
             writer.writerow([
