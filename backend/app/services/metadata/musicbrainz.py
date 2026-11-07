@@ -1,11 +1,17 @@
 """MusicBrainz enrichment service for track metadata."""
 
+import asyncio
+import functools
 import logging
-from typing import Any
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, TypeVar
 
 import musicbrainzngs
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 # Configure the MusicBrainz client
 musicbrainzngs.set_useragent(
@@ -16,6 +22,21 @@ musicbrainzngs.set_useragent(
 
 # Rate limiting: MusicBrainz allows 1 request per second
 musicbrainzngs.set_rate_limit(limit_or_interval=1.0)
+
+
+#: **MusicBrainz calls run here, never on the default executor.** `musicbrainzngs` serialises every
+#: request behind a one-per-second limit and retries a 503 with backoff, so a call can block its thread
+#: for a long time. Callers wrap it in `asyncio.wait_for`, and a timeout cancels the coroutine but not
+#: the thread: during a MusicBrainz outage the orphans filled the default pool (12 threads on the NAS)
+#: and every `asyncio.to_thread` in the server queued behind them. Lyrics requests took 80-90 s on
+#: 2026-11-07 while MusicBrainz returned 503s. Two threads, because the limit makes more pointless.
+_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="musicbrainz")
+
+
+async def run_musicbrainz(func: Callable[..., T], /, *args: Any, **kwargs: Any) -> T:
+    """`asyncio.to_thread` for MusicBrainz calls, on their own threads."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(_EXECUTOR, functools.partial(func, *args, **kwargs))
 
 
 def _normalize_for_comparison(s: str | None) -> str:

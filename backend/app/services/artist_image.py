@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Artist, ArtistAlias, ExternalArtistImageCache
 from app.services.external_albums_helpers import normalize_artist_name
 from app.services.metadata import musicbrainz
+from app.services.metadata.musicbrainz import run_musicbrainz
 from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
@@ -502,11 +503,11 @@ async def _resolve_via_musicbrainz(
     Wikipedia link that bypasses the ambiguity.
     """
     if not mb_id:
-        mb_id = await asyncio.to_thread(strict_mb_artist_lookup, name)
+        mb_id = await run_musicbrainz(strict_mb_artist_lookup, name)
     if not mb_id:
         return None
 
-    artist = await asyncio.to_thread(musicbrainz.get_artist_by_id, mb_id)
+    artist = await run_musicbrainz(musicbrainz.get_artist_by_id, mb_id)
     if not artist:
         return None
 

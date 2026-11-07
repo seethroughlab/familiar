@@ -13,6 +13,7 @@ from difflib import SequenceMatcher
 from typing import Any
 from uuid import UUID as UUIDType
 
+from app.services.metadata.musicbrainz import run_musicbrainz
 from app.services.redis_client import get_redis
 
 logger = logging.getLogger(__name__)
@@ -233,7 +234,7 @@ async def _check_artist_against_musicbrainz(
     try:
         if not mb_id_to_use:
             mb_result = await asyncio.wait_for(
-                asyncio.to_thread(search_artist, artist_name),
+                run_musicbrainz(search_artist, artist_name),
                 timeout=MUSICBRAINZ_CALL_TIMEOUT_SECONDS,
             )
             if mb_result and mb_result.get("score", 0) >= 80:
@@ -247,7 +248,7 @@ async def _check_artist_against_musicbrainz(
 
         if mb_id_to_use:
             recent = await asyncio.wait_for(
-                asyncio.to_thread(
+                run_musicbrainz(
                     get_artist_releases_recent, mb_id_to_use, days_back=days_back
                 ),
                 timeout=MUSICBRAINZ_CALL_TIMEOUT_SECONDS,
