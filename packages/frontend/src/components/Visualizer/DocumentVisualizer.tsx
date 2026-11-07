@@ -49,7 +49,13 @@ export interface TrackPayload {
   artworkUrl: string | null;
   duration: number;
   features: TrackFeatures | null;
-  lyrics: LyricLine[] | null;
+  lyrics: PublishedLyricLine[] | null;
+}
+
+/** A line as plugins receive it: the SDK's `time`, and the published `startTime`/`endTime`. */
+export interface PublishedLyricLine extends LyricLine {
+  startTime: number;
+  endTime?: number;
 }
 
 export interface StatePayload {
@@ -106,8 +112,24 @@ function trackPayload(
     artworkUrl,
     duration,
     features,
-    lyrics,
+    lyrics: lyrics ? withPublishedTiming(lyrics) : null,
   };
+}
+
+/**
+ * Each line with the fields `docs/VISUALIZER_API.md` publishes, as well as the SDK's.
+ *
+ * The published shape was `startTime`/`endTime`, and `examples/lyric-pulse` reads `startTime`; the
+ * server, the SDK and this host all say `time`. Sending only `time` left a document written from
+ * the docs drawing nothing (`undefined <= currentTime` is never true), so both go (ADR-0164 point 4).
+ */
+// eslint-disable-next-line react-refresh/only-export-components -- a pure helper, tested on its own
+export function withPublishedTiming(lines: LyricLine[]): PublishedLyricLine[] {
+  return lines.map((line, index) => ({
+    ...line,
+    startTime: line.time,
+    endTime: lines[index + 1]?.time,
+  }));
 }
 
 export function DocumentVisualizer({

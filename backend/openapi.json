@@ -5247,6 +5247,14 @@
             "title": "Source",
             "type": "string"
           },
+          "status": {
+            "description": "found, plain_only, instrumental, not_found or unavailable. `unavailable` says nothing about the track: the lyrics service could not be asked, so try again later.",
+            "title": "Status",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "synced": {
             "title": "Synced",
             "type": "boolean"
@@ -33794,7 +33802,7 @@
     },
     "/api/v1/tracks/{track_id}/lyrics": {
       "get": {
-        "description": "Get lyrics for a track.\n\nReturns synced lyrics with timestamps when available. Results are cached on\nthe track (``synced_lyrics``) so repeat requests don't re-hit LRCLIB. A\ngenuine miss returns an empty 200 response (not a 404).",
+        "description": "Get lyrics for a track (ADR-0163).\n\nThe listener's own lyrics first (an edit, a `.lrc` sidecar, the file's tags), then LRCLIB. The\nfirst synced source wins, otherwise the first plain one. `status` says which kind of answer this\nis; `unavailable` means LRCLIB could not be asked and says nothing about the track. Found, plain\nand instrumental answers are stored on the track, and a miss is remembered for about two weeks.",
         "operationId": "tracks_get_track_lyrics",
         "parameters": [
           {

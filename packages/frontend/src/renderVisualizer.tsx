@@ -1,7 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { initApiOrigin, registerProfileProvider, setApiOrigin } from './api/base';
+import { initApiOrigin, initServerToken, registerProfileProvider, setApiOrigin } from './api/base';
 import { autoSelectFromURL, profileFromURL } from './services/embedBridge';
 import { EmbedVisualizer } from './components/Embed/EmbedVisualizer';
 import { installVisualizerSink } from './services/visualizerSink';
@@ -22,7 +22,8 @@ import { catalogPromise } from './components/Visualizer/useVisualizerCatalog';
  *
  * The `QueryClient` is here for artwork and lyrics, which the page fetches itself (ADR-0033 point
  * 8) rather than having them pushed down the channel. A channel that carries everything has no
- * shape, and lyrics are a request the page can make perfectly well on its own.
+ * shape, and lyrics are a request the page can make perfectly well on its own. **It did not, until
+ * ADR-0164:** nothing called the lyrics fetch, and the page had neither an allowed origin nor a token.
  */
 export function renderVisualizer(options?: { onReady?: () => void }): void {
   // **First, before anything async.** The host probes for the sink as soon as the document finishes
@@ -98,7 +99,13 @@ export function renderVisualizer(options?: { onReady?: () => void }): void {
   // failure this surface produces over and over. A plugin problem must not take the visualizer down.
   const plugins = catalogPromise().catch(() => []);
 
-  Promise.all([ready, plugins]).then(() => {
+  // **The paired server's token, from the URL fragment** (ADR-0164 point 1), as Discover's embed
+  // takes it. Every API call the page makes other than artwork was refused without it once the
+  // server had a token, so track features, ranking and lyrics all came back empty, and nothing on
+  // the page said so.
+  const token = initServerToken().catch(() => {});
+
+  Promise.all([ready, plugins, token]).then(() => {
     options?.onReady?.();
     createRoot(document.getElementById('root')!).render(
       <StrictMode>
