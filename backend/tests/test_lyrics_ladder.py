@@ -120,13 +120,53 @@ async def test_search_failure_with_nothing_in_hand_is_unavailable_not_a_miss():
     [
         candidate(name="A Different Song"),
         candidate(artist="Someone Else"),
-        # "Saké (Blackjoy Version)" came back 224 s away from its track, as data[0].
-        candidate(duration=424),
     ],
 )
 async def test_search_never_takes_the_first_result_blind(bad):
     outcome = await service(FakeLrclib(search=[bad])).resolve("Song", "Band", None, 200)
     assert outcome.status == LyricsStatus.NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_a_length_that_disagrees_keeps_the_words_and_drops_the_timing():
+    # Right song, different edit: "Weak Ends" at 8 s out would have every line in the wrong place.
+    fake = FakeLrclib(search=[candidate(duration=208)])
+    outcome = await service(fake).resolve("Song", "Band", None, 200)
+    assert outcome.status == LyricsStatus.PLAIN_ONLY
+    assert outcome.result.synced is False
+    assert outcome.result.plain_text == "line"
+
+
+@pytest.mark.asyncio
+async def test_timing_from_another_edit_loses_to_plain_at_the_right_length():
+    fake = FakeLrclib(search=[candidate(duration=300, id=1), candidate(synced=False, id=2)])
+    outcome = await service(fake).resolve("Song", "Band", None, 200)
+    assert outcome.result.source_id == "lrclib:2"
+
+
+@pytest.mark.asyncio
+async def test_a_synced_only_entry_at_the_wrong_length_still_has_words():
+    fake = FakeLrclib(search=[candidate(duration=300, plainLyrics=None)])
+    outcome = await service(fake).resolve("Song", "Band", None, 200)
+    assert outcome.status == LyricsStatus.PLAIN_ONLY
+    assert outcome.result.plain_text == "line"
+
+
+@pytest.mark.asyncio
+async def test_an_instrumental_entry_at_the_wrong_length_is_no_answer():
+    fake = FakeLrclib(search=[candidate(duration=300, synced=False, instrumental=True)])
+    outcome = await service(fake).resolve("Song", "Band", None, 200)
+    assert outcome.status == LyricsStatus.NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_a_gloss_on_the_title_is_believed_only_at_a_matching_length():
+    glossed = candidate(name="Прогноз (Prognoz, Forecast)", artist="Molchat Doma (Молчат Дома)", duration=184)
+    matched = await service(FakeLrclib(search=[glossed])).resolve("Прогноз", "Молчат Дома", None, 185)
+    assert matched.status == LyricsStatus.FOUND
+
+    missed = await service(FakeLrclib(search=[glossed])).resolve("Прогноз", "Молчат Дома", None, 195)
+    assert missed.status == LyricsStatus.NOT_FOUND
 
 
 @pytest.mark.asyncio

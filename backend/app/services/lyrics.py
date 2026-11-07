@@ -22,6 +22,9 @@ DEFAULT_HOLD_SECONDS = 60.0
 #: Wider than LRCLIB's own two seconds: the baseline's right songs included one at four (ADR-0163).
 SEARCH_DURATION_TOLERANCE = 5.0
 
+#: Tighter for `Title (a gloss)`, since dropping the parenthesis could otherwise name another song.
+GLOSSED_TITLE_DURATION_TOLERANCE = 2.0
+
 _FAILED = object()
 
 _FEATURING_GROUP = re.compile(r"\s*[(\[]\s*(?:feat\.?|ft\.?|featuring)\s[^)\]]*[)\]]", re.IGNORECASE)
@@ -34,6 +37,7 @@ _ARTIST_FEATURING = re.compile(r"\s+(?:feat\.?|ft\.?|featuring)\s", re.IGNORECAS
 _ARTICLE_LAST = re.compile(r"^(.+),\s*(the|a|an)$", re.IGNORECASE)
 _ARTIST_JOIN = re.compile(r"\s*(?:&|/|;|,|\band\b)\s*", re.IGNORECASE)
 _NON_WORD = re.compile(r"[^\w]+")
+_PARENTHETICAL = re.compile(r"\s*[(\[][^)\]]*[)\]]")
 
 
 @dataclass
@@ -151,6 +155,14 @@ def _strip_artist(artist: str) -> str:
 
 def _primary_artist(artist: str) -> str:
     return _ARTIST_JOIN.split(_strip_artist(artist))[0].strip()
+
+
+def _without_timing(candidate: dict[str, Any]) -> dict[str, Any]:
+    """The same entry as plain lyrics: its timestamps belong to a different edit."""
+    plain = candidate.get("plainLyrics")
+    if not plain and candidate.get("syncedLyrics"):
+        plain = "\n".join(line.text for line in parse_lrc(candidate["syncedLyrics"]))
+    return {**candidate, "syncedLyrics": None, "plainLyrics": plain}
 
 
 def _key(text: str) -> str:
@@ -288,7 +300,13 @@ class LyricsService:
     def _best_candidate(
         candidates: list[Any], title: str, artist: str, duration: float | None
     ) -> dict[str, Any] | None:
-        """The acceptable `/search` result, if there is one. Never just the first (point 3)."""
+        """The acceptable `/search` result, if there is one. Never just the first (point 3).
+
+        **A length that disagrees rules out the timing, not the words.** Right title and right artist
+        at the wrong length is usually a different edit of the same song: its lyrics still apply, and
+        its timestamps do not. So it comes back without them. Audited on a real library: `MillionYoung`
+        "Weak Ends" at 8 s out and `Zoot Woman` "Nobody Knows" at 30 s out are both the right song.
+        """
         wanted_title = _key(_strip_title(title))
         wanted_artist = _key(_strip_artist(artist))
         wanted_primary = _key(_primary_artist(artist))
@@ -297,16 +315,26 @@ class LyricsService:
         for candidate in candidates:
             if not isinstance(candidate, dict):
                 continue
-            if _key(_strip_title(str(candidate.get("trackName") or ""))) != wanted_title:
-                continue
             their_artist = _key(_strip_artist(str(candidate.get("artistName") or "")))
             if their_artist not in (wanted_artist, wanted_primary) and (
                 not their_artist or wanted_primary not in their_artist
             ):
                 continue
+
             their_length = candidate.get("duration")
             distance = abs(their_length - duration) if their_length and duration else 0.0
+            their_title = _strip_title(str(candidate.get("trackName") or ""))
+            # `Прогноз (Prognoz, Forecast)`: a gloss on the title, only believed at a matching length.
+            if _key(their_title) != wanted_title and (
+                not (their_length and duration)
+                or distance > GLOSSED_TITLE_DURATION_TOLERANCE
+                or _key(_PARENTHETICAL.sub("", their_title)) != wanted_title
+            ):
+                continue
+
             if distance > SEARCH_DURATION_TOLERANCE:
+                if not candidate.get("instrumental"):
+                    accepted.append((2, distance, _without_timing(candidate)))
                 continue
             accepted.append((0 if candidate.get("syncedLyrics") else 1, distance, candidate))
 
