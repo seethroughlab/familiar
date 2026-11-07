@@ -38,6 +38,7 @@ from app.services.artist_image import (
     strict_mb_artist_lookup,
 )
 from app.services.metadata import musicbrainz
+from app.services.metadata.musicbrainz import run_musicbrainz
 from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
@@ -268,7 +269,7 @@ async def gather_candidates(
     if not mbid:
         return candidates
 
-    mb = await asyncio.to_thread(musicbrainz.get_artist_by_id, mbid)
+    mb = await run_musicbrainz(musicbrainz.get_artist_by_id, mbid)
     qid = _wikidata_entity_id((mb or {}).get("urls") or [])
     if qid:
         entity = await _wikidata_entity(client, qid)
@@ -329,7 +330,7 @@ async def fetch_gallery(
     db: AsyncSession, artist: Artist, client: httpx.AsyncClient, *, fanart_key: str | None
 ) -> int:
     """Fetch and store one artist's gallery. The caller commits."""
-    mbid = artist.musicbrainz_id or await asyncio.to_thread(strict_mb_artist_lookup, artist.name)
+    mbid = artist.musicbrainz_id or await run_musicbrainz(strict_mb_artist_lookup, artist.name)
     candidates = await gather_candidates(client, artist.name, mbid, fanart_key)
     return await store(db, artist, rank(candidates))
 

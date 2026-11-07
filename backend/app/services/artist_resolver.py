@@ -20,7 +20,6 @@ Whatever path resolves, the input tag is registered in ``ArtistAlias``
 
 from __future__ import annotations
 
-import asyncio
 import logging
 
 from sqlalchemy import select
@@ -31,6 +30,7 @@ from app.db.models import Artist, ArtistAlias
 from app.services.artist_image import strict_mb_artist_lookup
 from app.services.external_albums_helpers import normalize_artist_name
 from app.services.metadata import musicbrainz
+from app.services.metadata.musicbrainz import run_musicbrainz
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +128,7 @@ async def _create_artist_from_mb(
     runs in a thread). Falls back to the input tag if MB returns no
     name.
     """
-    mb = await asyncio.to_thread(musicbrainz.get_artist_by_id, mbid)
+    mb = await run_musicbrainz(musicbrainz.get_artist_by_id, mbid)
     name = (mb or {}).get("name") or fallback_name.strip()
     sort_name = (mb or {}).get("sort_name") or _compute_sort_name(name)
     artist = Artist(
@@ -190,7 +190,7 @@ async def resolve_canonical_artist(
             # Tag-side MBID points at a known artist by a different
             # name — reject this MBID and fall through.
         elif create_if_missing:
-            mb = await asyncio.to_thread(
+            mb = await run_musicbrainz(
                 musicbrainz.get_artist_by_id, musicbrainz_artist_id
             )
             mb_name = (mb or {}).get("name")
@@ -222,7 +222,7 @@ async def resolve_canonical_artist(
     # 3. Strict MB lookup (only when caller opts in — slow at 1 RPS).
     if do_mb_lookup:
         try:
-            mb_id = await asyncio.to_thread(
+            mb_id = await run_musicbrainz(
                 strict_mb_artist_lookup, artist_tag
             )
         except Exception as e:

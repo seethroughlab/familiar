@@ -1,12 +1,14 @@
 """Track streaming, artwork, and lyrics endpoints."""
 
 import asyncio
+import functools
 import hashlib
 import logging
 import random
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypeVar
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Request, UploadFile
@@ -34,6 +36,8 @@ from app.services.quality import is_lossless_source
 from . import AUDIO_MIME_TYPES
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 #: ADR-0163 point 7. LRCLIB is user-contributed and grows, so a miss is not forever; the jitter keeps
 #: a library's worth of misses from all expiring in the same hour.
@@ -500,7 +504,7 @@ async def _remembered_miss(key: str) -> bool:
     from app.services.redis_client import get_redis
 
     try:
-        return bool(await asyncio.to_thread(get_redis().exists, key))
+        return bool(await _lyrics_thread(get_redis().exists, key))
     except Exception:
         logger.warning("Could not read the lyrics miss cache", exc_info=True)
         return False
@@ -511,7 +515,7 @@ async def _remember_miss(key: str) -> None:
 
     seconds = LYRICS_MISS_TTL_SECONDS + random.randint(0, LYRICS_MISS_TTL_JITTER_SECONDS)
     try:
-        await asyncio.to_thread(get_redis().setex, key, seconds, "1")
+        await _lyrics_thread(get_redis().setex, key, seconds, "1")
     except Exception:
         logger.warning("Could not write the lyrics miss cache", exc_info=True)
 
@@ -578,7 +582,7 @@ async def get_track_lyrics(
     if not track:
         raise TrackNotFoundError()
 
-    identity = await asyncio.to_thread(_lyrics_identity, track)
+    identity = await _lyrics_thread(_lyrics_identity, track)
     cached = track.synced_lyrics
     if cached and cached.get("v") == 2 and cached.get("identity") == identity:
         return _lyrics_response(*_cached(cached))
@@ -621,6 +625,18 @@ async def get_track_lyrics(
     return _lyrics_response(status, result)
 
 
+#: **The lyrics route's blocking work runs on threads of its own.** On 2026-11-07, with MusicBrainz
+#: returning 503s, orphaned MusicBrainz threads filled the default executor, and lyrics requests took
+#: 80-90 s: the stat, the kv lookup and the tag read all queued behind them, before the deadline
+#: below had even started. MusicBrainz has its own executor now too; this keeps lyrics independent of
+#: whatever else uses `asyncio.to_thread`.
+_LYRICS_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="lyrics")
+
+
+async def _lyrics_thread(func: Callable[..., T], /, *args: Any) -> T:
+    return await asyncio.get_running_loop().run_in_executor(_LYRICS_EXECUTOR, functools.partial(func, *args))
+
+
 #: Under the Apple client's ten-second inactivity timeout, with room for the request around it.
 LYRICS_DEADLINE_SECONDS = 8.0
 
@@ -655,7 +671,7 @@ async def _resolve_lyrics(
             await _store_lyrics(session, track_id, identity, status, result)
         return status, result
 
-    local = await asyncio.to_thread(read_local_lyrics, file_path, edited)
+    local = await _lyrics_thread(read_local_lyrics, file_path, edited)
     if local.synced is not None:
         return await keep(LyricsStatus.FOUND, local.synced)
 

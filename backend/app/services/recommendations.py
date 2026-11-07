@@ -1,6 +1,5 @@
 """Recommendations service for discovering similar artists and tracks."""
 
-import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -28,6 +27,7 @@ from app.services.external_albums_helpers import (
     normalize_artist_name,
 )
 from app.services.lastfm import get_lastfm_service
+from app.services.metadata.musicbrainz import run_musicbrainz
 from app.services.search_links import generate_release_search_urls
 from app.utils.time import utcnow
 
@@ -545,7 +545,7 @@ class RecommendationsService:
             mb_id = await self._lookup_mb_id(cand["normalized"])
             if mb_id is None:
                 try:
-                    mb_result = await asyncio.to_thread(search_artist, cand["name"])
+                    mb_result = await run_musicbrainz(search_artist, cand["name"])
                 except Exception as e:
                     logger.warning(
                         f"MusicBrainz search_artist failed for {cand['name']}: {e}"
@@ -571,7 +571,7 @@ class RecommendationsService:
             if not mb_id:
                 continue
             try:
-                releases = await asyncio.to_thread(
+                releases = await run_musicbrainz(
                     get_artist_releases_recent,
                     mb_id,
                     days_back=PLAYLIST_REC_MB_DAYS_BACK,
