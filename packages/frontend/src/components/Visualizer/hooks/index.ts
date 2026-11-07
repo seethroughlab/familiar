@@ -1,29 +1,7 @@
 /**
- * Visualizer Hooks
+ * The audio analyser, re-exported for the host page's visualizer components.
  *
- * Utility hooks for building visualizers with access to audio, artwork,
- * beat timing, and lyric information.
+ * Plugins get their helpers from `@familiar/visualizer-sdk` (ADR-0125); the copies of the beat,
+ * lyric-timing, palette and effects helpers that used to sit beside this had no importer.
  */
-
-// Re-export audio analyser from main hooks
 export { useAudioAnalyser, getAudioData, type AudioAnalysisData } from '../../../hooks/useAudioAnalyser';
-
-// Artwork color extraction
-export { useArtworkPalette, DEFAULT_PALETTE } from './useArtworkPalette';
-
-// BPM synchronization
-export {
-  useBeatSync,
-  getBeatPhase,
-  getBeatSine,
-  DEFAULT_BPM,
-  type BeatSyncData,
-} from './useBeatSync';
-
-// Lyric timing
-export {
-  useLyricTiming,
-  getUpcomingLyrics,
-  getWordTiming,
-  type LyricTimingData,
-} from './useLyricTiming';
