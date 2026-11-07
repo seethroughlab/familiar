@@ -326,7 +326,7 @@ other folder; Familiar Server's own FSEvents watch is gone. Execution order diff
 | 6 | `0136` with `0138` | The menu-bar login-item app (read-only folder, zero-touch enforced by macOS — by the App Sandbox as built, by a Seatbelt profile since `0140`), and the etiquette it keeps: pause on battery/heat, background QoS, never hold the Mac awake. |
 | 7 | `0137` | The phone keeps a copy of its library: favourites kept by default, kept playlists, a storage budget, a defined "away" state. |
 
-**`ADR-0160`–`ADR-0164` get lyrics and the visualizers ready for wide release** (proposed 2026-11-06, for app 1.7). The lyrics
+**`ADR-0160`–`ADR-0164` get lyrics and the visualizers ready for wide release** (accepted 2026-11-07, for app 1.7). The lyrics
 defect was not matching: **nothing ever requested them**, in any app build, and a blocked origin and a
 missing token stood behind that. `0160` makes lyrics a native player mode, `0161` cuts the documents to
 Beat Tiles and Reactive Terrain, `0162` makes an unmodified seeded copy follow the app, `0163` resolves

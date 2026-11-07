@@ -1,6 +1,6 @@
 # ADR-0162: An Unmodified Shipped Copy Follows the App
 
-Status: proposed
+Status: accepted
 
 Date: 2026-11-06
 

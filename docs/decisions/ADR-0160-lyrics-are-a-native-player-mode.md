@@ -1,6 +1,6 @@
 # ADR-0160: Lyrics Are a Native Player Mode
 
-Status: proposed
+Status: accepted
 
 Date: 2026-11-06
 

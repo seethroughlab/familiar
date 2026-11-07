@@ -1,8 +1,16 @@
 # ADR-0163: The Server Resolves Lyrics and Reports a Status
 
-Status: proposed
+Status: accepted
 
 Date: 2026-11-06
+
+Implementation:
+
+- **Built 2026-11-07 in `familiar` #433**, every point but 9: the reject endpoint is not built yet.
+  On the same 400 tracks, synced went from 105 to 132, plain from 67 to 40 (29 upgraded to synced),
+  53 instrumentals were named as such, and misses fell from 222 to 167. Two baseline hits were lost:
+  one was transient on that run, and the other is mistagged with the mix name as its title. LRCLIB's
+  free-text search found 0 of 30 sampled misses.
 
 Extends [ADR-0051](ADR-0051-edited-metadata-outranks-file-tags.md).
 
@@ -62,10 +70,12 @@ LRCLIB's published rules also apply, and the service breaks them: identify the c
    `The X`. **It never strips `live`, `remix`, `version` or `instrumental`**, because those name
    different recordings.
 
-3. **`/search` results are matched, not trusted.** A candidate must match normalised title and artist,
-   and be within 5 s of the track's length when both are known. Synced beats plain, then the closer
-   length wins. No acceptable candidate is a miss. 5 s rather than 3 s because the baseline's hits
-   include right songs at 4 s.
+3. **`/search` results are matched, not trusted.** A candidate must match normalised title and artist.
+   Synced within 5 s of the track's length beats plain within 5 s, and then the closer length wins.
+   **A length further out rules out the timing, not the words:** the right title and artist at the wrong
+   length is usually another edit of the same song, so it is shown as plain lyrics. A title with a
+   parenthetical gloss, such as `Прогноз (Prognoz, Forecast)`, is believed only within 2 s. No acceptable
+   candidate is a miss.
 
 4. **Instrumental is an answer.** It ends the lookup, and is stored and reported.
 

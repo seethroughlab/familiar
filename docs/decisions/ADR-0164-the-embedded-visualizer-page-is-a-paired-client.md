@@ -1,8 +1,15 @@
 # ADR-0164: The Embedded Visualizer Page Is a Paired Client
 
-Status: proposed
+Status: accepted
 
 Date: 2026-11-06
+
+Implementation:
+
+- **Server and page built 2026-11-07 in `familiar` #434:** points 2–4, and point 1's
+  `initServerToken`. Point 5's test against the built page, and the token in the fragment, belong to
+  `familiar-apple`, as does re-vendoring `VisualizerBundle.html`, without which none of this reaches
+  the app.
 
 Extends [ADR-0033](ADR-0033-the-embed-bridge-gains-a-return-channel.md) point 8 and
 [ADR-0134](ADR-0134-clients-pair-with-a-server.md) point 6.

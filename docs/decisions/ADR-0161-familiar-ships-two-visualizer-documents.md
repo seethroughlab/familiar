@@ -1,6 +1,6 @@
 # ADR-0161: Familiar Ships Two Visualizer Documents
 
-Status: proposed
+Status: accepted
 
 Date: 2026-11-06
 
