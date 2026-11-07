@@ -23,6 +23,53 @@ class LyricsResult:
     source: str = "lrclib"
 
 
+#: One or more leading time tags: `[mm:ss]`, `[mm:ss.xx]`, `[mm:ss.xxx]`, or `[mm:ss:xx]`.
+_TIME_TAG = re.compile(r"\[(\d+):(\d{1,2})(?:[.:](\d{1,3}))?\]")
+_OFFSET_TAG = re.compile(r"^\[offset:\s*([+-]?\d+)\s*\]\s*$", re.IGNORECASE)
+#: Enhanced LRC's per-word timing. Lines are the unit here, so these are only noise in the text.
+_WORD_TAG = re.compile(r"<\d+:\d{1,2}(?:[.:]\d{1,3})?>")
+
+
+def parse_lrc(content: str) -> list[LyricLine]:
+    """Parse LRC text into timed lines, earliest first.
+
+    **The fraction is scaled by its own length.** `.34` is 340 ms and `.345` is 345 ms. Dividing every
+    fraction by 100 put a three-digit line up to 9.99 s late, and out of order with its neighbours.
+
+    A line can carry several time tags, for a repeated chorus, and is one line per tag. `[offset:]` is
+    in milliseconds, and a positive value makes the lyrics come sooner, by the format's definition.
+    """
+    offset = 0.0
+    lines: list[LyricLine] = []
+
+    for raw in content.lstrip("\ufeff").splitlines():
+        line = raw.strip()
+        offset_match = _OFFSET_TAG.match(line)
+        if offset_match:
+            offset = int(offset_match.group(1)) / 1000
+            continue
+
+        times: list[float] = []
+        position = 0
+        while match := _TIME_TAG.match(line, position):
+            fraction = match.group(3) or ""
+            times.append(
+                int(match.group(1)) * 60
+                + int(match.group(2))
+                + (int(fraction) / 10 ** len(fraction) if fraction else 0.0)
+            )
+            position = match.end()
+
+        text = _WORD_TAG.sub("", line[position:]).strip()
+        if text:
+            lines.extend(LyricLine(time=time, text=text) for time in times)
+
+    return sorted(
+        (LyricLine(time=max(0.0, line.time - offset), text=line.text) for line in lines),
+        key=lambda line: line.time,
+    )
+
+
 class LyricsService:
     """Service for fetching song lyrics with optional sync timing."""
 
@@ -120,7 +167,7 @@ class LyricsService:
             return None
 
         if synced_lyrics:
-            lines = self._parse_lrc(synced_lyrics)
+            lines = parse_lrc(synced_lyrics)
             return LyricsResult(
                 synced=True,
                 lines=lines,
@@ -142,28 +189,6 @@ class LyricsService:
                 plain_text=plain_text,
                 source="lrclib"
             )
-
-    def _parse_lrc(self, lrc_content: str) -> list[LyricLine]:
-        """Parse LRC format lyrics into list of LyricLine objects."""
-        lines = []
-        # LRC format: [mm:ss.xx] or [mm:ss:xx] lyric text
-        pattern = r'\[(\d+):(\d+)[.:](\d+)\]\s*(.*)'
-
-        for line in lrc_content.split("\n"):
-            match = re.match(pattern, line)
-            if match:
-                minutes = int(match.group(1))
-                seconds = int(match.group(2))
-                centiseconds = int(match.group(3))
-                text = match.group(4).strip()
-
-                # Convert to seconds
-                time_seconds = minutes * 60 + seconds + centiseconds / 100
-
-                if text:  # Skip empty lines
-                    lines.append(LyricLine(time=time_seconds, text=text))
-
-        return sorted(lines, key=lambda x: x.time)
 
     async def close(self) -> None:
         """Close the HTTP client."""
