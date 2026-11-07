@@ -13,12 +13,14 @@ from fastapi import APIRouter, Query, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.concurrency import encoder_limiter
 from app.api.deps import DbSession, release_connection
 from app.api.exceptions import NotFoundError, TrackNotFoundError, TranscodeError, ValidationError
 from app.config import settings
 from app.db.models import Track
+from app.db.session import async_session_maker
 from app.services.artwork import album_key_for_track, get_artwork_path
 from app.services.flac_remux import AAC, FLAC, TranscodeTarget, transcode_to_file
 from app.services.lyrics import (
@@ -515,7 +517,7 @@ async def _remember_miss(key: str) -> None:
 
 
 async def _store_lyrics(
-    db: DbSession, track_id: UUID, identity: str, status: LyricsStatus, result: LyricsResult | None
+    db: AsyncSession, track_id: UUID, identity: str, status: LyricsStatus, result: LyricsResult | None
 ) -> None:
     """Persist an answer **without moving `updated_at`**.
 
@@ -572,9 +574,6 @@ async def get_track_lyrics(
     # then cannot type this module's `router` through the package's import cycle.
     from sqlalchemy import select
 
-    from app.services.lyrics import get_lyrics_service
-    from app.services.lyrics_local import read_local_lyrics
-
     track = (await db.execute(select(Track).where(Track.id == track_id))).scalar_one_or_none()
     if not track:
         raise TrackNotFoundError()
@@ -595,13 +594,70 @@ async def get_track_lyrics(
     album_artist, duration = track.album_artist, track.duration_seconds
     file_path, edited = track.file_path, track.lyrics
     # Nothing below needs the row, and LRCLIB can take seconds: give the connection back first.
-    # The stores below take a fresh one for their one statement.
+    # The lookup stores through a session of its own.
     await release_connection(db)
+
+    # **Answered within a deadline, finished regardless.** The app's client gives up after ten
+    # seconds without a byte, and a lookup once took 17.5 s: the phone said "Your server didn't
+    # answer" while this went on to find and store the lyrics. So the work runs as its own task, the
+    # request waits for it only so long, and an overrun answers `unavailable` (try again) while the
+    # task finishes and stores. The app retries once, and then the stored answer is there. One task
+    # per track: the app and the visualizer page often ask about the same track at the same moment.
+    key = (track_id, identity)
+    work = _LYRICS_IN_FLIGHT.get(key)
+    if work is None:
+        work = asyncio.ensure_future(_resolve_lyrics(
+            track_id, identity, miss_key, legacy,
+            title=title, artist=artist, album=album, album_artist=album_artist,
+            duration=duration, file_path=file_path, edited=edited,
+        ))
+        _LYRICS_IN_FLIGHT[key] = work
+        work.add_done_callback(lambda _: _LYRICS_IN_FLIGHT.pop(key, None))
+    try:
+        status, result = await asyncio.wait_for(asyncio.shield(work), LYRICS_DEADLINE_SECONDS)
+    except TimeoutError:
+        logger.info("Lyrics for %s are still being looked up; answering unavailable", track_id)
+        return _lyrics_response(*legacy) if legacy else _lyrics_response(LyricsStatus.UNAVAILABLE)
+    return _lyrics_response(status, result)
+
+
+#: Under the Apple client's ten-second inactivity timeout, with room for the request around it.
+LYRICS_DEADLINE_SECONDS = 8.0
+
+#: Lookups running now, by track and identity. A finished one removes itself.
+_LYRICS_IN_FLIGHT: dict[tuple[UUID, str], asyncio.Future[tuple[LyricsStatus, LyricsResult | None]]] = {}
+
+
+async def _resolve_lyrics(
+    track_id: UUID,
+    identity: str,
+    miss_key: str,
+    legacy: tuple[LyricsStatus, LyricsResult | None] | None,
+    *,
+    title: str | None,
+    artist: str | None,
+    album: str | None,
+    album_artist: str | None,
+    duration: float | None,
+    file_path: str | None,
+    edited: str | None,
+) -> tuple[LyricsStatus, LyricsResult | None]:
+    """The lookup and its storage, independent of the request that started it.
+
+    Stores through a session of its own: it can outlive the request, and the request's session is
+    closed when the response goes.
+    """
+    from app.services.lyrics import get_lyrics_service
+    from app.services.lyrics_local import read_local_lyrics
+
+    async def keep(status: LyricsStatus, result: LyricsResult | None) -> tuple[LyricsStatus, LyricsResult | None]:
+        async with async_session_maker() as session:
+            await _store_lyrics(session, track_id, identity, status, result)
+        return status, result
 
     local = await asyncio.to_thread(read_local_lyrics, file_path, edited)
     if local.synced is not None:
-        await _store_lyrics(db, track_id, identity, LyricsStatus.FOUND, local.synced)
-        return _lyrics_response(LyricsStatus.FOUND, local.synced)
+        return await keep(LyricsStatus.FOUND, local.synced)
 
     if not title or not artist:
         outcome = LyricsOutcome(LyricsStatus.NOT_FOUND)
@@ -615,19 +671,15 @@ async def get_track_lyrics(
         )
 
     if outcome.status == LyricsStatus.FOUND or outcome.status == LyricsStatus.INSTRUMENTAL:
-        await _store_lyrics(db, track_id, identity, outcome.status, outcome.result)
-        return _lyrics_response(outcome.status, outcome.result)
+        return await keep(outcome.status, outcome.result)
 
     # The listener's own words outrank LRCLIB's when neither has timing.
     plain = local.plain or (outcome.result if outcome.status == LyricsStatus.PLAIN_ONLY else None)
     if plain is not None:
-        await _store_lyrics(db, track_id, identity, LyricsStatus.PLAIN_ONLY, plain)
-        return _lyrics_response(LyricsStatus.PLAIN_ONLY, plain)
+        return await keep(LyricsStatus.PLAIN_ONLY, plain)
 
     if outcome.status == LyricsStatus.UNAVAILABLE:
-        if legacy is not None:
-            return _lyrics_response(*legacy)
-        return _lyrics_response(LyricsStatus.UNAVAILABLE)
+        return legacy if legacy else (LyricsStatus.UNAVAILABLE, None)
 
     await _remember_miss(miss_key)
-    return _lyrics_response(LyricsStatus.NOT_FOUND)
+    return LyricsStatus.NOT_FOUND, None

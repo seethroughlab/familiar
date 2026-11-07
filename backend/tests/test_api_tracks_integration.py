@@ -212,6 +212,49 @@ class TestLyricsStatusAndCaching:
         assert (body["status"], body["lines"][0]["text"]) == ("found", "old")
 
 
+class TestLyricsDeadline:
+    """A slow lookup answers `unavailable` in time and still stores its answer (the first 1.7 build
+    showed "Your server didn't answer" over a track whose lyrics the server went on to find)."""
+
+    @pytest.mark.asyncio
+    async def test_an_overrun_answers_unavailable_and_keeps_going(self, async_db, client, monkeypatch):
+        import asyncio
+        import time
+
+        from app.api.routes.tracks import streaming
+        from app.services.lyrics import LyricLine, LyricsOutcome, LyricsResult, LyricsStatus
+
+        t = await insert_test_track(async_db, title="Slow", artist="Band")
+        await async_db.commit()
+        monkeypatch.setattr(streaming, "LYRICS_DEADLINE_SECONDS", 0.2)
+
+        class _Slow:
+            calls = 0
+
+            async def resolve(self, **kwargs):
+                _Slow.calls += 1
+                await asyncio.sleep(0.6)
+                return LyricsOutcome(LyricsStatus.FOUND, LyricsResult(
+                    synced=True, lines=[LyricLine(time=1.0, text="late")], plain_text="late", source="lrclib",
+                ))
+
+        monkeypatch.setattr("app.services.lyrics.get_lyrics_service", lambda: _Slow())
+
+        first = client.get(f"/api/v1/tracks/{t.id}/lyrics").json()
+        assert first["status"] == "unavailable"
+
+        # The lookup finishes on its own and stores; the next request is served from that.
+        deadline = time.monotonic() + 5
+        body = {}
+        while time.monotonic() < deadline:
+            body = client.get(f"/api/v1/tracks/{t.id}/lyrics").json()
+            if body["status"] == "found":
+                break
+            time.sleep(0.1)
+        assert (body["status"], body["lines"][0]["text"]) == ("found", "late")
+        assert _Slow.calls == 1, "a second request during the lookup joins it rather than starting another"
+
+
 class TestListTrackIds:
     @pytest.mark.asyncio
     async def test_returns_ids(self, async_db, client):
