@@ -1,5 +1,9 @@
 /** Default visualizer shown on first load. */
-export const DEFAULT_VISUALIZER_ID = 'reactive-terrain';
+/**
+ * The same default the Apple app's menu uses (`beat-tiles`). They disagreed, so a page told nothing drew
+ * a different visualizer from the one the app's menu ticked.
+ */
+export const DEFAULT_VISUALIZER_ID = 'beat-tiles';
 
 /**
  * localStorage key for persisted visualizer preference.

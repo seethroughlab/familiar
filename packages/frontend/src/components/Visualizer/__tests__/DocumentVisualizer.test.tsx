@@ -12,7 +12,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, cleanup, act } from '@testing-library/react';
-import { DocumentVisualizer, READY, EVENT_API_VERSION } from '../DocumentVisualizer';
+import { DocumentVisualizer, READY, EVENT_API_VERSION, withPublishedTiming } from '../DocumentVisualizer';
 
 const audio = { bass: 0.5, mid: 0.4, treble: 0.3, averageFrequency: 120, beat: 0.9, onset: true, frequencyData: new Uint8Array([1, 2, 3]) };
 const subscribe = vi.fn();
@@ -162,5 +162,16 @@ describe('the audio payload', () => {
     const payload = audioFrames[0].payload as Record<string, unknown>;
     expect(payload.beat).toBe(0.9);
     expect(payload.onset).toBe(true);
+  });
+});
+
+describe('withPublishedTiming (ADR-0164 point 4)', () => {
+  // The docs and examples/lyric-pulse read `startTime`; everything else sent only `time`, so a
+  // document written from the docs drew no line at all.
+  it('sends the published fields beside the SDK’s', () => {
+    expect(withPublishedTiming([{ time: 1, text: 'a' }, { time: 3.5, text: 'b' }])).toEqual([
+      { time: 1, text: 'a', startTime: 1, endTime: 3.5 },
+      { time: 3.5, text: 'b', startTime: 3.5, endTime: undefined },
+    ]);
   });
 });
