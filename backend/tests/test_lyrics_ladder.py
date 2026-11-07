@@ -3,7 +3,7 @@
 import httpx
 import pytest
 
-from app.services.lyrics import LyricsService, LyricsStatus
+from app.services.lyrics import LRCLIB_APP_ID, USER_AGENT, LyricsService, LyricsStatus
 
 SYNCED = {"id": 1, "syncedLyrics": "[00:01.00]line", "plainLyrics": "line", "duration": 200}
 PLAIN = {"id": 2, "syncedLyrics": None, "plainLyrics": "words", "duration": 200}
@@ -45,6 +45,18 @@ async def test_an_exact_synced_hit_takes_one_call():
     assert outcome.status == LyricsStatus.FOUND
     assert outcome.result.source_id == "lrclib:1"
     assert fake.paths() == ["get"]
+
+
+@pytest.mark.asyncio
+async def test_every_request_names_the_registered_app():
+    """LRCLIB's registration only means something if each request carries the ID; the
+    authorization document cited to App Review is about this application (2026-11-07)."""
+    fake = FakeLrclib(search=[candidate()])
+    await service(fake).resolve("Song", "Band", "Album", 200)
+    assert "search" in fake.paths()
+    for call in fake.calls:
+        assert call.headers["Lrclib-App-Id"] == LRCLIB_APP_ID
+        assert call.headers["User-Agent"] == USER_AGENT
 
 
 @pytest.mark.asyncio

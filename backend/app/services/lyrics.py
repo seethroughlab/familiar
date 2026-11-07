@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 #: LRCLIB asks clients to identify themselves.
 USER_AGENT = "Familiar (https://github.com/seethroughlab/familiar)"
+#: Familiar's registration at lrclib.net/developers (client-side, 2026-11-07). Public and
+#: self-asserted, not a credential: it names the app on LRCLIB's side and backs the shareable
+#: authorization document cited in familiar-apple's APP-REVIEW-NOTES.md.
+LRCLIB_APP_ID = "mbbWyD6CzJZx2ZTZ75B2y2VX6YjlEGQ_fkdvTu20VaA"
 #: LRCLIB asks for sequential requests 200-500 ms apart.
 MIN_INTERVAL_SECONDS = 0.3
 #: For a 429 with no usable `Retry-After`.
@@ -185,7 +189,7 @@ class LyricsService:
         self.client = httpx.AsyncClient(
             transport=transport,
             timeout=httpx.Timeout(6.0, connect=3.0),
-            headers={"User-Agent": USER_AGENT},
+            headers={"User-Agent": USER_AGENT, "Lrclib-App-Id": LRCLIB_APP_ID},
         )
         self._min_interval = min_interval
         self._pace = asyncio.Lock()
