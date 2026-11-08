@@ -10,15 +10,56 @@
  * reassembles on the box fronts, so it stays recognizable.
  */
 import { useRef, useMemo, useState, useEffect } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
+import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { AudioReactiveEffects, FrameScheduler, getAudioData, useArtworkPalette, useAudioAnalyser, type VisualizerProps } from '@familiar/visualizer-sdk';
 const isMobile = () => window.matchMedia('(max-width: 768px)').matches;
 
 const mobile = isMobile();
 const GRID = mobile ? 6 : 10;
 const COVER = 5; // world size of the cover
+
+/**
+ * **What glows is chosen, not found.** The bloom picks every pixel brighter than its
+ * threshold, and a cover's brightness is whatever the album's art is. So a low threshold
+ * bloomed white covers across the whole frame (1.7 builds 74-75) and a high one never
+ * reached a dark cover (builds 76-78). Now the threshold sits at 1 and stays there, a cover
+ * is capped at 0.9 so it never reaches it, and only a pop is driven past 1: a popped tile's
+ * sides, and a coverless tile's face. The bloom's strength no longer has to guess.
+ */
+// Dialled in by eye on an iPhone 13 with the temporary tuner (2026-11-08): bloom 1.32,
+// threshold 0.82, pop glow 0.99. Covers are capped at 0.9, so the brightest parts of a
+// cover can glow faintly on a pop; the rest of it never reaches the threshold.
+const BLOOM_THRESHOLD = 0.62;
+const BLOOM_STRENGTH = 0.24;
+const COVERLESS_BLOOM_THRESHOLD = 1.1;
+
+// Dialled in on the phone with a temporary on-screen tuner (2026-11-08): how far a popped tile's
+// glow is driven, and the exposure that lights the textured coverless tiles.
+const tuning = { popGlow: 0.64, exposure: 1.66 } as const;
+
+const FOV = 55; // vertical, degrees
+const REST_DISTANCE = 7; // the camera's distance in a wide frame
+const DOLLY = 0.5; // how far a big beat pulls the camera in
+
+/**
+ * How far back the camera sits so the whole grid's width fits the frame (2026-11-08).
+ *
+ * The field of view is vertical, so a tall frame sees less width. At 7 units a phone in
+ * portrait (aspect ~0.46) saw about two thirds of the grid, and the outer columns were cut
+ * off. Backing off by the frame's aspect keeps every tile in view with a margin, plus room
+ * for a popped tile to come forward and for the beat's dolly. A wide frame never comes
+ * closer than ``REST_DISTANCE``, so the Mac looks as it always has.
+ */
+export function fitDistance(aspect: number): number {
+  const halfWidth = COVER / 2 + 0.25; // the outer tiles' edges, and a margin
+  const popAllowance = 1.3; // a popped edge tile comes forward and looks wider
+  const tan = Math.tan(THREE.MathUtils.degToRad(FOV / 2));
+  const fit = halfWidth / (tan * Math.max(aspect, 0.1)) + popAllowance + DOLLY;
+  return Math.max(REST_DISTANCE, fit);
+}
 
 // Ripple timing (seconds).
 const RIPPLE_DELAY = 0.34; // extra delay for the farthest tile (wave travel time)
@@ -82,6 +123,40 @@ const SIDE_FRAG = /* glsl */ `
   }
 `;
 
+// Front-face shader for a coverless album: a lit block rather than a flat swatch. A soft
+// falloff across the face (lit from the upper left), a bevelled rim that catches the light,
+// and a sheen in the album's hue that moves as the camera drifts. uGlow is the pop: at rest
+// the face stays dark, and a pop drives it past 1 so the bloom picks it up.
+const COVERLESS_FRAG = /* glsl */ `
+  precision highp float;
+  uniform vec3 uColor;
+  uniform vec3 uSheen;
+  uniform float uGlow;
+  varying vec3 vNormalV;
+  varying vec3 vViewDir;
+  varying vec2 vUv;
+
+  void main() {
+    vec2 uv = clamp(vUv, 0.0, 1.0);
+    vec3 N = normalize(vNormalV);
+    vec3 V = normalize(vViewDir);
+    vec3 L = normalize(vec3(-0.45, 0.6, 0.8));
+    float diffuse = 0.55 + 0.6 * max(dot(N, L), 0.0);
+    float falloff = mix(0.8, 1.25, (uv.y + (1.0 - uv.x)) * 0.5);
+    float edge = min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y));
+    float rim = 1.0 - smoothstep(0.0, 0.07, edge);
+    float fres = pow(1.0 - max(dot(N, V), 0.0), 2.0);
+    vec3 col = uColor * diffuse * falloff;
+    col += uSheen * (rim * 0.35 + fres * 0.5);
+    col *= uGlow;
+    // A strong pop lights the face's centre from within, so it blooms as a glow
+    // rather than as a brighter flat square.
+    float core = 1.0 - smoothstep(0.0, 0.62, length(uv - 0.5));
+    col += uSheen * core * max(uGlow - 2.0, 0.0) * 1.2;
+    gl_FragColor = vec4(col, 1.0);
+  }
+`;
+
 interface Ripple {
   t0: number;
   strength: number;
@@ -90,6 +165,9 @@ interface Ripple {
 interface Tile {
   geometry: THREE.BoxGeometry;
   front: THREE.MeshBasicMaterial;
+  lit: THREE.ShaderMaterial | null; // the coverless front, lit; null when there's a cover
+  std: THREE.MeshStandardMaterial | null; // the coverless cube's material, once the maps load
+  stdMaps: THREE.Texture[]; // this tile's clones of the shared maps, to dispose
   side: THREE.ShaderMaterial;
   materials: THREE.Material[];
   x: number;
@@ -107,11 +185,13 @@ function TilesScene({
   backdrop,
   palette,
   coverlessHueValue,
+  materialMaps,
 }: {
   tex: THREE.Texture | null;
   backdrop: THREE.Texture | null;
   palette: string[];
   coverlessHueValue: number;
+  materialMaps: MaterialMaps[] | null;
 }) {
   useAudioAnalyser(true);
   const meshRefs = useRef<(THREE.Mesh | null)[]>([]);
@@ -136,12 +216,14 @@ function TilesScene({
         // so a flipped tile still shows the art. The back is mirrored in U so it reads
         // correctly after a 180° flip. The 4 thin edge faces stay palette-coloured.
         const uv = geometry.attributes.uv as THREE.BufferAttribute;
-        for (let k = 16; k < 20; k++) {
+        // A coverless cube keeps whole-face UVs: its material is tiled per face, not cut
+        // from one picture.
+        for (let k = tex ? 16 : 24; k < 20; k++) {
           const ux = uv.getX(k);
           const uy = uv.getY(k);
           uv.setXY(k, (col + ux) / GRID, (GRID - 1 - row + uy) / GRID);
         }
-        for (let k = 20; k < 24; k++) {
+        for (let k = tex ? 20 : 24; k < 24; k++) {
           const ux = uv.getX(k);
           const uy = uv.getY(k);
           uv.setXY(k, (col + (1 - ux)) / GRID, (GRID - 1 - row + uy) / GRID);
@@ -155,6 +237,18 @@ function TilesScene({
           color: rest ? rest.clone() : new THREE.Color(1, 1, 1),
           toneMapped: false,
         });
+        const lit = rest
+          ? new THREE.ShaderMaterial({
+              uniforms: {
+                uColor: { value: rest.clone() },
+                uSheen: { value: new THREE.Color().setHSL((baseHSL.h + 0.04) % 1, 0.6, 0.45, THREE.SRGBColorSpace) },
+                uGlow: { value: 1 },
+              },
+              vertexShader: SIDE_VERT,
+              fragmentShader: COVERLESS_FRAG,
+              toneMapped: false,
+            })
+          : null;
         // Without a cover the side faces stay near the album's hue rather than sweeping
         // the whole wheel, so a flipped tile reads as part of the same picture.
         const hue = (baseHSL.h + dist * (tex ? 0.42 : 0.12)) % 1;
@@ -173,21 +267,59 @@ function TilesScene({
         });
         // Box face order: px, nx, py, ny, pz(front), nz(back). Art on front + back,
         // palette glow on the 4 thin edges.
-        const materials = [side, side, side, side, front, front];
+        // With the materials loaded, a coverless tile is a real cube: one lit, textured
+        // material on every face, lit by the studio environment. The emissive is the pop.
+        let std: THREE.MeshStandardMaterial | null = null;
+        const stdMaps: THREE.Texture[] = [];
+        if (!tex && materialMaps) {
+          const [main, a, b] = albumMaterials(baseHSL.h);
+          const r = hash01(baseHSL.h, row * GRID + col);
+          const set = materialMaps[r < 0.6 ? main : r < 0.85 ? a : b];
+          // Each tile shows its own quarter of the texture, so neighbours don't repeat.
+          const ox = hash01(baseHSL.h, row * GRID + col + 500) * 0.5;
+          const oy = hash01(baseHSL.h, row * GRID + col + 900) * 0.5;
+          const own = (t: THREE.Texture) => {
+            const c = t.clone();
+            c.repeat.set(0.5, 0.5);
+            c.offset.set(ox, oy);
+            stdMaps.push(c);
+            return c;
+          };
+          const orm = own(set.orm);
+          std = new THREE.MeshStandardMaterial({
+            map: own(set.color),
+            normalMap: own(set.normal),
+            roughnessMap: orm,
+            metalnessMap: orm,
+            aoMap: orm,
+            metalness: 1,
+            roughness: 1,
+            color: new THREE.Color(1, 1, 1).lerp(new THREE.Color().setHSL(baseHSL.h, 0.6, 0.6), 0.22),
+            emissive: new THREE.Color().setHSL(baseHSL.h, 0.8, 0.6, THREE.SRGBColorSpace),
+            emissiveMap: getRimMask(),
+            emissiveIntensity: 0,
+            envMapIntensity: 1.6,
+          });
+        }
+        const face = lit ?? front;
+        const materials = std ? [std, std, std, std, std, std] : [side, side, side, side, face, face];
 
         const x = (col - (GRID - 1) / 2) * size;
         const y = ((GRID - 1) / 2 - row) * size;
-        out.push({ geometry, front, side, materials, x, y, dist, phase: Math.random(), hue, flip: 0, flipTarget: 0, rest });
+        out.push({ geometry, front, lit, std, stdMaps, side, materials, x, y, dist, phase: Math.random(), hue, flip: 0, flipTarget: 0, rest });
       }
     }
     return out;
-  }, [tex, palette, coverlessHueValue]);
+  }, [tex, palette, coverlessHueValue, materialMaps]);
 
   useEffect(() => {
     return () => {
       for (const t of tiles) {
         t.geometry.dispose();
         t.front.dispose();
+        t.lit?.dispose();
+        t.std?.dispose();
+        for (const m of t.stdMaps) m.dispose();
         t.side.dispose();
       }
     };
@@ -272,11 +404,18 @@ function TilesScene({
       // full glow, and on a phone the popped tiles fill most of the screen. A popped
       // side (up to 0.9) still crosses the bloom threshold, so pops glow and rest doesn't.
       // (1.05 and 1.5 turned the whole frame white on every beat, glow or no glow.)
-      // Without a cover the front keeps its own shade and a pop lifts it, up to about 2.6
-      // times its rest. (Until 1.7 this set every coverless tile to the same flat grey.)
-      if (t.rest) t.front.color.copy(t.rest).multiplyScalar(1 + Math.min(z, 1) * 1.6);
+      // Without a cover the lit front rests dark and a pop drives it past 1, into the bloom.
+      // (Until 1.7 this set every coverless tile to the same flat grey.)
+      // A pop lights the cube from inside, past the bloom threshold, so it glows.
+      if (t.std) t.std.emissiveIntensity = Math.min(Math.max(z - 0.35, 0), 1.0) * 2.0 * tuning.popGlow;
+      if (t.lit) t.lit.uniforms.uGlow.value = 1 + Math.min(z, 1.4) * 1.2 * tuning.popGlow;
       else t.front.color.setScalar(THREE.MathUtils.clamp(0.5 + z * 0.25, 0.5, 0.9));
-      t.side.uniforms.uGlow.value = THREE.MathUtils.clamp(0.35 + z * 0.4, 0.3, 0.9);
+      // Up to 0.9 the sides track the pop as before; past that, a strong pop drives them
+      // over the bloom threshold so the tile's edges glow.
+      // Without a cover every side shares one hue, so they all cross together: dimmer.
+      t.side.uniforms.uGlow.value =
+        (THREE.MathUtils.clamp(0.35 + z * 0.4, 0.3, 0.9) + Math.max(z - 0.8, 0) * 0.5 * tuning.popGlow) *
+        (t.lit ? 0.6 : 1);
       t.side.uniforms.uTime.value = elapsed;
     }
 
@@ -284,7 +423,7 @@ function TilesScene({
     const cam = state.camera;
     cam.position.x = Math.sin(elapsed * 0.12) * 0.7;
     cam.position.y = 0.4 + Math.sin(elapsed * 0.09) * 0.4;
-    cam.position.z = 7 - beat * 0.5;
+    cam.position.z = fitDistance(state.size.width / Math.max(state.size.height, 1)) - beat * DOLLY;
     cam.lookAt(0, 0, 0);
   });
 
@@ -298,6 +437,16 @@ function TilesScene({
         </mesh>
       )}
       {reflector && <primitive object={reflector} />}
+      {!tex && materialMaps && (
+        <>
+          <StudioEnvironment />
+          {/* Key light from the upper left. The fill is a hemisphere light, which brightens
+              surfaces without a reflection: a directional fill near the camera mirrored off
+              the flat metal fronts straight into the lens and bloomed as a hot spot. */}
+          <directionalLight position={[-3, 4, 6]} intensity={1.6} />
+          <hemisphereLight args={['#ffffff', '#202020', 0.9]} />
+        </>
+      )}
       <group>
         {tiles.map((t, i) => (
           <mesh
@@ -312,11 +461,12 @@ function TilesScene({
       <AudioReactiveEffects
         enableBloom
         enableVignette
-        // Tuned on rendered frames at phone width (1.7 builds 74-75): 0.45 with a 0.6
-        // threshold washed the frame white on every beat, 0.2 with 0.85 never glowed at
-        // all. This lets a popped tile's bright edge halo while the cover holds.
-        bloomIntensity={mobile ? 0.25 : 0.35}
-        bloomThreshold={0.75}
+        // See BLOOM_THRESHOLD: the threshold is fixed, and only pops cross it.
+        bloomIntensity={BLOOM_STRENGTH}
+        // A lit, textured cube's brightest face sits near 1, so the coverless scene blooms
+        // only above that; the pop's rim is driven well past it.
+        bloomThreshold={tex ? BLOOM_THRESHOLD : COVERLESS_BLOOM_THRESHOLD}
+        bloomThresholdFollowsMusic={false}
         bloomRadius={0.45}
         bloomBassBoost={0.1}
         halfResolution={mobile}
@@ -347,6 +497,139 @@ export function coverlessHue(seed: string): number {
 export function coverlessTileColor(hue: number, col: number, row: number, dist: number): THREE.Color {
   const h = (hue + ((col - row) / GRID) * 0.06 + 1) % 1;
   return new THREE.Color().setHSL(h, 0.5, 0.11 + 0.1 * (1 - dist), THREE.SRGBColorSpace);
+}
+
+/**
+ * Materials for an album with no cover: eight CC0 sets from ambientCG, packed at 512 px into
+ * colour, normal and occlusion/roughness/metalness (``public/m-<name>-*.jpg``; credits in
+ * ``public/CREDITS.md``). Each album uses three of them, chosen from its name, so it always
+ * looks the same and different albums look different.
+ */
+const MATERIAL_NAMES = ['plaster', 'gold', 'red', 'teal', 'plates', 'tiles', 'rust', 'steel'] as const;
+type MaterialMaps = { color: THREE.Texture; normal: THREE.Texture; orm: THREE.Texture };
+
+let materialsPromise: Promise<MaterialMaps[]> | null = null;
+function loadMaterials(): Promise<MaterialMaps[]> {
+  if (!materialsPromise) {
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin('anonymous');
+    const load = (file: string, srgb: boolean) =>
+      loader.loadAsync(file).then((t) => {
+        t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        t.anisotropy = 4;
+        return t;
+      });
+    materialsPromise = Promise.all(
+      MATERIAL_NAMES.map(async (name) => ({
+        color: await load(`m-${name}-c.jpg`, true),
+        normal: await load(`m-${name}-n.jpg`, false),
+        orm: await load(`m-${name}-orm.jpg`, false),
+      }))
+    ).catch((err) => {
+      materialsPromise = null; // try again next time rather than never
+      throw err;
+    });
+  }
+  return materialsPromise;
+}
+
+function useCoverlessMaterials(wanted: boolean): MaterialMaps[] | null {
+  const [maps, setMaps] = useState<MaterialMaps[] | null>(null);
+  useEffect(() => {
+    if (!wanted || maps) return;
+    let live = true;
+    loadMaterials().then((m) => live && setMaps(m), () => undefined);
+    return () => {
+      live = false;
+    };
+  }, [wanted, maps]);
+  return maps;
+}
+
+/**
+ * Something for the metal to reflect: a CC0 studio HDRI from Poly Haven (``public/env.hdr``),
+ * prefiltered once and set as the scene's environment. Without it a metallic material has
+ * nothing to show and reads as flat grey.
+ */
+function StudioEnvironment() {
+  const { gl, scene } = useThree();
+  // Exposure brightens the picture after the bloom has picked what glows, so it lifts the
+  // cubes at rest without lighting up more of the frame. Only while there is no cover.
+  useFrame(() => {
+    gl.toneMappingExposure = tuning.exposure;
+  });
+  useEffect(() => () => void (gl.toneMappingExposure = 1), [gl]);
+  useEffect(() => {
+    let live = true;
+    let target: THREE.WebGLRenderTarget | null = null;
+    new HDRLoader().setDataType(THREE.FloatType).load('env.hdr', (hdr) => {
+      if (!live) return hdr.dispose();
+      // Clamp the studio's lights. Its softboxes are many times brighter than 1, so every
+      // reflection of one crossed the bloom threshold and the cube edges lit up as a grid of
+      // white lines. Below the threshold, reflections stay reflections and only a pop glows.
+      const data = hdr.image.data as Float32Array;
+      for (let i = 0; i < data.length; i++) if (data[i] > ENV_CEILING) data[i] = ENV_CEILING;
+      hdr.mapping = THREE.EquirectangularReflectionMapping;
+      const pmrem = new THREE.PMREMGenerator(gl);
+      target = pmrem.fromEquirectangular(hdr);
+      scene.environment = target.texture;
+      scene.environmentIntensity = 1.8; // x ENV_CEILING stays under the bloom threshold
+      hdr.dispose();
+      pmrem.dispose();
+    });
+    return () => {
+      live = false;
+      scene.environment = null;
+      target?.dispose();
+    };
+  }, [gl, scene]);
+  return null;
+}
+
+/**
+ * Where a coverless cube glows on a pop: its rim, fading to nothing a fifth of the way in.
+ * A whole-face glow lit most of the grid at once on a loud passage and washed the frame white;
+ * a rim reads as light catching the edge, as the cover version's side faces do.
+ */
+let rimMask: THREE.CanvasTexture | null = null;
+function getRimMask(): THREE.CanvasTexture {
+  if (rimMask) return rimMask;
+  const S = 128;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const ctx = c.getContext('2d')!;
+  const img = ctx.createImageData(S, S);
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const e = Math.min(x, S - 1 - x, y, S - 1 - y) / S; // 0 at the edge, 0.5 at the centre
+      const v = Math.round(255 * Math.pow(Math.max(0, 1 - e / 0.2), 2.2));
+      const i = (y * S + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  rimMask = new THREE.CanvasTexture(c);
+  return rimMask;
+}
+
+/** The brightest the studio environment may be, so a reflection never blooms. */
+const ENV_CEILING = 0.55;
+
+/** A small deterministic hash of a string and a number, in [0, 1). */
+function hash01(seed: number, i: number): number {
+  let h = Math.imul((seed * 0x100000000) ^ (i + 0x9e3779b9), 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return (h >>> 0) / 0x100000000;
+}
+
+/** The album's three materials, by index into MATERIAL_NAMES: one main, two accents. */
+export function albumMaterials(hue: number): [number, number, number] {
+  const order = MATERIAL_NAMES.map((_, i) => i).sort((a, b) => hash01(hue, a + 101) - hash01(hue, b + 101));
+  return [order[0], order[1], order[2]];
 }
 
 // A coverless backdrop: the album's hue as a dim glow behind the grid.
@@ -435,14 +718,16 @@ export function BeatTiles({ artworkUrl, track }: VisualizerProps) {
     };
   }, [artworkUrl]);
 
+  const materialMaps = useCoverlessMaterials(!tex);
+
   // Shown while there is no cover: before one loads, and for an album that has none.
   const coverlessBackdrop = useMemo(() => (tex ? null : makeCoverlessBackdrop(hue)), [tex, hue]);
   useEffect(() => () => coverlessBackdrop?.dispose(), [coverlessBackdrop]);
 
   return (
-    <div className="w-full h-full">
-      <Canvas camera={{ position: [0, 0.4, 7], fov: 55 }} gl={{ antialias: !mobile, alpha: false }}>
-        <TilesScene tex={tex} backdrop={backdrop ?? coverlessBackdrop} palette={palette} coverlessHueValue={hue} />
+    <div className="w-full h-full" style={{ position: 'relative' }}>
+      <Canvas camera={{ position: [0, 0.4, REST_DISTANCE], fov: FOV }} gl={{ antialias: !mobile, alpha: false }}>
+        <TilesScene tex={tex} backdrop={backdrop ?? coverlessBackdrop} palette={palette} coverlessHueValue={hue} materialMaps={materialMaps} />
       </Canvas>
     </div>
   );
