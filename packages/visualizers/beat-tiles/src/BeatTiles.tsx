@@ -261,11 +261,12 @@ function TilesScene({
       mesh.rotation.x = z * 0.18 * Math.sin(t.phase * 6.28);
 
       // Brightness is CLAMPED so a screenful of popped tiles can never wash the frame
-      // out. The caps stay at or under 1: the side shader's colour is already near
-      // white at full glow, and on a phone the popped tiles fill most of the screen.
+      // out. The caps stay under 1: the side shader's colour is already near white at
+      // full glow, and on a phone the popped tiles fill most of the screen. A popped
+      // side (up to 0.9) still crosses the bloom threshold, so pops glow and rest doesn't.
       // (1.05 and 1.5 turned the whole frame white on every beat, glow or no glow.)
       t.front.color.setScalar(t.front.map ? THREE.MathUtils.clamp(0.5 + z * 0.25, 0.5, 0.9) : 0.6);
-      t.side.uniforms.uGlow.value = THREE.MathUtils.clamp(0.35 + z * 0.3, 0.3, 0.8);
+      t.side.uniforms.uGlow.value = THREE.MathUtils.clamp(0.35 + z * 0.4, 0.3, 0.9);
       t.side.uniforms.uTime.value = elapsed;
     }
 
@@ -301,9 +302,12 @@ function TilesScene({
       <AudioReactiveEffects
         enableBloom
         enableVignette
-        bloomIntensity={mobile ? 0.2 : 0.3}
-        bloomThreshold={0.85}
-        bloomRadius={0.4}
+        // Tuned on rendered frames at phone width (1.7 builds 74-75): 0.45 with a 0.6
+        // threshold washed the frame white on every beat, 0.2 with 0.85 never glowed at
+        // all. This lets a popped tile's bright edge halo while the cover holds.
+        bloomIntensity={mobile ? 0.25 : 0.35}
+        bloomThreshold={0.75}
+        bloomRadius={0.45}
         bloomBassBoost={0.1}
         halfResolution={mobile}
       />
