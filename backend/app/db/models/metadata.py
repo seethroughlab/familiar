@@ -24,7 +24,7 @@ class ProposedChange(Base):
     # What kind of change
     change_type: Mapped[str] = mapped_column(
         String(50), nullable=False
-    )  # "metadata", "artwork", "merge_albums", "set_compilation"
+    )  # "metadata", "move_to_album" (ADR-0166)
     target_type: Mapped[str] = mapped_column(
         String(20), nullable=False
     )  # "track", "album"
