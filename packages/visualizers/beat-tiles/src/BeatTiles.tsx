@@ -20,6 +20,27 @@ const mobile = isMobile();
 const GRID = mobile ? 6 : 10;
 const COVER = 5; // world size of the cover
 
+const FOV = 55; // vertical, degrees
+const REST_DISTANCE = 7; // the camera's distance in a wide frame
+const DOLLY = 0.5; // how far a big beat pulls the camera in
+
+/**
+ * How far back the camera sits so the whole grid's width fits the frame (2026-11-08).
+ *
+ * The field of view is vertical, so a tall frame sees less width. At 7 units a phone in
+ * portrait (aspect ~0.46) saw about two thirds of the grid, and the outer columns were cut
+ * off. Backing off by the frame's aspect keeps every tile in view with a margin, plus room
+ * for a popped tile to come forward and for the beat's dolly. A wide frame never comes
+ * closer than ``REST_DISTANCE``, so the Mac looks as it always has.
+ */
+export function fitDistance(aspect: number): number {
+  const halfWidth = COVER / 2 + 0.25; // the outer tiles' edges, and a margin
+  const popAllowance = 1.3; // a popped edge tile comes forward and looks wider
+  const tan = Math.tan(THREE.MathUtils.degToRad(FOV / 2));
+  const fit = halfWidth / (tan * Math.max(aspect, 0.1)) + popAllowance + DOLLY;
+  return Math.max(REST_DISTANCE, fit);
+}
+
 // Ripple timing (seconds).
 const RIPPLE_DELAY = 0.34; // extra delay for the farthest tile (wave travel time)
 const RIPPLE_W = 0.32; // width of each pop pulse
@@ -284,7 +305,7 @@ function TilesScene({
     const cam = state.camera;
     cam.position.x = Math.sin(elapsed * 0.12) * 0.7;
     cam.position.y = 0.4 + Math.sin(elapsed * 0.09) * 0.4;
-    cam.position.z = 7 - beat * 0.5;
+    cam.position.z = fitDistance(state.size.width / Math.max(state.size.height, 1)) - beat * DOLLY;
     cam.lookAt(0, 0, 0);
   });
 
@@ -441,7 +462,7 @@ export function BeatTiles({ artworkUrl, track }: VisualizerProps) {
 
   return (
     <div className="w-full h-full">
-      <Canvas camera={{ position: [0, 0.4, 7], fov: 55 }} gl={{ antialias: !mobile, alpha: false }}>
+      <Canvas camera={{ position: [0, 0.4, REST_DISTANCE], fov: FOV }} gl={{ antialias: !mobile, alpha: false }}>
         <TilesScene tex={tex} backdrop={backdrop ?? coverlessBackdrop} palette={palette} coverlessHueValue={hue} />
       </Canvas>
     </div>
