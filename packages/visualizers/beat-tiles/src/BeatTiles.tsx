@@ -124,19 +124,23 @@ function TilesScene({
     for (let row = 0; row < GRID; row++) {
       for (let col = 0; col < GRID; col++) {
         const geometry = new THREE.BoxGeometry(size * 0.94, size * 0.94, depth);
-        // Map the +Z (front) AND -Z (back) faces to this tile's sub-rect of the cover,
+        // Map the +Z (front) AND -Z (back) faces to this tile's sub-rect of the cover.
+        // Rows count down from the top, but the texture's v counts up from the bottom
+        // (flipY), so row 0 takes the top strip: until 1.7 the cover was drawn with its
+        // rows in reverse order.
+        //
         // so a flipped tile still shows the art. The back is mirrored in U so it reads
         // correctly after a 180° flip. The 4 thin edge faces stay palette-coloured.
         const uv = geometry.attributes.uv as THREE.BufferAttribute;
         for (let k = 16; k < 20; k++) {
           const ux = uv.getX(k);
           const uy = uv.getY(k);
-          uv.setXY(k, (col + ux) / GRID, (row + uy) / GRID);
+          uv.setXY(k, (col + ux) / GRID, (GRID - 1 - row + uy) / GRID);
         }
         for (let k = 20; k < 24; k++) {
           const ux = uv.getX(k);
           const uy = uv.getY(k);
-          uv.setXY(k, (col + (1 - ux)) / GRID, (row + uy) / GRID);
+          uv.setXY(k, (col + (1 - ux)) / GRID, (GRID - 1 - row + uy) / GRID);
         }
         uv.needsUpdate = true;
 
@@ -153,7 +157,7 @@ function TilesScene({
             uGlow: { value: 0.42 },
             uTime: { value: 0 },
             uCover: { value: tex },
-            uUvOffset: { value: new THREE.Vector2(col / GRID, row / GRID) },
+            uUvOffset: { value: new THREE.Vector2(col / GRID, (GRID - 1 - row) / GRID) },
             uUvScale: { value: 1 / GRID },
             uHasCover: { value: tex ? 1 : 0 },
           },
@@ -256,10 +260,12 @@ function TilesScene({
       mesh.rotation.y = t.flip;
       mesh.rotation.x = z * 0.18 * Math.sin(t.phase * 6.28);
 
-      // Brightness is CLAMPED so 100 popped tiles can never wash the frame out;
-      // at rest it stays below the bloom threshold, popped tiles glow.
-      t.front.color.setScalar(t.front.map ? THREE.MathUtils.clamp(0.45 + z * 0.36, 0.45, 1.05) : 1);
-      t.side.uniforms.uGlow.value = THREE.MathUtils.clamp(0.42 + z * 0.6, 0.35, 1.5);
+      // Brightness is CLAMPED so a screenful of popped tiles can never wash the frame
+      // out. The caps stay at or under 1: the side shader's colour is already near
+      // white at full glow, and on a phone the popped tiles fill most of the screen.
+      // (1.05 and 1.5 turned the whole frame white on every beat, glow or no glow.)
+      t.front.color.setScalar(t.front.map ? THREE.MathUtils.clamp(0.5 + z * 0.25, 0.5, 0.9) : 0.6);
+      t.side.uniforms.uGlow.value = THREE.MathUtils.clamp(0.35 + z * 0.3, 0.3, 0.8);
       t.side.uniforms.uTime.value = elapsed;
     }
 
@@ -295,10 +301,10 @@ function TilesScene({
       <AudioReactiveEffects
         enableBloom
         enableVignette
-        bloomIntensity={mobile ? 0.45 : 0.6}
-        bloomThreshold={0.6}
-        bloomRadius={0.45}
-        bloomBassBoost={0.3}
+        bloomIntensity={mobile ? 0.2 : 0.3}
+        bloomThreshold={0.85}
+        bloomRadius={0.4}
+        bloomBassBoost={0.1}
         halfResolution={mobile}
       />
       <FrameScheduler />
