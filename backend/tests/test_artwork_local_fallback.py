@@ -48,11 +48,12 @@ class TestFindLocalArtwork:
         monkeypatch.setattr(artwork, "extract_artwork", fake_extract({other: JPEG}, []))
         assert find_local_artwork(own, [other]) == JPEG
 
-    def test_another_file_in_the_folder_when_the_album_is_split(self, album_dir, monkeypatch):
-        # A second album-artist tag makes a second album in the database; the folder is one.
+    def test_an_unrelated_file_in_the_folder_lends_nothing(self, album_dir, monkeypatch):
+        """*How to Take a Fall*: untagged, in a folder of seven unrelated songs, it took a
+        stranger's photo. Only files the caller names as the same album may lend one."""
         own, other = album_dir / "04 The Last Dregs.mp3", album_dir / "02 Dressed for Space.mp3"
         monkeypatch.setattr(artwork, "extract_artwork", fake_extract({other: JPEG}, []))
-        assert find_local_artwork(own, []) == JPEG
+        assert find_local_artwork(own, []) is None
 
     def test_a_cover_image_beside_the_files(self, album_dir, monkeypatch):
         monkeypatch.setattr(artwork, "extract_artwork", fake_extract({}, []))
@@ -69,7 +70,7 @@ class TestFindLocalArtwork:
             (tmp_path / f"{i:03d}.flac").write_bytes(b"x")
         opened: list[Path] = []
         monkeypatch.setattr(artwork, "extract_artwork", fake_extract({}, opened))
-        album = [tmp_path / f"{i:03d}.flac" for i in range(10)]
+        album = [tmp_path / f"{i:03d}.flac" for i in range(MAX_LOCAL_FILES + 20)]
         assert find_local_artwork(tmp_path / "000.flac", album) is None
         assert len(opened) == MAX_LOCAL_FILES
 
@@ -154,3 +155,47 @@ class TestTheRoute:
         assert client.get(f"/api/v1/tracks/{bare.id}/artwork").status_code == 404
         assert len(opened) == reads, "a remembered miss must not search the disk again"
         assert len(queued) == 1
+
+    @pytest.mark.asyncio
+    async def test_a_split_album_borrows_from_its_other_half_in_the_folder(
+        self, async_db, client, album_dir, monkeypatch, saved, queued
+    ):
+        """Two album-artist tags make two albums in the database; the folder and tag are one."""
+        from app.db.models.albums import Album
+
+        db = async_db
+        halves = [Album(name="TRST", sort_name="TRST"), Album(name="TRST", sort_name="TRST")]
+        db.add_all(halves)
+        await db.flush()
+        bare = await insert_test_track(db, title="4", artist="TR/ST", album="TRST", file_path=str(album_dir / "04 The Last Dregs.mp3"))
+        covered = await insert_test_track(db, title="2", artist="TR/ST", album="trst", file_path=str(album_dir / "02 Dressed for Space.mp3"))
+        bare.canonical_album_id, covered.canonical_album_id = halves[0].id, halves[1].id
+        await db.commit()
+        monkeypatch.setattr(artwork, "extract_artwork", fake_extract({Path(covered.file_path): JPEG}, []))
+
+        resp = client.get(f"/api/v1/tracks/{bare.id}/artwork")
+
+        assert resp.status_code == 200 and resp.content == JPEG
+
+    @pytest.mark.asyncio
+    async def test_an_untagged_track_borrows_from_nobody(
+        self, async_db, client, tmp_path, monkeypatch, saved, queued
+    ):
+        """Elliott Smith's *Unknown Album* folder: seven songs, no album tags, one folder album."""
+        from app.db.models.albums import Album
+
+        db = async_db
+        folder = tmp_path / "Elliott Smith" / "Unknown Album"
+        folder.mkdir(parents=True)
+        album = Album(name="Unknown Album", sort_name="Unknown Album")
+        db.add(album)
+        await db.flush()
+        fall = await insert_test_track(db, title="How to Take a Fall", artist="Elliott Smith", album=None, file_path=str(folder / "How to Take a Fall.mp3"))
+        other = await insert_test_track(db, title="Shake Sugaree", artist="Elliott Smith", album=None, file_path=str(folder / "Shake Sugaree.mp3"))
+        fall.canonical_album_id = other.canonical_album_id = album.id
+        await db.commit()
+        for t in (fall, other):
+            Path(t.file_path).write_bytes(b"x")
+        monkeypatch.setattr(artwork, "extract_artwork", fake_extract({Path(other.file_path): JPEG}, []))
+
+        assert client.get(f"/api/v1/tracks/{fall.id}/artwork").status_code == 404
