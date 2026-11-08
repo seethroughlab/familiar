@@ -290,6 +290,77 @@ async def report_playback_error(
     return PlaybackErrorResponse(status="skip", reason="no_cache")
 
 
+#: How long an album with no cover anywhere is left alone before the library is searched again.
+ARTWORK_MISS_SECONDS = 24 * 3600
+
+
+def _artwork_miss_key(album_key: str) -> str:
+    return f"artwork:miss:{album_key}"
+
+
+async def _find_missing_artwork(db: AsyncSession, track: Track, album_key: str) -> bool:
+    """Find a cover for an album that has none, and save it. True when one was saved.
+
+    **The library first, then online.** The phone and the Mac ask for artwork only through
+    this route, and it used to look only inside the requested file. The online fetcher
+    (Cover Art Archive, Last.fm) was reached only from the web app's album cards, so once
+    the web player went, an album whose files carry no picture never got a cover: 659 of
+    4,378 on 2026-11-07. A miss here now searches the album's other files and its folder,
+    and when that finds nothing, queues the online lookup and answers 404 for now.
+
+    A miss is remembered for a day (`ARTWORK_MISS_SECONDS`), so an album with no cover
+    anywhere is not re-read from disk on every request.
+    """
+    from sqlalchemy import select
+
+    from app.services.artwork import MAX_LOCAL_FILES, find_local_artwork, save_artwork
+    from app.services.redis_client import get_redis
+
+    miss_key = _artwork_miss_key(album_key)
+    try:
+        if get_redis().get(miss_key):
+            return False
+    except Exception:
+        pass
+
+    album_files: list[Path] = []
+    if track.canonical_album_id is not None:
+        rows = await db.execute(
+            select(Track.file_path)
+            .where(
+                Track.canonical_album_id == track.canonical_album_id,
+                Track.id != track.id,
+                Track.active_filter(),
+            )
+            .order_by(Track.disc_number, Track.track_number)
+            .limit(MAX_LOCAL_FILES)
+        )
+        album_files = [Path(p) for p in rows.scalars() if p]
+
+    image = await asyncio.to_thread(find_local_artwork, Path(track.file_path), album_files)
+    if image:
+        try:
+            if await asyncio.to_thread(save_artwork, image, album_key):
+                return True
+        except Exception as exc:  # an unreadable cover.jpg is a miss, not a 500
+            logger.warning("artwork for %s found but not saved: %s", album_key, exc)
+
+    if track.album and track.artist:
+        try:
+            from app.services.background.manager import get_background_manager
+
+            await get_background_manager().queue_artwork_fetch(
+                album_key=album_key, artist=track.artist, album=track.album, track_id=str(track.id)
+            )
+        except Exception as exc:
+            logger.warning("could not queue an online artwork lookup for %s: %s", album_key, exc)
+    try:
+        get_redis().set(miss_key, "1", ex=ARTWORK_MISS_SECONDS)
+    except Exception:
+        pass
+    return False
+
+
 @router.get(
     "/{track_id}/artwork", tags=["tracks"],
     response_class=StreamingResponse,
@@ -302,7 +373,9 @@ async def get_track_artwork(
 ) -> StreamingResponse:
     """Get album artwork for a track.
 
-    Artwork is extracted from the audio file on first request and cached.
+    Found on first request and kept under the album's key: from the library's own files
+    (`find_local_artwork`), and failing that, looked up online in the background so a later
+    request has it.
     """
     from sqlalchemy import select
 
@@ -318,17 +391,8 @@ async def get_track_artwork(
     album_key = album_key_for_track(track)
     artwork_path = get_artwork_path(album_key, size)
 
-    # Check if artwork exists on disk
     if not artwork_path.exists():
-        # Try to extract from audio file
-        file_path = Path(track.file_path)
-        if file_path.exists():
-            from app.services.artwork import extract_and_save_artwork
-            extract_and_save_artwork(
-                file_path, track.artist, track.album, album_key=album_key
-            )
-
-        # Check again
+        await _find_missing_artwork(db, track, album_key)
         if not artwork_path.exists():
             raise NotFoundError("No artwork available")
 
