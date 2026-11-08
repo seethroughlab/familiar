@@ -4277,9 +4277,10 @@ export const proposedChangesBatchApplyMutation = (options?: Partial<Options<Prop
  *
  * Scan the library now for auto-detectable metadata issues and queue proposals.
  *
- * Currently detects duplicate artist spellings and proposes merges. Idempotent —
- * re-running won't duplicate pending proposals. This also runs automatically
- * after each library sync.
+ * Detects duplicate artist spellings, albums split within one folder, and albums a
+ * false compilation label fused (ADR-0166, ADR-0167 point 4). Idempotent — re-running
+ * won't duplicate pending proposals. All but the last also run after each library sync;
+ * the fused-album pass runs only from here.
  */
 export const proposedChangesScanForProposalsMutation = (options?: Partial<Options<ProposedChangesScanForProposalsData>>): UseMutationOptions<ProposedChangesScanForProposalsResponse, AxiosError<ProposedChangesScanForProposalsError>, Options<ProposedChangesScanForProposalsData>> => {
     const mutationOptions: UseMutationOptions<ProposedChangesScanForProposalsResponse, AxiosError<ProposedChangesScanForProposalsError>, Options<ProposedChangesScanForProposalsData>> = {

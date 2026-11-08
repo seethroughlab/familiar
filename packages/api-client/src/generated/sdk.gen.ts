@@ -2958,9 +2958,10 @@ export const proposedChangesBatchApply = <ThrowOnError extends boolean = false>(
  *
  * Scan the library now for auto-detectable metadata issues and queue proposals.
  *
- * Currently detects duplicate artist spellings and proposes merges. Idempotent —
- * re-running won't duplicate pending proposals. This also runs automatically
- * after each library sync.
+ * Detects duplicate artist spellings, albums split within one folder, and albums a
+ * false compilation label fused (ADR-0166, ADR-0167 point 4). Idempotent — re-running
+ * won't duplicate pending proposals. All but the last also run after each library sync;
+ * the fused-album pass runs only from here.
  */
 export const proposedChangesScanForProposals = <ThrowOnError extends boolean = false>(options?: Options<ProposedChangesScanForProposalsData, ThrowOnError>): RequestResult<ProposedChangesScanForProposalsResponses, ProposedChangesScanForProposalsErrors, ThrowOnError> => (options?.client ?? client).post<ProposedChangesScanForProposalsResponses, ProposedChangesScanForProposalsErrors, ThrowOnError>({
     responseType: 'json',

@@ -214,13 +214,18 @@ async def scan_for_proposals(
 ) -> dict[str, int]:
     """Scan the library now for auto-detectable metadata issues and queue proposals.
 
-    Currently detects duplicate artist spellings and proposes merges. Idempotent —
-    re-running won't duplicate pending proposals. This also runs automatically
-    after each library sync.
+    Detects duplicate artist spellings, albums split within one folder, and albums a
+    false compilation label fused (ADR-0166, ADR-0167 point 4). Idempotent — re-running
+    won't duplicate pending proposals. All but the last also run after each library sync;
+    the fused-album pass runs only from here.
     """
-    from app.services.auto_proposals import scan_for_duplicate_artist_proposals
+    from app.services.auto_proposals import (
+        scan_for_album_move_proposals,
+        scan_for_duplicate_artist_proposals,
+    )
 
     created = await scan_for_duplicate_artist_proposals(db)
+    created += await scan_for_album_move_proposals(db, include_splits=True)
     return {"created": created}
 
 

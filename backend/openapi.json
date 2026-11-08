@@ -27792,7 +27792,7 @@
     },
     "/api/v1/proposed-changes/scan": {
       "post": {
-        "description": "Scan the library now for auto-detectable metadata issues and queue proposals.\n\nCurrently detects duplicate artist spellings and proposes merges. Idempotent \u2014\nre-running won't duplicate pending proposals. This also runs automatically\nafter each library sync.",
+        "description": "Scan the library now for auto-detectable metadata issues and queue proposals.\n\nDetects duplicate artist spellings, albums split within one folder, and albums a\nfalse compilation label fused (ADR-0166, ADR-0167 point 4). Idempotent \u2014 re-running\nwon't duplicate pending proposals. All but the last also run after each library sync;\nthe fused-album pass runs only from here.",
         "operationId": "proposed-changes_scan_for_proposals",
         "responses": {
           "200": {

@@ -20,9 +20,13 @@ from app.db.models import (
     Track,
 )
 from app.services import metadata_overrides
+from app.services.album_membership import move_tracks_to_album, undo_move
 from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
+
+#: ADR-0166: tracks moved to the album they belong on (a merge or a split).
+MOVE_TO_ALBUM = "move_to_album"
 
 
 @dataclass
@@ -308,6 +312,23 @@ class ProposedChangesService:
             if change.change_type == "metadata" and change.field:
                 await self._apply_metadata_to_db(tracks, change.field, change.new_value)
                 result.db_updated = True
+            elif change.change_type == MOVE_TO_ALBUM:
+                # ADR-0166: the record of what moved is what makes the undo possible.
+                change.old_value = await move_tracks_to_album(
+                    self.db,
+                    [t.id for t in tracks],
+                    kind=change.new_value["kind"],
+                    album_artist=change.new_value["album_artist"],
+                    album_id=UUID(change.new_value["album_id"]) if change.new_value.get("album_id") else None,
+                    title=change.new_value.get("title"),
+                )
+                result.db_updated = True
+            else:
+                return ApplyResult(
+                    change_id=change_id,
+                    success=False,
+                    error=f"Cannot apply a change of type {change.change_type!r}",
+                )
 
             # Mark change as applied
             change.status = ChangeStatus.APPLIED
@@ -390,7 +411,9 @@ class ProposedChangesService:
             tracks = list(db_result.scalars().all())
 
             # Revert database values
-            if change.change_type == "metadata" and change.field:
+            if change.change_type == MOVE_TO_ALBUM:
+                await undo_move(self.db, change.old_value)
+            elif change.change_type == "metadata" and change.field:
                 # old_value might be a dict mapping track_id -> old_value
                 # or a single value for all tracks
                 if isinstance(change.old_value, dict):
