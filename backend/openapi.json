@@ -33079,7 +33079,7 @@
         ]
       },
       "get": {
-        "description": "Get album artwork for a track.\n\nArtwork is extracted from the audio file on first request and cached.",
+        "description": "Get album artwork for a track.\n\nFound on first request and kept under the album's key: from the library's own files\n(`find_local_artwork`), and failing that, looked up online in the background so a later\nrequest has it.",
         "operationId": "tracks_get_track_artwork",
         "parameters": [
           {

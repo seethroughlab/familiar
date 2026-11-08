@@ -5548,7 +5548,9 @@ export const tracksGetTrackArtworkQueryKey = (options: Options<TracksGetTrackArt
  *
  * Get album artwork for a track.
  *
- * Artwork is extracted from the audio file on first request and cached.
+ * Found on first request and kept under the album's key: from the library's own files
+ * (`find_local_artwork`), and failing that, looked up online in the background so a later
+ * request has it.
  */
 export const tracksGetTrackArtworkOptions = (options: Options<TracksGetTrackArtworkData>) => queryOptions<unknown, AxiosError<TracksGetTrackArtworkError>, unknown, ReturnType<typeof tracksGetTrackArtworkQueryKey>>({
     queryFn: async ({ queryKey, signal }) => {
