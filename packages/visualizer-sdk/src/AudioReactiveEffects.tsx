@@ -57,6 +57,13 @@ interface AudioReactiveEffectsProps {
   rgbShiftAmount?: number;
   /** How much bass adds to bloom strength (default 1.5; lower = calmer bloom) */
   bloomBassBoost?: number;
+  /**
+   * Whether the threshold drops as the music gets louder (default true). A visualizer that
+   * decides what glows itself, by driving only those surfaces past the threshold, turns this
+   * off so the threshold stays where it put it: a lowering threshold is what let a bright
+   * cover bloom on every loud passage.
+   */
+  bloomThresholdFollowsMusic?: boolean;
 }
 
 export function AudioReactiveEffects({
@@ -70,6 +77,7 @@ export function AudioReactiveEffects({
   enableRGBShift = false,
   rgbShiftAmount = 0.0015,
   bloomBassBoost = 1.5,
+  bloomThresholdFollowsMusic = true,
 }: AudioReactiveEffectsProps) {
   const { gl, scene, camera, size } = useThree();
   const glowLevel = GLOW_LEVEL;
@@ -166,8 +174,12 @@ export function AudioReactiveEffects({
     if (bloomPassRef.current) {
       const rawStrength = bloomIntensity + bass * bloomBassBoost;
       bloomPassRef.current.strength = rawStrength * glowScale;
-      const rawThreshold = Math.max(0.3, bloomThreshold - intensity * 0.2);
-      bloomPassRef.current.threshold = rawThreshold + (1.0 - glowScale) * 0.3;
+      if (bloomThresholdFollowsMusic) {
+        const rawThreshold = Math.max(0.3, bloomThreshold - intensity * 0.2);
+        bloomPassRef.current.threshold = rawThreshold + (1.0 - glowScale) * 0.3;
+      } else {
+        bloomPassRef.current.threshold = bloomThreshold;
+      }
     }
 
     if (vignettePassRef.current) {

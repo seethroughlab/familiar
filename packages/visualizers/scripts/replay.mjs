@@ -59,7 +59,7 @@ else if (track?.artworkUrl) {
   } catch { /* drawn without a cover, and the report says so */ }
 }
 
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.glb': 'model/gltf-binary' };
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.glb': 'model/gltf-binary', '.jpg': 'image/jpeg', '.png': 'image/png', '.hdr': 'application/octet-stream' };
 const engine = engineName === 'chromium' ? chromium : webkit;
 const browser = await engine.launch(engineName === 'chromium' ? { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] } : {});
 const page = await browser.newPage({ viewport: { width: pageInfo.width, height: pageInfo.height } });
@@ -71,7 +71,9 @@ await page.route('http://familiar.test/**', (route) => {
   if (p.startsWith('/v/')) {
     const f = path.join(dist, p.slice(3));
     return fs.existsSync(f)
-      ? route.fulfill({ status: 200, contentType: TYPES[path.extname(f)] ?? 'application/octet-stream', body: fs.readFileSync(f) })
+      // The app's scheme handler answers every plugin file with ACAO * (the document has an
+      // opaque origin), so a texture or model the document loads must get it here too.
+      ? route.fulfill({ status: 200, contentType: TYPES[path.extname(f)] ?? 'application/octet-stream', body: fs.readFileSync(f), headers: { 'access-control-allow-origin': '*' } })
       : route.fulfill({ status: 404 });
   }
   return route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html>' });
