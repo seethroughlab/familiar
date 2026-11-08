@@ -99,16 +99,19 @@ interface Tile {
   hue: number; // side base hue
   flip: number; // current flip angle
   flipTarget: number;
+  rest: THREE.Color | null; // the front's colour at rest when there is no cover
 }
 
 function TilesScene({
   tex,
   backdrop,
   palette,
+  coverlessHueValue,
 }: {
   tex: THREE.Texture | null;
   backdrop: THREE.Texture | null;
   palette: string[];
+  coverlessHueValue: number;
 }) {
   useAudioAnalyser(true);
   const meshRefs = useRef<(THREE.Mesh | null)[]>([]);
@@ -120,7 +123,8 @@ function TilesScene({
     const size = COVER / GRID;
     const depth = size * 0.9; // near-cube so the colour side-faces are full squares
     const baseHSL = { h: 0.78, s: 0.7, l: 0.5 };
-    new THREE.Color(palette[0] ?? '#7c3aed').getHSL(baseHSL);
+    if (tex) new THREE.Color(palette[0] ?? '#7c3aed').getHSL(baseHSL);
+    else baseHSL.h = coverlessHueValue;
     for (let row = 0; row < GRID; row++) {
       for (let col = 0; col < GRID; col++) {
         const geometry = new THREE.BoxGeometry(size * 0.94, size * 0.94, depth);
@@ -145,12 +149,15 @@ function TilesScene({
         uv.needsUpdate = true;
 
         const dist = Math.min(1, Math.hypot(col - (GRID - 1) / 2, row - (GRID - 1) / 2) / (GRID / 2));
+        const rest = tex ? null : coverlessTileColor(baseHSL.h, col, row, dist);
         const front = new THREE.MeshBasicMaterial({
           map: tex ?? null,
-          color: tex ? new THREE.Color(1, 1, 1) : new THREE.Color(palette[0] ?? '#7c3aed'),
+          color: rest ? rest.clone() : new THREE.Color(1, 1, 1),
           toneMapped: false,
         });
-        const hue = (baseHSL.h + dist * 0.42) % 1;
+        // Without a cover the side faces stay near the album's hue rather than sweeping
+        // the whole wheel, so a flipped tile reads as part of the same picture.
+        const hue = (baseHSL.h + dist * (tex ? 0.42 : 0.12)) % 1;
         const side = new THREE.ShaderMaterial({
           uniforms: {
             uHue: { value: hue },
@@ -170,11 +177,11 @@ function TilesScene({
 
         const x = (col - (GRID - 1) / 2) * size;
         const y = ((GRID - 1) / 2 - row) * size;
-        out.push({ geometry, front, side, materials, x, y, dist, phase: Math.random(), hue, flip: 0, flipTarget: 0 });
+        out.push({ geometry, front, side, materials, x, y, dist, phase: Math.random(), hue, flip: 0, flipTarget: 0, rest });
       }
     }
     return out;
-  }, [tex, palette]);
+  }, [tex, palette, coverlessHueValue]);
 
   useEffect(() => {
     return () => {
@@ -265,7 +272,10 @@ function TilesScene({
       // full glow, and on a phone the popped tiles fill most of the screen. A popped
       // side (up to 0.9) still crosses the bloom threshold, so pops glow and rest doesn't.
       // (1.05 and 1.5 turned the whole frame white on every beat, glow or no glow.)
-      t.front.color.setScalar(t.front.map ? THREE.MathUtils.clamp(0.5 + z * 0.25, 0.5, 0.9) : 0.6);
+      // Without a cover the front keeps its own shade and a pop lifts it, up to about 2.6
+      // times its rest. (Until 1.7 this set every coverless tile to the same flat grey.)
+      if (t.rest) t.front.color.copy(t.rest).multiplyScalar(1 + Math.min(z, 1) * 1.6);
+      else t.front.color.setScalar(THREE.MathUtils.clamp(0.5 + z * 0.25, 0.5, 0.9));
       t.side.uniforms.uGlow.value = THREE.MathUtils.clamp(0.35 + z * 0.4, 0.3, 0.9);
       t.side.uniforms.uTime.value = elapsed;
     }
@@ -316,6 +326,51 @@ function TilesScene({
   );
 }
 
+/**
+ * A coverless album's hue, from its name, so each album looks like itself rather than like
+ * every other album without a cover. FNV-1a: stable across sessions and devices.
+ */
+export function coverlessHue(seed: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0) / 0x100000000;
+}
+
+/**
+ * A tile's resting colour when there is no cover: a dark shade of the album's hue, a little
+ * lighter toward the centre and drifting in hue across the diagonal, so the grid reads as one
+ * picture. Kept dark so a beat has room to brighten it without washing the frame out.
+ */
+export function coverlessTileColor(hue: number, col: number, row: number, dist: number): THREE.Color {
+  const h = (hue + ((col - row) / GRID) * 0.06 + 1) % 1;
+  return new THREE.Color().setHSL(h, 0.5, 0.11 + 0.1 * (1 - dist), THREE.SRGBColorSpace);
+}
+
+// A coverless backdrop: the album's hue as a dim glow behind the grid.
+function makeCoverlessBackdrop(hue: number): THREE.CanvasTexture | null {
+  try {
+    const S = 256;
+    const c = document.createElement('canvas');
+    c.width = c.height = S;
+    const ctx = c.getContext('2d');
+    if (!ctx) return null;
+    const deg = Math.round(hue * 360);
+    const g = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S * 0.7);
+    g.addColorStop(0, `hsl(${deg} 45% 14%)`);
+    g.addColorStop(1, 'hsl(0 0% 3%)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, S, S);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  } catch {
+    return null;
+  }
+}
+
 // Build a soft, blurred + dimmed backdrop from the cover image.
 function makeBackdrop(img: HTMLImageElement): THREE.CanvasTexture | null {
   try {
@@ -341,8 +396,10 @@ function makeBackdrop(img: HTMLImageElement): THREE.CanvasTexture | null {
   }
 }
 
-export function BeatTiles({ artworkUrl }: VisualizerProps) {
+export function BeatTiles({ artworkUrl, track }: VisualizerProps) {
   const palette = useArtworkPalette(artworkUrl);
+  const seed = track ? track.album || track.artist || track.title || track.id : '';
+  const hue = useMemo(() => coverlessHue(seed), [seed]);
   const [tex, setTex] = useState<THREE.Texture | null>(null);
   const [backdrop, setBackdrop] = useState<THREE.Texture | null>(null);
 
@@ -378,10 +435,14 @@ export function BeatTiles({ artworkUrl }: VisualizerProps) {
     };
   }, [artworkUrl]);
 
+  // Shown while there is no cover: before one loads, and for an album that has none.
+  const coverlessBackdrop = useMemo(() => (tex ? null : makeCoverlessBackdrop(hue)), [tex, hue]);
+  useEffect(() => () => coverlessBackdrop?.dispose(), [coverlessBackdrop]);
+
   return (
     <div className="w-full h-full">
       <Canvas camera={{ position: [0, 0.4, 7], fov: 55 }} gl={{ antialias: !mobile, alpha: false }}>
-        <TilesScene tex={tex} backdrop={backdrop} palette={palette} />
+        <TilesScene tex={tex} backdrop={backdrop ?? coverlessBackdrop} palette={palette} coverlessHueValue={hue} />
       </Canvas>
     </div>
   );

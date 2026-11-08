@@ -17,7 +17,7 @@ export interface VisualizerProps {
   currentTime: number;
   duration: number;
   isPlaying: boolean;
-  track: { id: string; title?: string | null; artist?: string | null } | null;
+  track: { id: string; title?: string | null; artist?: string | null; album?: string | null } | null;
   features: TrackFeatures | null;
   artworkUrl: string | null;
   lyrics: LyricLine[] | null;

@@ -26,7 +26,7 @@ function App() {
 
   return (
     <BeatTiles
-      track={track ? { id: track.id ?? '', title: track.title, artist: track.artist } : null}
+      track={track ? { id: track.id ?? '', title: track.title, artist: track.artist, album: track.album } : null}
       artworkUrl={track?.artworkUrl ?? null}
       features={track?.features ?? null}
       lyrics={null}
