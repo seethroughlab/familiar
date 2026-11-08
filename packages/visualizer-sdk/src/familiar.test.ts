@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 
 import * as events from './fixtures/events';
-import { _reset, API_VERSION, announceReady, getAudioData, handleMessage, install, usePlaybackState, useTrack } from './familiar';
+import { _reset, API_VERSION, announceReady, getAudioData, handleMessage, install, setStat, takeCaptureRequest, usePlaybackState, useTrack } from './familiar';
 
 beforeEach(() => _reset());
 afterEach(() => vi.restoreAllMocks());
@@ -98,6 +98,32 @@ describe('the window wiring', () => {
     vi.stubGlobal('requestAnimationFrame', () => 0);
     announceReady();
     expect(post).toHaveBeenCalledWith({ type: 'familiar:ready', apiVersion: API_VERSION }, '*');
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('the probe', () => {
+  it('a capture request is taken exactly once', () => {
+    expect(takeCaptureRequest()).toBe(false);
+    handleMessage({ type: 'familiar:capture', apiVersion: API_VERSION });
+    expect(takeCaptureRequest()).toBe(true);
+    expect(takeCaptureRequest()).toBe(false);
+  });
+
+  it('reported numbers ride along with the frame rate', () => {
+    let tick: FrameRequestCallback = () => {};
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => { tick = cb; return 0; });
+    let now = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => now);
+    const post = vi.spyOn(window.parent, 'postMessage').mockImplementation(() => {});
+    setStat('bloomStrength', 0.12345);
+    setStat('ignored', Number.NaN);
+    announceReady();
+    now = 1001;
+    tick(now);
+    const stats = post.mock.calls.map((c) => c[0] as { type: string; payload?: Record<string, number> })
+      .find((m) => m.type === 'familiar:stats');
+    expect(stats?.payload).toEqual({ fps: 1, bloomStrength: 0.123 });
     vi.unstubAllGlobals();
   });
 });

@@ -117,6 +117,10 @@ export function handleMessage(data: unknown): void {
       state = { isPlaying: p.isPlaying === true, currentTime: number(p.currentTime) };
       stateListeners.forEach((l) => l(state));
       break;
+    case 'familiar:capture':
+      // The host's probe asks for one frame of what is on screen (see `takeCaptureRequest`).
+      captureRequested = true;
+      break;
     default:
       // A message type this bridge does not know. Not an error: the host may add one.
       break;
@@ -124,6 +128,61 @@ export function handleMessage(data: unknown): void {
 }
 
 let installed = false;
+
+/**
+ * The probe (`familiar` 1.7 work): what a document can tell the host about what it is drawing.
+ *
+ * The host cannot see inside a sandboxed document, and a test harness renders on another engine
+ * with made-up audio. Beat Tiles was tuned twice against such renders and the phone showed
+ * something else both times. So a document reports a few numbers with its frame rate (`setStat`),
+ * and hands back a frame on request: the host's probe mode asks with `familiar:capture`, and the
+ * renderer answers `familiar:frame` after its next draw (`takeCaptureRequest`). Outside probe mode
+ * nothing asks, and this costs one extra key in a once-a-second message.
+ */
+let captureRequested = false;
+const stats: Record<string, number> = {};
+
+/** Report a number with the frame rate, e.g. the bloom strength actually in use. */
+export function setStat(name: string, value: number): void {
+  if (Number.isFinite(value)) stats[name] = Math.round(value * 1000) / 1000;
+}
+
+/**
+ * True once per `familiar:capture`. Call right after drawing, in the same task: a WebGL canvas
+ * without `preserveDrawingBuffer` reads back blank once the frame has been presented.
+ */
+export function takeCaptureRequest(): boolean {
+  if (!captureRequested) return false;
+  captureRequested = false;
+  return true;
+}
+
+/** Send a frame of `canvas` to the host, scaled to at most `maxWidth` CSS pixels wide. */
+export function sendCapture(canvas: HTMLCanvasElement, maxWidth = 390): void {
+  try {
+    const scale = Math.min(1, maxWidth / canvas.width);
+    const out = document.createElement('canvas');
+    out.width = Math.max(1, Math.round(canvas.width * scale));
+    out.height = Math.max(1, Math.round(canvas.height * scale));
+    out.getContext('2d')?.drawImage(canvas, 0, 0, out.width, out.height);
+    parent.postMessage(
+      {
+        type: 'familiar:frame',
+        apiVersion: API_VERSION,
+        payload: {
+          image: out.toDataURL('image/jpeg', 0.85),
+          canvasWidth: canvas.width,
+          canvasHeight: canvas.height,
+          devicePixelRatio: window.devicePixelRatio,
+          stats: { ...stats },
+        },
+      },
+      '*'
+    );
+  } catch {
+    // A capture is a diagnostic. Never let it take the scene down.
+  }
+}
 
 /** Attach the bridge to `window`. Idempotent; called for you by `announceReady`. */
 export function install(): void {
@@ -184,7 +243,11 @@ function reportFrameRate(): void {
     const now = performance.now();
     if (now - since >= 1000) {
       parent.postMessage(
-        { type: 'familiar:stats', apiVersion: API_VERSION, payload: { fps: Math.round((frames * 1000) / (now - since)) } },
+        {
+          type: 'familiar:stats',
+          apiVersion: API_VERSION,
+          payload: { fps: Math.round((frames * 1000) / (now - since)), ...stats },
+        },
         '*'
       );
       frames = 0;
@@ -211,4 +274,6 @@ export function _reset(): void {
   track = null;
   state = { isPlaying: false, currentTime: 0 };
   warnedVersion = undefined;
+  captureRequested = false;
+  for (const key of Object.keys(stats)) delete stats[key];
 }

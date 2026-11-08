@@ -13,7 +13,7 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RGBShiftShader } from 'three/examples/jsm/shaders/RGBShiftShader.js';
 import * as THREE from 'three';
-import { getAudioData, GLOW_LEVEL } from './familiar';
+import { getAudioData, GLOW_LEVEL, sendCapture, setStat, takeCaptureRequest } from './familiar';
 
 // Vignette shader
 const VignetteShader = {
@@ -174,8 +174,17 @@ export function AudioReactiveEffects({
       vignettePassRef.current.uniforms.darkness.value = vignetteIntensity + bass * 0.3;
     }
 
+    // What the effect is actually doing, for the host's probe and debug panel.
+    if (bloomPassRef.current) {
+      setStat('bloomStrength', bloomPassRef.current.strength);
+      setStat('bloomThreshold', bloomPassRef.current.threshold);
+    }
+    setStat('bass', bass);
+
     // Render through composer instead of default renderer
     composer.render();
+    // Same task as the draw, or the canvas reads back blank.
+    if (takeCaptureRequest()) sendCapture(gl.domElement);
   }, 1);
 
   return null;

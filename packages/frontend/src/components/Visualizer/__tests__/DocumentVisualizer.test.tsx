@@ -12,7 +12,8 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, cleanup, act } from '@testing-library/react';
-import { DocumentVisualizer, READY, EVENT_API_VERSION, withPublishedTiming } from '../DocumentVisualizer';
+import { DocumentVisualizer, READY, EVENT_API_VERSION, FRAME, STATS, withPublishedTiming } from '../DocumentVisualizer';
+import { _resetProbe } from '../../../services/visualizerProbe';
 
 const audio = { bass: 0.5, mid: 0.4, treble: 0.3, averageFrequency: 120, beat: 0.9, onset: true, frequencyData: new Uint8Array([1, 2, 3]) };
 const subscribe = vi.fn();
@@ -173,5 +174,58 @@ describe('withPublishedTiming (ADR-0164 point 4)', () => {
       { time: 1, text: 'a', startTime: 1, endTime: 3.5 },
       { time: 3.5, text: 'b', startTime: 3.5, endTime: undefined },
     ]);
+  });
+});
+
+describe('the probe (probe=1 on the URL)', () => {
+  type Drained = Array<{ kind: string; payload?: Record<string, unknown> }>;
+  const drain = (): Drained =>
+    JSON.parse((window as unknown as { __familiarProbe: { drain: () => string } }).__familiarProbe.drain());
+
+  afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); _resetProbe(); });
+
+  async function readyWithProbe(search: string) {
+    window.history.replaceState(null, '', `/${search}`);
+    let ticks = 0;
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => { if (ticks++ < 3) setTimeout(() => cb(0), 0); return ticks; });
+    vi.stubGlobal('cancelAnimationFrame', () => {});
+    const mounted = mountWithSpy();
+    await act(async () => {
+      window.dispatchEvent(new MessageEvent('message', { data: { type: READY }, source: mounted.frame.contentWindow }));
+    });
+    await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+    return mounted;
+  }
+
+  it('records what the document was sent and what it reported, and asks for frames', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const { frame } = await readyWithProbe('?probe=1');
+    act(() => {
+      for (const data of [
+        { type: STATS, payload: { fps: 58, bloomStrength: 0.1 } },
+        { type: FRAME, payload: { image: 'data:image/jpeg;base64,AA' } },
+      ]) window.dispatchEvent(new MessageEvent('message', { data, source: frame.contentWindow }));
+    });
+    act(() => { vi.advanceTimersByTime(5000); });
+
+    const records = drain();
+    const kinds = new Set(records.map((r) => r.kind));
+    expect([...kinds]).toEqual(expect.arrayContaining(['page', 'track', 'audio', 'stats', 'frame']));
+    // Exactly what was posted, so a harness replays the same feed.
+    const audio = records.find((r) => r.kind === 'audio')!.payload!;
+    const posted = sentMessages(frame).find((m) => m.type === 'familiar:audio')!.payload;
+    expect(audio).toEqual(posted);
+    expect(records.find((r) => r.kind === 'stats')!.payload).toEqual({ fps: 58, bloomStrength: 0.1 });
+    expect(sentMessages(frame).some((m) => m.type === 'familiar:capture')).toBe(true);
+    // A drain forgets what it returned.
+    expect(drain()).toEqual([]);
+  });
+
+  it('records nothing, and asks for nothing, without probe=1', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const { frame } = await readyWithProbe('');
+    act(() => { vi.advanceTimersByTime(5000); });
+    expect((window as unknown as { __familiarProbe?: unknown }).__familiarProbe).toBeUndefined();
+    expect(sentMessages(frame).some((m) => m.type === 'familiar:capture')).toBe(false);
   });
 });

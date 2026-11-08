@@ -21,6 +21,7 @@ import type { Track, TrackFeatures } from '../../types';
 import type { LyricLine } from '../../api';
 import { getAudioData, useAudioAnalyser } from './hooks';
 import { recordHostFrame, recordPostedFrame, recordPluginFps } from './visualizerMetrics';
+import { CAPTURE_EVERY_MS, installProbe, probeEnabled, recordProbe } from '../../services/visualizerProbe';
 
 export interface DocumentVisualizerProps {
   /** URL of the plugin's `index.html`. */
@@ -39,7 +40,8 @@ export interface DocumentVisualizerProps {
 export type HostMessage =
   | { type: 'familiar:track'; payload: TrackPayload }
   | { type: 'familiar:state'; payload: StatePayload }
-  | { type: 'familiar:audio'; payload: AudioPayload };
+  | { type: 'familiar:audio'; payload: AudioPayload }
+  | { type: 'familiar:capture' };
 
 export interface TrackPayload {
   id: string | null;
@@ -94,6 +96,10 @@ export const READY = 'familiar:ready';
  */
 export const STATS = 'familiar:stats';
 
+/** The probe's request for a frame, and the document's answer (`services/visualizerProbe.ts`). */
+export const CAPTURE = 'familiar:capture';
+export const FRAME = 'familiar:frame';
+
 /** Version of the *event* contract, not of any library (ADR-0087 point 9). */
 export const EVENT_API_VERSION = 1;
 
@@ -145,6 +151,8 @@ export function DocumentVisualizer({
 }: DocumentVisualizerProps) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [ready, setReady] = useState(false);
+  // Read once: the native host reloads the page to change it, as it does for `debug`.
+  const [probe] = useState(() => probeEnabled());
 
   // Reset on navigation: a different document has not said it is listening yet.
   useEffect(() => { setReady(false); }, [src]);
@@ -166,6 +174,8 @@ export function DocumentVisualizer({
       const data = event.data as { type?: unknown; payload?: { fps?: unknown } } | null;
       if (!data || typeof data !== 'object') return;
       if (data.type === READY) setReady(true);
+      if (probe && data.type === STATS) recordProbe('stats', { payload: data.payload });
+      if (probe && data.type === FRAME) recordProbe('frame', { payload: data.payload });
       // Optional, and the only thing a plugin tells the host besides that it is listening. The
       // host cannot measure a plugin's frame rate — opaque origin — and that is the one number
       // that matches what a person actually sees.
@@ -173,13 +183,23 @@ export function DocumentVisualizer({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, []);
+  }, [probe]);
+
+  // The probe asks for a frame every few seconds. Off unless the native host turned it on.
+  useEffect(() => {
+    if (!probe || !ready) return;
+    installProbe();
+    const timer = setInterval(() => send({ type: CAPTURE }), CAPTURE_EVERY_MS);
+    return () => clearInterval(timer);
+  }, [probe, ready, send]);
 
   // Track — sent on ready, and whenever the track (or what is known about it) changes.
   useEffect(() => {
     if (!ready) return;
-    send({ type: 'familiar:track', payload: trackPayload(track, features, artworkUrl, lyrics, duration) });
-  }, [ready, send, track, features, artworkUrl, lyrics, duration]);
+    const payload = trackPayload(track, features, artworkUrl, lyrics, duration);
+    if (probe) recordProbe('track', { payload: { ...payload, lyrics: payload.lyrics ? payload.lyrics.length : null } });
+    send({ type: 'familiar:track', payload });
+  }, [ready, send, track, features, artworkUrl, lyrics, duration, probe]);
 
   // Transport. `currentTime` moves constantly, so this fires often; it is two numbers.
   useEffect(() => {
@@ -219,26 +239,25 @@ export function DocumentVisualizer({
           bass: data.bass, beat: data.beat, onset: data.onset,
           averageFrequency: data.averageFrequency,
         });
-        send({
-          type: 'familiar:audio',
-          payload: {
-            bass: data.bass,
-            mid: data.mid,
-            treble: data.treble,
-            averageFrequency: data.averageFrequency,
-            beat: data.beat,
-            onset: data.onset,
-            // A plain array: structured clone handles typed arrays, but a plugin that JSON-parses
-            // its way through a framework boundary gets an object with numeric keys instead.
-            frequencyData: Array.from(data.frequencyData ?? []),
-          },
-        });
+        const payload: AudioPayload = {
+          bass: data.bass,
+          mid: data.mid,
+          treble: data.treble,
+          averageFrequency: data.averageFrequency,
+          beat: data.beat,
+          onset: data.onset,
+          // A plain array: structured clone handles typed arrays, but a plugin that JSON-parses
+          // its way through a framework boundary gets an object with numeric keys instead.
+          frequencyData: Array.from(data.frequencyData ?? []),
+        };
+        if (probe) recordProbe('audio', { payload });
+        send({ type: 'familiar:audio', payload });
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [ready, send]);
+  }, [ready, send, probe]);
 
   return (
     <iframe
