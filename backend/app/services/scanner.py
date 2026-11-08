@@ -18,6 +18,7 @@ from app.db.models import Track, TrackAnalysis, TrackStatus
 from app.services import metadata_overrides
 from app.services.album_resolver import resolve_canonical_album
 from app.services.artist_resolver import resolve_canonical_artist
+from app.services.compilations import VARIOUS_ARTISTS
 
 
 class LibraryValidationError(Exception):
@@ -846,74 +847,86 @@ class LibraryScanner:
         return track
 
     async def detect_compilation_albums(self) -> dict[str, int]:
-        """Detect compilation albums and set album_artist for tracks.
+        """Label compilation tracks that have no album artist "Various Artists" (ADR-0167).
 
-        Finds albums where:
-        - album_artist is not already set
-        - Multiple different artists exist for the same album
+        Which tracks form a compilation is decided by ``compilations.compilation_track_ids``:
+        one record, not one title. The rule this replaced grouped by title across the whole
+        library, so Portishead's *Third* became a compilation because Soft Machine also has a
+        *Third*, and the two records became one album.
 
-        Sets album_artist = "Various Artists" for all tracks in those albums.
+        The evidence is every active, titled track whose album artist is blank or already
+        "Various Artists" (a compilation half-labelled by an earlier run still counts as one).
+        Only a **blank** album artist is ever written; a value from a tag is never replaced.
         Returns dict with albums_detected and tracks_updated counts.
-
-        Uses case-insensitive album matching to handle variations like
-        "Alice In Ultraland" vs "Alice in Ultraland".
         """
         from sqlalchemy import update
 
-        # Find albums with multiple artists (compilation candidates)
-        # Only consider tracks where album_artist is not already set
-        # Use lower(album) for case-insensitive grouping
-        # Strip "feat./ft./featuring" suffixes so that tracks like
-        # "Massive Attack feat. Damon Albarn" don't cause false compilation detection
-        stripped_artist = func.regexp_replace(
-            Track.artist,
-            r'\s+(feat\.?|ft\.?|featuring)\s+.*$',
-            '',
-            'i',
-        )
-        compilation_query = (
-            select(func.lower(Track.album).label("album_lower"))
-            .where(
-                Track.album.isnot(None),
-                Track.album != "",
-                Track.status == TrackStatus.ACTIVE,
-                (Track.album_artist.is_(None) | (Track.album_artist == "")),
+        from app.services.compilations import CompilationEvidence, compilation_track_ids
+
+        rows = (
+            await self.db.execute(
+                select(
+                    Track.id,
+                    Track.album,
+                    Track.artist,
+                    Track.file_path,
+                    Track.disc_number,
+                    Track.track_number,
+                    Track.album_artist,
+                ).where(
+                    Track.album.isnot(None),
+                    Track.album != "",
+                    Track.status == TrackStatus.ACTIVE,
+                    Track.album_artist.is_(None)
+                    | (Track.album_artist == "")
+                    | (Track.album_artist == VARIOUS_ARTISTS),
+                )
             )
-            .group_by(func.lower(Track.album))
-            .having(func.count(func.distinct(func.lower(stripped_artist))) > 1)
-        )
+        ).all()
 
-        result = await self.db.execute(compilation_query)
-        compilation_albums_lower = [row[0] for row in result.fetchall()]
+        evidence = [
+            CompilationEvidence(
+                id=row.id,
+                album=row.album,
+                artist=row.artist or "",
+                folder=str(Path(row.file_path).parent),
+                disc_number=row.disc_number,
+                track_number=row.track_number,
+            )
+            for row in rows
+        ]
+        compilation_ids = compilation_track_ids(evidence)
+        blank = {row.id: row.album for row in rows if not (row.album_artist or "").strip()}
+        to_label = [tid for tid in compilation_ids if tid in blank]
 
-        if not compilation_albums_lower:
+        if not to_label:
             logger.info("No compilation albums detected")
             return {"albums_detected": 0, "tracks_updated": 0}
 
-        logger.info(f"Detected {len(compilation_albums_lower)} compilation albums: {compilation_albums_lower[:5]}...")
+        albums = {blank[tid].strip().lower() for tid in to_label}
+        logger.info(f"Detected {len(albums)} compilation albums: {sorted(albums)[:5]}...")
 
-        # Update all tracks in those albums to have album_artist = "Various Artists"
-        # Use case-insensitive matching
-        update_stmt = (
-            update(Track)
-            .where(
-                func.lower(Track.album).in_(compilation_albums_lower),
-                (Track.album_artist.is_(None) | (Track.album_artist == "")),
+        tracks_updated = 0
+        for start in range(0, len(to_label), 1000):
+            chunk = to_label[start : start + 1000]
+            result = await self.db.execute(
+                update(Track)
+                .where(
+                    Track.id.in_(chunk),
+                    Track.album_artist.is_(None) | (Track.album_artist == ""),
+                )
+                .values(album_artist=VARIOUS_ARTISTS)
             )
-            .values(album_artist="Various Artists")
-        )
-
-        result = await self.db.execute(update_stmt)
-        tracks_updated = result.rowcount  # type: ignore[attr-defined]
+            tracks_updated += result.rowcount  # type: ignore[attr-defined]
 
         await self.db.commit()
 
         logger.info(
-            f"Compilation detection complete: {len(compilation_albums_lower)} albums, "
+            f"Compilation detection complete: {len(albums)} albums, "
             f"{tracks_updated} tracks updated"
         )
 
-        return {"albums_detected": len(compilation_albums_lower), "tracks_updated": tracks_updated}
+        return {"albums_detected": len(albums), "tracks_updated": tracks_updated}
 
     async def _update_track(
         self,
