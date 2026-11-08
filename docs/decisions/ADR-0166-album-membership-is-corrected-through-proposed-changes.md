@@ -68,25 +68,37 @@ still show a cover on only some tracks.
    - Write the chosen `album_artist` to every moved track as an ADR-0051 override, so the album list
      groups by the same text and agrees with the identity.
    - **An album left with no tracks is deleted**, after its tracks are repointed; the foreign key is
-     `ON DELETE SET NULL`. If all of its tracks went to one album, that is a merge: its `AlbumAlias`
-     rows move to the target, and the target takes its release id if it has none. Otherwise its
-     aliases are deleted.
+     `ON DELETE SET NULL`. After a merge, its `AlbumAlias` rows move to the target, and the target
+     takes its release id if it has none. After a split, its aliases are deleted, because they key
+     on the label being taken back.
    - **Rescans keep the result**, without anything writing to a file. After a merge, the moved
      aliases resolve the files' own tags to the kept album. After a split, the detector's label was
      only ever in the database, so the files' tags already key on the track artist. The target
      album has that alias, registered if missing.
    - **Artwork:** if the target has no cover, copy one from the album the tracks came from. Covers
      filed under other ids stay on disk untouched; nothing deletes artwork.
-3. **Two rules suggest moves, and both are limited to evidence in one folder or one artist.**
-   - **Merge:** albums whose tracks share a containing directory, and whose titles agree under
-     `normalize_for_matching`. The kept album is the one with the most tracks, with a tie going to
-     the one with a release id. The proposed album artist is the most common non-blank one other
-     than "Various Artists"; it falls back to "Various Artists" only when the folder holds more than
-     one track artist.
-   - **Split:** tracks labelled "Various Artists" that ADR-0167's rule would not label, grouped by
-     track artist. They move to that artist's album for the title.
-   - Both run beside the duplicate-artist scan in `app/services/auto_proposals.py`, and neither
-     re-proposes a set of tracks already covered by a pending proposal.
+3. **Two rules suggest moves.** Both run beside the duplicate-artist scan in
+   `app/services/auto_proposals.py`, as one pure function of the tracks (`plan_album_moves`).
+   Neither re-proposes a track already covered by a pending move.
+   - **Split:** tracks labelled "Various Artists" that ADR-0167's rule would not label, where the
+     artist passes that ADR's own-album test (three or more tracks under the title, numbered
+     against another artist's), in a folder holding only that artist. And the artists passing it
+     must hold at least half of the title's tracks. Without those conditions, a compilation mostly
+     by one artist would be split into one-track albums: *Mistress America*'s soundtrack, or the
+     seventeen-artist *One on Twoism Volume 2*. They move to that artist's album for the title.
+     Splits run only by hand (ADR-0167 point 4).
+   - **Merge:** albums whose tracks share a containing directory and whose titles agree under
+     `normalize_for_matching`. The kept album is the one with the most of those tracks, with a tie
+     going to the one with a release id.
+   - **A merge's album artist:** "Various Artists" when the folder's tracks are shared by ADR-0167's
+     majority test. Otherwise the most common album artist other than "Various Artists", and
+     failing that the most common track artist.
+   - **A folder a split covers is skipped by the merge rule.** On *Third*, merging first would join
+     Portishead's stray track to the fused album; the split moves the rest onto the stray's album
+     instead.
+   - **A folder whose other albums hold tracks in another folder is skipped.** Moving them would
+     take tracks out of an album no single folder holds. When the kept album reaches beyond the
+     folder, the merge is proposed only if that album is a compilation by ADR-0167's rule.
    - **Two copies in two folders are never proposed for merging**, because merging them would hide
      a duplicate rather than resolve it.
 4. **A move can be undone.** `old_value` records each track's previous album id, album artist id
@@ -125,8 +137,10 @@ still show a cover on only some tracks.
 
 ## Consequences
 
-- **Positive:** the 35 split folders become merge proposals, and the albums the false label fused
-  (*Third*, *Greatest Hits*, *Classics*, *Peel Session* and others) become split proposals.
+- **Positive:** a dry run on the live library proposes 16 splits (155 tracks) and 20 merges (64
+  tracks). Among them: *Third* and *Greatest Hits* split into their records, *TRST* and *Cro
+  Magnox* each made one album under their artist, and compilation folders such as *Nothing
+  Changes* and *sii-comp07* made one album under "Various Artists".
   Approving one gives each record one identity, one cover and one row in the album list, and a
   rescan doesn't undo it.
 - **Positive:** this builds ADR-0052's album merge follow-up, and goes further: the same operation
