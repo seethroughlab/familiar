@@ -5,7 +5,7 @@
   "type": "module",
   "description": "The first-party visualizer documents' contract check (ADR-0125 point 4): every built document against the same recorded host events.",
   "scripts": {
-    "build": "pnpm -r --filter './packages/visualizers/*' build",
+    "build": "pnpm -r --filter './*' build",
     "test:documents": "playwright test"
   },
   "devDependencies": {
