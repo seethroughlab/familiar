@@ -16,7 +16,7 @@ from mutagen.id3 import ID3
 from mutagen.mp4 import MP4
 from PIL import Image
 
-from app.config import AUDIO_EXTENSIONS, GENERATIVE_ART_VERSION, settings
+from app.config import GENERATIVE_ART_VERSION, settings
 
 # Standard sizes for artwork
 ARTWORK_SIZES = {
@@ -354,10 +354,15 @@ def find_local_artwork(own_file: Path, album_files: Sequence[Path] = ()) -> byte
     The order:
 
     1. the requested file;
-    2. the album's other tracks (``album_files``), which the caller has from the database;
-    3. other audio files in the same folder, since a split album (two album-artist tags)
-       is two albums in the database and one folder on disk;
-    4. an image file beside them named like a cover (``FOLDER_IMAGE_STEMS``).
+    2. the album's other tracks (``album_files``), which the caller chooses from the
+       database: the same album, or the same folder with the same album tag, since a split
+       album (two album-artist tags) is two albums in the database and one folder on disk;
+    3. an image file beside them named like a cover (``FOLDER_IMAGE_STEMS``).
+
+    **Never just any audio file in the folder.** Until 2026-11-08 step 2 also opened every
+    audio file beside the track, whatever album it was on. Elliott Smith's *How to Take a
+    Fall* sits untagged in a folder of seven unrelated songs, and took a photo from one of
+    them. A file only lends its picture when the database says it is the same album.
 
     At most ``MAX_LOCAL_FILES`` audio files are opened in total.
     """
@@ -386,9 +391,6 @@ def find_local_artwork(own_file: Path, album_files: Sequence[Path] = ()) -> byte
         entries = sorted(folder.iterdir())
     except OSError:
         return None
-    for path in entries:
-        if path.suffix.lower() in AUDIO_EXTENSIONS and (data := embedded(path)):
-            return data
 
     by_name = {p.name.lower(): p for p in entries if p.is_file()}
     for stem in FOLDER_IMAGE_STEMS:

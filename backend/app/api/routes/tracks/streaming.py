@@ -311,7 +311,7 @@ async def _find_missing_artwork(db: AsyncSession, track: Track, album_key: str) 
     A miss is remembered for a day (`ARTWORK_MISS_SECONDS`), so an album with no cover
     anywhere is not re-read from disk on every request.
     """
-    from sqlalchemy import select
+    from sqlalchemy import and_, func, or_, select
 
     from app.services.artwork import MAX_LOCAL_FILES, find_local_artwork, save_artwork
     from app.services.redis_client import get_redis
@@ -323,19 +323,38 @@ async def _find_missing_artwork(db: AsyncSession, track: Track, album_key: str) 
     except Exception:
         pass
 
+    # Files that may lend their picture: the same album, or, for an album the database
+    # holds split, the same folder with the same album tag. A track with no album tag
+    # borrows from nobody: its "album" is only its folder, and a folder of unrelated songs
+    # would hand it a stranger's cover (find_local_artwork's docstring has the case).
     album_files: list[Path] = []
-    if track.canonical_album_id is not None:
+    album_tag = (track.album or "").strip()
+    if album_tag:
+        own_folder = Path(track.file_path).parent
+        same_album = Track.canonical_album_id == track.canonical_album_id
+        same_tag_here = and_(
+            Track.file_path.startswith(f"{own_folder}/", autoescape=True),
+            func.lower(func.trim(Track.album)) == album_tag.lower(),
+        )
         rows = await db.execute(
-            select(Track.file_path)
+            select(Track.file_path, Track.canonical_album_id)
             .where(
-                Track.canonical_album_id == track.canonical_album_id,
+                or_(same_album, same_tag_here) if track.canonical_album_id else same_tag_here,
                 Track.id != track.id,
                 Track.active_filter(),
             )
             .order_by(Track.disc_number, Track.track_number)
             .limit(MAX_LOCAL_FILES)
         )
-        album_files = [Path(p) for p in rows.scalars() if p]
+        album_files = [
+            Path(r.file_path)
+            for r in rows
+            if r.file_path
+            and (
+                (track.canonical_album_id and r.canonical_album_id == track.canonical_album_id)
+                or Path(r.file_path).parent == own_folder  # not a subfolder's file
+            )
+        ]
 
     image = await asyncio.to_thread(find_local_artwork, Path(track.file_path), album_files)
     if image:
