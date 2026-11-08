@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+No migrations; the API contract stays at v1 (one optional field added). These are the server half
+of the Apple apps' 1.7 (lyrics, two visualizers).
+
+### Lyrics
+
+- **More lyrics are found, and every answer says what kind it is** (ADR-0163). `GET
+  /tracks/{id}/lyrics` gains an optional `status`: `found`, `plain_only`, `instrumental`,
+  `not_found` or `unavailable`. `unavailable` means LRCLIB could not be asked (a 429, a 5xx, a
+  timeout) and says nothing about the track. Before, every failure read as "no lyrics". On a fixed
+  sample of 400 tracks from a 27,366-track library, synced lyrics went from 26% to 33%, and 53
+  instrumentals are now named as such instead of read as misses.
+  - **Your own lyrics come first:** lyrics you edited, a `.lrc` file beside the track, synced
+    (`SYLT`) or plain lyrics in the file's tags, then LRCLIB. All are read, never written. The
+    scanner had always dropped embedded lyrics.
+  - **Matching:** at most four LRCLIB calls per track. Search results must agree on title, artist
+    and length, never just the first result. A match at the wrong length keeps the words and drops
+    the timing.
+  - **The LRC parser** reads three-digit fractions (`.345` had been read as 3.45 s), several time
+    tags on one line, `[offset:]`, a BOM and CRLF line endings.
+  - **Caching:** found, plain and instrumental answers are stored on the track and asked again
+    after a retag. A miss is remembered for about two weeks, and `unavailable` never is. Storing an
+    answer does not move `updated_at`, so it does not re-sync the track to every phone.
+- **A lyrics request answers within 8 seconds.** A slow lookup carries on in the background and
+  stores its answer for the next request, and simultaneous requests for one track share one
+  lookup. The first 1.7 TestFlight build said "Your server didn't answer" for a track whose lookup
+  took 17.5 s, longer than the app waits.
+- **Familiar is a registered LRCLIB application.** Every request is paced, honours `Retry-After`,
+  and names Familiar in `User-Agent` and `Lrclib-App-Id`. LRCLIB's authorization document is linked
+  from `familiar-apple`'s App Review notes.
+
+### Visualizers
+
+- **The Apple app's visualizer page can reach its server** (ADR-0164). `familiar-visualizer://bundle`
+  is an allowed origin, and the page reads the pairing token. Before, track features, the ranking
+  behind Match to the Music and lyrics were all refused, and only artwork, which is exempt, worked.
+  Plugins now receive the track's lyrics, as `VISUALIZER_API.md` had always promised, and lyric
+  lines carry `startTime`/`endTime` as the docs describe. The default visualizer is Beat Tiles.
+- **Two first-party visualizers: Beat Tiles and Reactive Terrain** (ADR-0161). The Lyrics and Lyric
+  Storm packages are deleted, since lyrics are a native mode in the app (ADR-0160), and the site's
+  gallery drops them along with Spectrum.
+- **Audio-reactive motion glides** at the screen's rate instead of stepping at the 10 frames a
+  second a native host sends. The debug panel no longer calls 30 fps healthy.
+
+### Removed
+
+- The visualizer helpers and picker that nothing imported once the web player was gone (GPU
+  particles, beat sync, lyric timing, artwork palette).
+
 ## [0.2.0-beta22] - 2026-11-02
 
 One migration (it deletes a health row); the API contract stays at v1.
