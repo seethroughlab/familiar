@@ -1,6 +1,6 @@
 # ADR-0173: Transports Share Operations and Generated Contracts
 
-Status: proposed
+Status: accepted
 
 Date: 2026-11-08
 

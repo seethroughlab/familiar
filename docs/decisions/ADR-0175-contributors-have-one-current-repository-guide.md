@@ -1,6 +1,6 @@
 # ADR-0175: Contributor Documentation Has One Current Repository Guide
 
-Status: proposed
+Status: accepted
 
 Date: 2026-11-08
 

@@ -1,6 +1,6 @@
 # ADR-0174: Admin Workflows Show Actions Before Diagnostics
 
-Status: proposed
+Status: accepted
 
 Date: 2026-11-08
 

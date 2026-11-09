@@ -1,6 +1,6 @@
 # ADR-0169: The Maintainability Audit Is Fixed in Risk Order
 
-Status: proposed
+Status: accepted
 
 Date: 2026-11-08
 
