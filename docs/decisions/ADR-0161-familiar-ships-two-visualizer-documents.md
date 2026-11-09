@@ -7,6 +7,19 @@ Date: 2026-11-06
 Supersedes [ADR-0088](ADR-0088-every-visualizer-ships-as-a-document.md) point 1's "nothing is
 dropped".
 
+Implementation:
+- **Frame rate, measured on an iPhone 13 (2026-11-08), accepted at 30 fps for app 1.7.** An
+  untouched visualizer runs at 30, because WebKit throttles a cross-origin frame the listener has
+  not interacted with. Low Power Mode was ruled out by switching it off: still 29 median. Beat
+  Tiles held the cap in both looks: covers at a median 29 (lowest 27), and the textured coverless
+  tiles (familiar #450) at a median 29 (lowest 28) over 91 seconds. Unthrottled, while the
+  listener dragged sliders inside the frame, covers ran at 59 (lowest 42), so the scene is not
+  the limit. Nobody touches the inside of the frame in ordinary use, so 30 is what every listener
+  sees. The maintainer accepted it for 1.7. Lifting the cap means changing how a document is
+  embedded (ADR-0087), and is left for after 1.7. Measured with the device probe
+  (`-FamiliarVisualizerProbe YES`), whose `stats` records carry the page's own fps. Reactive
+  Terrain was not measured; it is under the same cap.
+
 ## Context
 
 ADR-0088 point 1 ships `reactive-terrain`, `beat-tiles`, `lyrics`, `lyric-storm` and `spectrum`.
