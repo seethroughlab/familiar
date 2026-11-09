@@ -215,7 +215,7 @@ export async function navigateToView(page: Page, label: string) {
  * against whatever page it happened to be on. Removing it from the type makes that a compile error
  * rather than a confident false pass — the same reason `Queue` went.
  */
-export async function navigateToTab(page: Page, tabName: 'Library' | 'Playlists') {
+export async function navigateToTab(page: Page, tabName: 'Library') {
   switch (tabName) {
     case 'Library': {
       // Was `navigateToView(page, 'Tracks')`, which reached the track list on the Tools page.
@@ -224,9 +224,6 @@ export async function navigateToTab(page: Page, tabName: 'Library' | 'Playlists'
       await navigateToDestination(page, 'Library');
       break;
     }
-    case 'Playlists':
-      // Visible by default, no navigation needed
-      break;
   }
 }
 

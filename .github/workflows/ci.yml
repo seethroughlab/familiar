@@ -1085,6 +1085,12 @@ jobs:
             console.log('No flaky tests detected');
           "
 
+      # ADR-0174: a skipped test is a failure unless it declared an environment capability.
+      - name: Check for skipped E2E tests
+        if: always()
+        working-directory: packages/web
+        run: node scripts/check-e2e-skips.mjs
+
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()

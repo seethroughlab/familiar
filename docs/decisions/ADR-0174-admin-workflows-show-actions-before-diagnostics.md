@@ -4,6 +4,22 @@ Status: accepted
 
 Date: 2026-11-08
 
+Implementation:
+
+- **Phase 1, 2026-11-09. Point 1's premise did not hold for playlists.** The playlist spec could not
+  seed its way to passing, because the web app has no playlist screen to drive: ADR-0058 made it an
+  administration tool, `app/routes.ts` has no playlist section, `navigateToTab('Playlists')` did
+  nothing ("visible by default"), and no component creates, renames or deletes a playlist. Its four
+  tests could only skip; CI reported 15 passed and 5 skipped of 20. `playlists.spec.ts` is deleted,
+  and playlist behaviour is tested at the operation and REST level instead
+  (`tests/test_playlist_operations.py`, `tests/test_api_playlists.py`, ADR-0173). The other skips
+  were state, not missing UI: `profiles.spec.ts` now seeds the profile it selects through the API
+  (and deletes it) and asserts the selector a fresh context always shows; `library-sync.spec.ts`
+  waits out the global setup's sync instead of skipping its trigger test. No `test.skip` remains in
+  `e2e/`. `packages/web/scripts/check-e2e-skips.mjs` runs after the suite in CI and fails on any
+  skipped test unless it names a capability from its `CAPABILITIES` list (empty today), which it
+  reports on a line of its own (point 2).
+
 Extends [ADR-0126](ADR-0126-the-admin-ui-is-organized-around-operator-workflows.md)
 
 ## Context

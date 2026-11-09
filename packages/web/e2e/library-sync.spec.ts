@@ -48,16 +48,11 @@ test.describe('Library Sync', () => {
       hasText: /sync/i,
     }).first();
 
-    // Wait for the button to be actionable rather than checking and then clicking.
-    // `isDisabled()` followed by `click()` is a race: a sync starting in between leaves the
-    // check saying "enabled" and the click waiting out its full actionability timeout, which
-    // is how this test failed while reporting only `<button disabled ...>`.
-    try {
-      await expect(syncButton).toBeEnabled({ timeout: 10000 });
-    } catch {
-      test.skip(true, 'A sync was already running, so this test has nothing to trigger.');
-      return;
-    }
+    // The global setup's sync can still be running (it waits 120 s, and a cold CI library can take
+    // longer). That used to skip this test, so a run could pass without ever pressing the button
+    // (ADR-0174 point 1). Wait it out instead, then require the button.
+    await waitForSyncComplete(page, 180000);
+    await expect(syncButton).toBeEnabled({ timeout: 10000 });
 
     await syncButton.click();
     await waitForSyncComplete(page, 30000);
