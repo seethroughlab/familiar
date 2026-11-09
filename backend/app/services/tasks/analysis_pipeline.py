@@ -6,7 +6,6 @@ and all queue_* functions for the background analysis pipeline.
 
 import gc
 import logging
-from datetime import timedelta
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -14,20 +13,22 @@ from uuid import UUID
 from sqlalchemy.orm.exc import StaleDataError
 
 from app.config import EMBEDDING_VERSION, FEATURES_VERSION
+from app.services.analysis_lifecycle import RETRY_AFTER, classify, is_terminal, retry_cutoff
 from app.services.tasks.common import _record_task_failure, log_memory
 from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
-ANALYSIS_RETRY_WINDOW_HOURS = 24
-# Retry ownership policy:
+# Retry policy lives in `app/services/analysis_lifecycle.py` (ADR-0172): the window, the attempt
+# limit, and which failure reasons are permanent.
 # - Track-level failure cooldown: Track.analysis_failed_at
-# - Embedding-level failure cooldown: TrackAnalysis.embedding_failed_at
+# - Embedding-level failure: TrackAnalysis.embedding_failed_at, _failure_reason, _attempts
+ANALYSIS_RETRY_WINDOW_HOURS = int(RETRY_AFTER.total_seconds() // 3600)
 
 
 def _analysis_failure_cutoff():
     """Shared retry cutoff for analysis queueing policies."""
-    return utcnow() - timedelta(hours=ANALYSIS_RETRY_WINDOW_HOURS)
+    return retry_cutoff()
 
 
 def _ensure_track_analysis_row(db: Any, track_id: "UUID", version: int) -> None:
@@ -345,10 +346,21 @@ def _record_embedding_failure(track_id: str, error_msg: str) -> None:
             analysis = result.scalar_one_or_none()
 
             if analysis:
+                reason = classify(error_msg)
                 analysis.embedding_error = error_msg[:500]
                 analysis.embedding_failed_at = utcnow()
+                analysis.embedding_failure_reason = reason.value
+                analysis.embedding_attempts = (analysis.embedding_attempts or 0) + 1
+                terminal = is_terminal(reason, analysis.embedding_attempts)
                 db.commit()
-                logger.info(f"Recorded embedding failure for track {track_id}")
+                # ADR-0172 point 2: the reason, track and phase, for a log reader and not for prose.
+                logger.info(
+                    "Analysis failure: phase=embeddings track=%s reason=%s attempt=%d %s",
+                    track_id,
+                    reason.value,
+                    analysis.embedding_attempts,
+                    "terminal" if terminal else "will retry",
+                )
             else:
                 logger.warning(f"No TrackAnalysis record to record embedding failure for {track_id}")
     except Exception as db_error:
@@ -428,6 +440,10 @@ def run_track_embedding(track_id: str) -> dict[str, Any]:
                 existing_analysis.embedding = embedding
                 existing_analysis.embedding_source = embedding_source
                 existing_analysis.embedding_version = EMBEDDING_VERSION
+                existing_analysis.embedding_error = None
+                existing_analysis.embedding_failed_at = None
+                existing_analysis.embedding_failure_reason = None
+                existing_analysis.embedding_attempts = 0
                 db.commit()
                 logger.info(f"Embedding saved for {track.title} (source={embedding_source})")
             else:

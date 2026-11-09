@@ -322,6 +322,11 @@ class TrackAnalysis(Base):
     # Embedding failure tracking (separate from Track.analysis_error which is for features)
     embedding_error: Mapped[str | None] = mapped_column(String(500))
     embedding_failed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # Why it failed, as a stable code, and how many times (ADR-0172). A permanent reason, or
+    # `MAX_ATTEMPTS` failures, is never retried; see `app/services/analysis_lifecycle.py`. Reset with
+    # the row when the scanner sees the file change.
+    embedding_failure_reason: Mapped[str | None] = mapped_column(String(32))
+    embedding_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 

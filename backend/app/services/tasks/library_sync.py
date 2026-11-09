@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from app.config import EMBEDDING_VERSION, FEATURES_VERSION, MELODIC_VERSION, settings
+from app.services.analysis_lifecycle import embeddings_remaining, features_remaining
 from app.services.background.events import record_background_event
 from app.services.background.pause import background_pause
 from app.services.redis_client import get_redis
@@ -441,7 +442,10 @@ async def run_library_sync(
                         )
                     )
                     features_done = analyzed_result.scalar() or 0
-                    pending_features = total_tracks - features_done
+                    # ADR-0172: what the queue could still take, not `total - done`. The
+                    # difference was 30 tracks on the NAS that are not `active`, counted for ever
+                    # and queued never, so every sync spun here until the churn guard.
+                    pending_features = await features_remaining(db)
 
                 if pending_features == 0:
                     break
@@ -571,7 +575,10 @@ async def run_library_sync(
                         )
                         total_with_features = total_result.scalar() or 0
 
-                        pending_embeddings = total_with_features - embeddings_done
+                        # ADR-0172: what the queue could still take. `total - done` also counted
+                        # tracks that are not `active`, and failures past their 24 hours that will
+                        # never succeed; both kept the phase spinning until the churn guard.
+                        pending_embeddings = await embeddings_remaining(db)
 
                     # Check for timeout
                     elapsed = time.time() - embedding_start_time
