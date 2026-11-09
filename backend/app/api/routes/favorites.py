@@ -242,7 +242,7 @@ async def add_favorite(
     db: DbSession,
     profile: RequiredProfile,
 ) -> FavoriteStatusResponse:
-    """Add a track to favorites. Idempotent."""
+    """Add a track to favorites."""
     try:
         await favorite_ops.add(db, profile.id, track_id)
     except TrackNotFound:
@@ -256,7 +256,7 @@ async def remove_favorite(
     db: DbSession,
     profile: RequiredProfile,
 ) -> FavoriteStatusResponse:
-    """Remove a track from favorites. Idempotent."""
+    """Remove a track from favorites."""
     await favorite_ops.remove(db, profile.id, track_id)
     return FavoriteStatusResponse(track_id=track_id, is_favorite=False)
 
