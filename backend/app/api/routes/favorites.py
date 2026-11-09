@@ -17,6 +17,8 @@ from app.api.schemas.suggestions import (
 )
 from app.api.schemas.tracks import TrackResponse
 from app.db.models import ProfileFavorite, ProfilePlayHistory, Track
+from app.operations import favorites as favorite_ops
+from app.operations.errors import TrackNotFound
 from app.services.collection_suggestions import SEED_SAMPLE_CAP, suggest_for_collection
 
 logger = logging.getLogger(__name__)
@@ -240,33 +242,11 @@ async def add_favorite(
     db: DbSession,
     profile: RequiredProfile,
 ) -> FavoriteStatusResponse:
-    """Add a track to favorites."""
-    # Verify track exists
-    track = await db.get(Track, track_id)
-    if not track:
-        raise TrackNotFoundError()
-
-    # Check if already favorited
-    result = await db.execute(
-        select(ProfileFavorite).where(
-            ProfileFavorite.profile_id == profile.id,
-            ProfileFavorite.track_id == track_id,
-        )
-    )
-    existing = result.scalar_one_or_none()
-
-    if existing:
-        # Already favorited, just return success
-        return FavoriteStatusResponse(track_id=track_id, is_favorite=True)
-
-    # Add favorite
-    favorite = ProfileFavorite(
-        profile_id=profile.id,
-        track_id=track_id,
-    )
-    db.add(favorite)
-    await db.commit()
-
+    """Add a track to favorites. Idempotent."""
+    try:
+        await favorite_ops.add(db, profile.id, track_id)
+    except TrackNotFound:
+        raise TrackNotFoundError() from None
     return FavoriteStatusResponse(track_id=track_id, is_favorite=True)
 
 
@@ -276,19 +256,8 @@ async def remove_favorite(
     db: DbSession,
     profile: RequiredProfile,
 ) -> FavoriteStatusResponse:
-    """Remove a track from favorites."""
-    result = await db.execute(
-        select(ProfileFavorite).where(
-            ProfileFavorite.profile_id == profile.id,
-            ProfileFavorite.track_id == track_id,
-        )
-    )
-    favorite = result.scalar_one_or_none()
-
-    if favorite:
-        await db.delete(favorite)
-        await db.commit()
-
+    """Remove a track from favorites. Idempotent."""
+    await favorite_ops.remove(db, profile.id, track_id)
     return FavoriteStatusResponse(track_id=track_id, is_favorite=False)
 
 

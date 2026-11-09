@@ -1,6 +1,7 @@
 """Tests for the playlist, favourite, history and radio tools.
 
-Most of what these tools do is delegate to route functions that are already tested. What is *not*
+Most of what these tools do is delegate to the operations in `app/operations/` (ADR-0173), which
+`tests/test_playlist_operations.py` tests once. What is *not*
 covered elsewhere are the two decisions specific to being called by a language model, and both fail
 silently if they regress:
 
@@ -70,14 +71,14 @@ class TestFavouriteIsSetNotToggle:
     async def test_favouriting_twice_leaves_it_favourited(self, monkeypatch):
         calls: list[str] = []
 
-        async def fake_add(track_id, db, profile):
+        async def fake_add(db, profile_id, track_id):
             calls.append("add")
 
-        async def fake_remove(track_id, db, profile):
+        async def fake_remove(db, profile_id, track_id):
             calls.append("remove")
 
-        monkeypatch.setattr("app.api.routes.favorites.add_favorite", fake_add)
-        monkeypatch.setattr("app.api.routes.favorites.remove_favorite", fake_remove)
+        monkeypatch.setattr("app.operations.favorites.add", fake_add)
+        monkeypatch.setattr("app.operations.favorites.remove", fake_remove)
 
         executor = ToolExecutor(db=None, profile_id=uuid4())  # type: ignore[arg-type]
         monkeypatch.setattr(type(executor), "_profile", _returning(object()))
@@ -94,10 +95,10 @@ class TestFavouriteIsSetNotToggle:
     async def test_unfavouriting_removes(self, monkeypatch):
         calls: list[str] = []
 
-        async def fake_remove(track_id, db, profile):
+        async def fake_remove(db, profile_id, track_id):
             calls.append("remove")
 
-        monkeypatch.setattr("app.api.routes.favorites.remove_favorite", fake_remove)
+        monkeypatch.setattr("app.operations.favorites.remove", fake_remove)
         executor = ToolExecutor(db=None, profile_id=uuid4())  # type: ignore[arg-type]
         monkeypatch.setattr(type(executor), "_profile", _returning(object()))
 

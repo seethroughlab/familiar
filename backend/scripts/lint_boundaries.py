@@ -28,12 +28,9 @@ HTTP_FREE_FORBIDDEN = ("fastapi", "starlette", "app.api", "app.main", "app.mcp")
 SERVICES_FORBIDDEN = ("app.api.routes", "app.api.deps")
 
 #: rule 2 violations that exist today, and what removes them.
-KNOWN: dict[str, str] = {
-    "app/services/llm/handlers/playlists.py": (
-        "calls route functions in app.api.routes.playlists and .favorites directly; "
-        "moves to operations when the playlists domain migrates"
-    ),
-}
+#: Empty since ADR-0173's pilot moved the playlist and favourite use cases into `app/operations/`.
+#: Keep it that way: a service that needs a route's behaviour needs an operation.
+KNOWN: dict[str, str] = {}
 
 
 def imported_names(tree: ast.AST) -> list[tuple[int, str]]:

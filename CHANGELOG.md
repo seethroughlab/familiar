@@ -12,6 +12,9 @@ them from stored failures.
 
 ### Fixed
 
+- **Adding a track to a one-track playlist no longer ties it with the first** (found extracting
+  ADR-0173's operations): the next position was computed as `max(position) or -1`, which read a
+  last position of 0 as an empty playlist. A track id repeated in one request is now added once.
 - **A sync with nothing new finishes instead of spinning until the churn guard** (ADR-0172). Every
   periodic sync on the NAS spent about four minutes ending in `queue_churn_limit_exceeded`: the loop
   counted tracks that are not `active` as pending, but never queued them. One definition in
@@ -27,6 +30,8 @@ them from stored failures.
 
 ### Changed
 
+- **Playlist and favourite use cases live in `app/operations/`** (ADR-0173). The REST routes and the
+  LLM/MCP tools are adapters over them; the boundary lint has no known exceptions left.
 - **One analysis status model** (ADR-0172). `/health/system`, `/health/workers`, `/library/stats`
   and `/library/analysis/status` used to define "pending" four different ways and disagreed on the
   same library. All four now read one query, which splits each phase into complete, queued,
