@@ -34,6 +34,17 @@ Implementation:
   7. Every closure that moved carries the ADR it came from; nothing was folded into the root.
   One behaviour change: ambient's `attach(persist:initial:)` is process-level, not re-run per
   server, so a rebind no longer resets the controls from their persisted copy.
+- **Audited 2026-11-08 — the root is idempotent, but its detach path is incomplete.** A clean
+  `swift test` passes the composition-root tests, and repeated `start()` still retains one seek
+  observer and one command subscription. The audit found one concrete violation of point 3:
+  `bindConfiguration()` gives `nil` to radio and casting when `makeClient()` returns none, but
+  Ambient's source and transport are assigned only inside `if let client` and are never cleared.
+  `AmbientController.attach(source:)` accepts no nil source, and
+  `testADifferentIdentityReplacesTheSources` asserts that radio and casting go offline on
+  `configuration.clear()` without asserting Ambient. A running session can therefore retain the
+  client and transport for a server the interface says was disconnected. This is an implementation
+  defect under the accepted decision, not a new decision: add explicit Ambient detachment and a
+  compiled disconnect assertion before calling point 3 complete.
 
 Extends [ADR-0008](ADR-0008-the-apple-app-shell-is-a-committed-xcode-project.md) and
 [ADR-0122](ADR-0122-the-apple-client-has-explicit-module-boundaries.md).

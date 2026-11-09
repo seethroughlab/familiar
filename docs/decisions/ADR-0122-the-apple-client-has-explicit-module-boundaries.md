@@ -31,6 +31,20 @@ Implementation:
   Also in that PR: `scripts/vendor-schema.sh --fetch` re-vendored `openapi.json` after
   ADR-0129 added `ErrorEnvelope.code`; every `familiar-apple` branch fails the schema gate until
   that is done after a `familiar` schema change.
+- **Audited 2026-11-08 — the first boundary holds; the rest has not yet been earned.**
+  `FamiliarAppCore` is still the only new target, with 15 public type-level declarations and 1,026
+  lines of compiled tests. `FamiliarKit` has grown to 208 public type-level declarations, but the
+  evidence still does not justify splitting Domain, Playback, Storage or Ambient merely to shorten
+  files: there is no cycle or feature that needs an independent build boundary. The large ownership
+  surfaces have continued to grow — `NativeAudioEngine.swift` 2,822 lines, `FamiliarPlayer.swift`
+  2,351, `LibraryView.swift` 2,267, `AmbientSynthEngine.swift` unchanged at 2,116 — so point 7's
+  same-target collaborator and extension splits remain useful refactors when those files are next
+  changed.
+  Twelve test files still consume `AppSource` and nine consume `EngineSource`. Some engine probes
+  assert exact real-time API forms the type system cannot express; app wiring, placement and
+  navigation probes should continue moving to compiled AppCore tests when their subject moves. The
+  architecture-map follow-up is still open: `familiar-apple` has no `docs/ARCHITECTURE.md`, and its
+  `ROADMAP.md` still lists the map as future work.
 
 Extends [ADR-0001](ADR-0001-native-apple-clients-supersede-capacitor.md) and
 [ADR-0008](ADR-0008-the-apple-app-shell-is-a-committed-xcode-project.md).
