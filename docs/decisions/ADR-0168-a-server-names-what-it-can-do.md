@@ -1,6 +1,6 @@
 # ADR-0168: A Server Names What It Can Do
 
-Status: proposed
+Status: accepted
 
 Date: 2026-11-08
 
