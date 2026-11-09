@@ -4,6 +4,23 @@ Status: accepted
 
 Date: 2026-11-08
 
+Implementation:
+- **Built 2026-11-08 (#457); the exit condition is met.** By phase:
+  - **Repair.** `api/library.ts` imports `RediscoverySuggestion` from the generated client.
+    `engineContract.test.ts` loses its mocks of the deleted Capacitor plugin, which were what named
+    `FamiliarAudioPlugin`, and its fake declares the full `AudioEngineCapabilities`. `AudioEngine` is
+    unchanged, with no `any` and nothing excluded.
+  - **Enforce.** Root `pnpm run typecheck` runs `scripts/check_typecheck_coverage.py`, then every
+    package's `typecheck`. `make check` and CI's Frontend Lint run it, and the Frontend Test job's
+    separate visualizer checks are folded in. A deliberate error in `api/library.ts` failed it
+    locally, and in CI (run 42550583793, step "Type-check every workspace package", TS2322), then
+    was reverted.
+  - **Cover.** Seven workspace packages, all with `typecheck`. `@familiar/visualizers` gained a
+    `tsconfig.json` for its contract test. The coverage script reads `pnpm-workspace.yaml`, and
+    fails on a package with TypeScript and no script (proven by removing `web`'s). The bundle budget
+    check writes its report to the ignored `packages/web/dist/perf`. `update:bundle-metrics`
+    rewrites the tracked `artifacts/perf` copy on purpose.
+
 Extends [ADR-0127](ADR-0127-current-documentation-precedes-project-history.md) and
 [ADR-0129](ADR-0129-the-web-client-is-generated-from-the-openapi-contract.md)
 
