@@ -1,326 +1,87 @@
-import type { RediscoverySuggestion } from '@familiar/api-client';
+import type * as Wire from '@familiar/api-client';
 import type { LibraryStats } from '../types';
 import api from './base';
 import { getApiUrl, encodePathSegment } from './base';
 
-export interface ImportResult {
-  status: string;
-  message: string;
-  import_path: string | null;
-  files_found: number;
-  files: string[];
+// Response types are the schema's (ADR-0173). The names are kept so callers need not change; each
+// is the generated type, and `pnpm generate:api` is what updates them.
+/**
+ * Sync progress as the UI reads it: every field present.
+ *
+ * The server always sends all of them (each has a default in `SyncProgress`), but a default makes a
+ * field optional in the schema, and `dump_openapi.py` turns `progress: SyncProgress | None` into an
+ * optional property, so the generated type says "maybe absent" where the wire says "present, or
+ * null". The schema cannot simply be tightened: familiar-apple generates `SyncStatus` too, and its
+ * optionals would change under `LibrarySyncStore`. So the adapter fills the defaults once, here.
+ */
+export type SyncProgress = Required<Wire.SyncProgress>;
+export type SyncPhase = SyncProgress['phase'];
+export type SyncStatus = Omit<Wire.SyncStatus, 'progress'> & { progress: SyncProgress | null };
+
+const PROGRESS_DEFAULTS: SyncProgress = {
+  phase: 'idle',
+  phase_message: '',
+  files_discovered: 0,
+  files_processed: 0,
+  files_total: 0,
+  new_tracks: 0,
+  updated_tracks: 0,
+  unchanged_tracks: 0,
+  relocated_tracks: 0,
+  marked_missing: 0,
+  recovered: 0,
+  tracks_analyzed: 0,
+  tracks_pending_analysis: 0,
+  tracks_total: 0,
+  analysis_percent: 0,
+  started_at: null,
+  current_item: null,
+  last_heartbeat: null,
+  errors: [],
+};
+
+/** A sync status off the wire, with progress either complete or null. */
+export function toSyncStatus(wire: Wire.SyncStatus): SyncStatus {
+  return { ...wire, progress: wire.progress ? { ...PROGRESS_DEFAULTS, ...wire.progress } : null };
 }
 
-export interface RecentImport {
-  name: string;
-  path: string;
-  file_count: number;
-  created_at: string | null;
-}
+export type ArtistSummary = Wire.ArtistSummary;
+export type ArtistListResponse = Wire.ArtistListResponse;
+export type ArtistAlbum = Wire.ArtistAlbum;
+export type ArtistTrack = Wire.ArtistTrack;
+export type ArtistDetailResponse = Wire.ArtistDetailResponse;
 
-// Unified Sync Types
-export type SyncPhase = 'idle' | 'discovering' | 'reading' | 'features' | 'embeddings' | 'melodic' | 'complete' | 'error';
+export type AlbumSummary = Wire.AlbumSummary;
+export type AlbumListResponse = Wire.AlbumListResponse;
+export type AlbumTrack = Wire.AlbumTrack;
+export type SimilarAlbumInfo = Wire.SimilarAlbumInfo;
+export type DiscoverAlbumInfo = Wire.DiscoverAlbumInfo;
+export type AlbumDetailResponse = Wire.AlbumDetailResponse;
 
-export interface SyncProgress {
-  phase: SyncPhase;
-  phase_message: string;
+export type YearCount = Wire.YearCount;
+export type YearDistributionResponse = Wire.YearDistributionResponse;
+export type MoodCell = Wire.MoodCell;
+export type MoodDistributionResponse = Wire.MoodDistributionResponse;
 
-  // Discovery/scan metrics
-  files_discovered: number;
-  files_processed: number;
-  files_total: number;
-  new_tracks: number;
-  updated_tracks: number;
-  unchanged_tracks: number;
-  relocated_tracks: number;
-  marked_missing: number;
-  recovered: number;
-
-  // Analysis metrics
-  tracks_analyzed: number;
-  tracks_pending_analysis: number;
-  tracks_total: number;
-  analysis_percent: number;
-
-  // Overall
-  started_at: string | null;
-  current_item: string | null;
-  last_heartbeat: string | null;
-  errors: string[];
-}
-
-export interface SyncStatus {
-  status: 'idle' | 'running' | 'completed' | 'error' | 'already_running';
-  message: string;
-  progress: SyncProgress | null;
-}
-
-// Library Browser Types
-export interface ArtistSummary {
-  /** Canonical Artist.id (UUID) — present after Pass 2 read cutover. */
-  id?: string | null;
-  name: string;
-  track_count: number;
-  album_count: number;
-  first_track_id: string;
-  first_album: string | null;
-  image_url?: string | null;
-}
-
-export interface ArtistListResponse {
-  items: ArtistSummary[];
-  total: number;
-  page: number;
-  page_size: number;
-}
-
-// Artist Detail
-export interface ArtistAlbum {
-  name: string;
-  year: number | null;
-  track_count: number;
-  first_track_id: string;
-}
-
-export interface ArtistTrack {
-  id: string;
-  title: string | null;
-  album: string | null;
-  track_number: number | null;
-  duration_seconds: number | null;
-  year: number | null;
-}
-
-export interface ArtistDetailResponse {
-  /** Canonical Artist.id (UUID) — present after Pass 2 read cutover. */
-  id?: string | null;
-  name: string;
-  track_count: number;
-  album_count: number;
-  total_duration_seconds: number;
-
-  // From Last.fm
-  bio_summary: string | null;
-  bio_content: string | null;
-  image_url: string | null;
-  lastfm_url: string | null;
-  listeners: number | null;
-  playcount: number | null;
-  tags: string[];
-  similar_artists: Array<{
-    name: string;
-    match_score: number;
-    in_library: boolean;
-    track_count: number | null;
-    image_url: string | null;
-    lastfm_url: string | null;
-    bandcamp_url: string | null;
-  }>;
-
-  // Library content
-  albums: ArtistAlbum[];
-  tracks: ArtistTrack[];
-  first_track_id: string;
-
-  // Cache status
-  lastfm_fetched: boolean;
-  lastfm_error: string | null;
-}
-
-export interface AlbumSummary {
-  name: string;
-  artist: string;
-  year: number | null;
-  track_count: number;
-  first_track_id: string;
-}
-
-export interface AlbumListResponse {
-  items: AlbumSummary[];
-  total: number;
-  page: number;
-  page_size: number;
-}
-
-export interface AlbumTrack {
-  id: string;
-  title: string | null;
-  track_number: number | null;
-  disc_number: number | null;
-  duration_seconds: number | null;
-}
-
-export interface SimilarAlbumInfo {
-  name: string;
-  artist: string;
-  year: number | null;
-  track_count: number;
-  first_track_id: string;
-  similarity_score: number;
-}
-
-export interface DiscoverAlbumInfo {
-  name: string;
-  artist: string;
-  image_url: string | null;
-  lastfm_url: string | null;
-  bandcamp_url: string | null;
-}
-
-export interface AlbumDetailResponse {
-  name: string;
-  artist: string;
-  album_artist: string | null;
-  year: number | null;
-  genre: string | null;
-  track_count: number;
-  total_duration_seconds: number;
-  first_track_id: string;
-  tracks: AlbumTrack[];
-  similar_albums: SimilarAlbumInfo[];
-  discover_albums: DiscoverAlbumInfo[];
-  other_albums_by_artist: SimilarAlbumInfo[];
-}
-
-// Year Distribution (for Timeline browser)
-export interface YearCount {
-  year: number;
-  track_count: number;
-  album_count: number;
-  artist_count: number;
-}
-
-export interface YearDistributionResponse {
-  years: YearCount[];
-  total_with_year: number;
-  total_without_year: number;
-  min_year: number | null;
-  max_year: number | null;
-}
-
-// Mood Distribution (for MoodGrid browser)
-export interface MoodCell {
-  x_min: number;
-  x_max: number;
-  y_min: number;
-  y_max: number;
-  track_count: number;
-  sample_track_ids: string[];
-}
-
-export interface MoodDistributionResponse {
-  cells: MoodCell[];
-  grid_size: number;
-  total_with_mood: number;
-  total_without_mood: number;
-  x_axis: string;
-  y_axis: string;
-}
-
-// Music Map (for MusicMap browser)
-export interface MapNode {
-  id: string;
-  name: string;
-  x: number;
-  y: number;
-  track_count: number;
-  first_track_id: string;
-  // Per-artist mean of each lens feature (energy/valence/etc.), 0-1 scaled.
-  features?: Record<string, number>;
-}
-
-export interface MapEdge {
-  source: string;
-  target: string;
-  weight: number;
-}
-
-export interface MusicMapResponse {
-  nodes: MapNode[];
-  edges: MapEdge[];
-  entity_type: string;
-  total_entities: number;
-}
-
-// Ego-centric Music Map
-export interface EgoMapCenter {
-  name: string;
-  track_count: number;
-  first_track_id: string;
-}
-
-export interface EgoMapArtist {
-  name: string;
-  x: number;
-  y: number;
-  distance: number;
-  track_count: number;
-  first_track_id: string;
-}
-
-export interface EgoMapResponse {
-  center: EgoMapCenter;
-  artists: EgoMapArtist[];
-  mode: string;
-  total_artists: number;
-}
-
-// 3D Music Map
-export interface MapNode3D {
-  id: string;
-  name: string;
-  x: number;
-  y: number;
-  z: number;
-  track_count: number;
-  first_track_id: string;
-  representative_track_id?: string; // Track closest to artist's audio centroid
-}
-
-export interface MusicMap3DResponse {
-  nodes: MapNode3D[];
-  entity_type: string;
-  total_entities: number;
-}
-
-// Letter Index (for Alphabet Bar navigation)
-export interface LetterIndexResponse {
-  letters: Record<string, number>;  // {"A": 0, "B": 47, "C": 123, "#": 500}
-  total: number;
-}
+export type MapNode = Wire.MapNode;
+export type MapEdge = Wire.MapEdge;
+export type MusicMapResponse = Wire.MusicMapResponse;
+export type EgoMapCenter = Wire.EgoMapCenterResponse;
+export type EgoMapArtist = Wire.EgoMapArtistResponse;
+export type EgoMapResponse = Wire.EgoMapResponse;
+export type MapNode3D = Wire.MapNode3dResponse;
+export type MusicMap3DResponse = Wire.MusicMap3dResponse;
+export type LetterIndexResponse = Wire.LetterIndexResponse;
 
 /** Duplicate groups from a whole-library scan. Preview only — the server has no apply route. */
-export interface DuplicateTrackInfo {
-  id: string;
-  title: string | null;
-  artist: string | null;
-  album: string | null;
-  file_path: string;
-  format: string | null;
-  quality: string;
-  format_tier: number;
-  metadata_completeness: number;
-  created_at: string;
-}
+export type DuplicateTrackInfo = Wire.TrackInfo;
+export type DuplicateGroup = Wire.DuplicateGroup;
+export type DeduplicatePreview = Wire.DeduplicatePreviewResponse;
+export type ArtworkCoverage = Wire.ArtworkCoverageResponse;
 
-export interface DuplicateGroup {
-  normalized_key: string;
-  keep: DuplicateTrackInfo;
-  remove: DuplicateTrackInfo[];
-}
-
-export interface DeduplicatePreview {
-  total_groups: number;
-  total_duplicates: number;
-  groups: DuplicateGroup[];
-}
-
-export interface ArtworkCoverage {
-  total_albums: number;
-  with_artwork: number;
-  generated: number;
-  without_artwork: number;
-}
+export type DiscoverTrack = Wire.DiscoverTrack;
+export type DiscoverRecommendedArtist = Wire.DiscoverRecommendedArtist;
+export type LibraryDiscoverResponse = Wire.DiscoverResponse;
 
 export const libraryApi = {
   getStats: async (): Promise<LibraryStats> => {
@@ -335,11 +96,7 @@ export const libraryApi = {
    * 30-day rule the per-album path uses, so pressing this twice in a day does nothing the second
    * time — the button cannot bypass the rate limit.
    */
-  refetchGeneratedArtwork: async (): Promise<{
-    considered: number;
-    queued: number;
-    skipped_recent: number;
-  }> => {
+  refetchGeneratedArtwork: async (): Promise<Wire.RefetchGeneratedResponse> => {
     const { data } = await api.post('/artwork/refetch-generated');
     return data;
   },
@@ -466,43 +223,16 @@ export const libraryApi = {
         reread_unchanged: options.rereadUnchanged ?? false,
       },
     });
-    return data;
+    return toSyncStatus(data);
   },
 
   getSyncStatus: async (): Promise<SyncStatus> => {
     const { data } = await api.get('/library/sync/status');
-    return data;
+    return toSyncStatus(data);
   },
 
-  cancelSync: async (): Promise<{ status: string; message: string }> => {
+  cancelSync: async (): Promise<Wire.CancelResponse> => {
     const { data } = await api.post('/library/sync/cancel');
-    return data;
-  },
-
-  importMusic: async (
-    file: File,
-    onProgress?: (progress: number) => void
-  ): Promise<ImportResult> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    const { data } = await api.post('/library/import', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      onUploadProgress: (progressEvent) => {
-        if (progressEvent.total && onProgress) {
-          const percentCompleted = Math.round(
-            (progressEvent.loaded * 100) / progressEvent.total
-          );
-          onProgress(percentCompleted);
-        }
-      },
-    });
-    return data;
-  },
-
-  getRecentImports: async (limit = 10): Promise<RecentImport[]> => {
-    const { data } = await api.get('/library/imports/recent', {
-      params: { limit },
-    });
     return data;
   },
 
@@ -537,40 +267,3 @@ export const libraryApi = {
     return data;
   },
 };
-
-// Curated Prompts types
-
-
-// Library Discover types
-export interface DiscoverTrack {
-  id: string;
-  title: string | null;
-  artist: string | null;
-  album: string | null;
-  duration_seconds: number | null;
-  play_count: number;
-}
-
-export interface DiscoverRecommendedArtist {
-  name: string;
-  match_score: number;
-  in_library: boolean;
-  track_count: number | null;
-  image_url: string | null;
-  lastfm_url: string | null;
-  bandcamp_url: string | null;
-  based_on_artist: string;
-}
-
-export interface LibraryDiscoverResponse {
-  /**
-   * Owned, unheard, ranked against listening (ADR-0101). Replaces `unheard_tracks`
-   * and `deep_cuts`, which were random picks limited to artists already played.
-   */
-  rediscovery: RediscoverySuggestion[];
-  /** Seeds behind the list, so an empty result can distinguish "no listening
-   *  history yet" from "nothing similar found". */
-  rediscovery_seed_count: number;
-  recommended_artists: DiscoverRecommendedArtist[];
-  recently_added_count: number;
-}

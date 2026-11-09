@@ -1754,6 +1754,22 @@ export type ChangeStatsResponse = {
 };
 
 /**
+ * CheckStarted
+ *
+ * A background check was started.
+ */
+export type CheckStarted = {
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Status
+     */
+    status: string;
+};
+
+/**
  * ClapStatus
  *
  * CLAP embeddings status details.
@@ -2707,9 +2723,7 @@ export type ExternalAlbumResponse = {
      * Purchase Links
      */
     purchase_links: {
-        [key: string]: {
-            [key: string]: string;
-        };
+        [key: string]: PurchaseLink;
     };
     /**
      * Release Date
@@ -4595,9 +4609,7 @@ export type NewReleaseItem = {
      * Purchase Links
      */
     purchase_links: {
-        [key: string]: {
-            [key: string]: string;
-        };
+        [key: string]: PurchaseLink;
     };
     /**
      * Release Date
@@ -4647,6 +4659,115 @@ export type NewReleasesListResponse = {
      * Total
      */
     total: number;
+};
+
+/**
+ * NewReleasesProgress
+ *
+ * A check in flight, or the last one's outcome, as the task records it.
+ */
+export type NewReleasesProgress = {
+    /**
+     * Artists Checked
+     */
+    artists_checked?: number | null;
+    /**
+     * Artists Total
+     */
+    artists_total?: number | null;
+    /**
+     * Current Artist
+     */
+    current_artist?: string | null;
+    /**
+     * Errors
+     */
+    errors?: Array<string>;
+    /**
+     * Last Heartbeat
+     */
+    last_heartbeat?: string | null;
+    /**
+     * Message
+     */
+    message?: string | null;
+    /**
+     * Phase
+     */
+    phase?: string | null;
+    /**
+     * Releases Found
+     */
+    releases_found?: number | null;
+    /**
+     * Releases New
+     */
+    releases_new?: number | null;
+    /**
+     * Started At
+     */
+    started_at?: string | null;
+    /**
+     * Status
+     */
+    status: string;
+};
+
+/**
+ * NewReleasesRotation
+ *
+ * How far this week's rotation through the profile's artists has got.
+ */
+export type NewReleasesRotation = {
+    /**
+     * Checked This Week
+     */
+    checked_this_week: number;
+    /**
+     * Estimated Days To Complete
+     */
+    estimated_days_to_complete: number;
+    /**
+     * Remaining This Week
+     */
+    remaining_this_week: number;
+    /**
+     * Total Artists In Rotation
+     */
+    total_artists_in_rotation: number;
+};
+
+/**
+ * NewReleasesStatus
+ *
+ * What discovery has found, what is running now, and the rotation behind it.
+ *
+ * Typed since ADR-0173, so the web client takes this shape from the schema rather than declaring
+ * its own (it was `dict[str, Any]`, and `discovery.ts` kept a handwritten copy).
+ */
+export type NewReleasesStatus = {
+    /**
+     * Artists Checked
+     */
+    artists_checked: number;
+    /**
+     * Artists In Library
+     */
+    artists_in_library: number;
+    /**
+     * Last Check At
+     */
+    last_check_at?: string | null;
+    /**
+     * New Releases Available
+     */
+    new_releases_available: number;
+    progress?: NewReleasesProgress;
+    rotation: NewReleasesRotation;
+    /**
+     * Total Releases Found
+     */
+    total_releases_found: number;
 };
 
 /**
@@ -5676,6 +5797,22 @@ export type ProposedChangeResponse = {
      * Target Type
      */
     target_type: string;
+};
+
+/**
+ * PurchaseLink
+ *
+ * A store search for a release, from `generate_release_search_urls()`.
+ */
+export type PurchaseLink = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Url
+     */
+    url: string;
 };
 
 /**
@@ -13942,13 +14079,9 @@ export type NewReleasesTriggerCheckError = NewReleasesTriggerCheckErrors[keyof N
 
 export type NewReleasesTriggerCheckResponses = {
     /**
-     * Response New-Releases Trigger Check
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: CheckStarted;
 };
 
 export type NewReleasesTriggerCheckResponse = NewReleasesTriggerCheckResponses[keyof NewReleasesTriggerCheckResponses];
@@ -13996,13 +14129,9 @@ export type NewReleasesTriggerBatchCheckError = NewReleasesTriggerBatchCheckErro
 
 export type NewReleasesTriggerBatchCheckResponses = {
     /**
-     * Response New-Releases Trigger Batch Check
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: CheckStarted;
 };
 
 export type NewReleasesTriggerBatchCheckResponse = NewReleasesTriggerBatchCheckResponses[keyof NewReleasesTriggerBatchCheckResponses];
@@ -14041,13 +14170,9 @@ export type NewReleasesGetStatusError = NewReleasesGetStatusErrors[keyof NewRele
 
 export type NewReleasesGetStatusResponses = {
     /**
-     * Response New-Releases Get Status
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: NewReleasesStatus;
 };
 
 export type NewReleasesGetStatusResponse = NewReleasesGetStatusResponses[keyof NewReleasesGetStatusResponses];

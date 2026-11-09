@@ -9,6 +9,13 @@ Used by:
 from pydantic import BaseModel
 
 
+class PurchaseLink(BaseModel):
+    """A store search for a release, from `generate_release_search_urls()`."""
+
+    name: str
+    url: str
+
+
 class ExternalAlbumResponse(BaseModel):
     """An external (not-in-library) album recommendation."""
 
@@ -25,8 +32,9 @@ class ExternalAlbumResponse(BaseModel):
     local_album_match: bool
     dismissed: bool
     discovered_at: str
-    # {store_name: {"url": ..., "label": ...}} from generate_release_search_urls()
-    purchase_links: dict[str, dict[str, str]]
+    # {store_key: {"name": ..., "url": ...}}. Typed since ADR-0173: the web client had its own copy
+    # of this shape, and the comment that stood here said "label" where the code writes "name".
+    purchase_links: dict[str, PurchaseLink]
 
 
 class ExternalAlbumsResponse(BaseModel):

@@ -51,64 +51,12 @@
         "ListFrontendLogsResponse"
       ]
     },
-    "discovery.ts": {
-      "until": "ADR-0173 Phase 2: discovery/library move to generated types",
-      "types": [
-        "ExternalAlbum",
-        "ExternalAlbumsResponse",
-        "NewReleasesListParams",
-        "NewReleasesListResponse",
-        "NewReleasesProgress",
-        "NewReleasesRotation",
-        "NewReleasesStatus"
-      ]
-    },
     "integrations.ts": {
       "until": "when this domain is next changed (ADR-0173 point 8); outside the three named domains",
       "types": [
         "LastfmStatus",
         "VideoSearchResult",
         "VideoStatus"
-      ]
-    },
-    "library.ts": {
-      "until": "ADR-0173 Phase 2: discovery/library move to generated types",
-      "types": [
-        "AlbumDetailResponse",
-        "AlbumListResponse",
-        "AlbumSummary",
-        "AlbumTrack",
-        "ArtistAlbum",
-        "ArtistDetailResponse",
-        "ArtistListResponse",
-        "ArtistSummary",
-        "ArtistTrack",
-        "ArtworkCoverage",
-        "DeduplicatePreview",
-        "DiscoverAlbumInfo",
-        "DiscoverRecommendedArtist",
-        "DiscoverTrack",
-        "DuplicateGroup",
-        "DuplicateTrackInfo",
-        "EgoMapArtist",
-        "EgoMapCenter",
-        "EgoMapResponse",
-        "ImportResult",
-        "LetterIndexResponse",
-        "LibraryDiscoverResponse",
-        "MapEdge",
-        "MapNode",
-        "MapNode3D",
-        "MoodCell",
-        "MoodDistributionResponse",
-        "MusicMap3DResponse",
-        "MusicMapResponse",
-        "RecentImport",
-        "SimilarAlbumInfo",
-        "SyncProgress",
-        "SyncStatus",
-        "YearCount",
-        "YearDistributionResponse"
       ]
     },
     "metadata.ts": {
@@ -241,5 +189,7 @@
       ]
     }
   },
-  "viewModels": {}
+  "viewModels": {
+    "library.ts:SyncStatus": "The wire SyncStatus with progress filled to every field or null (toSyncStatus). The schema marks progress fields optional because each has a server default, and cannot be tightened without changing familiar-apple's generated SyncStatus."
+  }
 }

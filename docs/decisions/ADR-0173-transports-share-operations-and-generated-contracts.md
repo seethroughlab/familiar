@@ -29,7 +29,29 @@ Implementation:
   when that domain next changes (point 8). `viewModels` is for UI state and deliberate transformed
   views, with a reason, and starts empty: each domain's migration sorts its types into one or the
   other.
-- **Not done:** Phases 2–4, moving discovery/library, tracks and playlists to generated types.
+- **Phase 2, discovery/library, 2026-11-09.** `library.ts` and `discovery.ts` declare no response
+  shapes of their own: each exported name is now an alias of the generated type (callers unchanged),
+  and the allowlist went from 149 to 108. What the swap turned up:
+  - **Dead adapters.** `importMusic` and `getRecentImports` called `/library/import` and
+    `/library/imports/recent`, which the server no longer has; nothing called them. Deleted with
+    their types.
+  - **Untyped endpoints.** `GET /new-releases/status` and both `POST /new-releases/check*`
+    returned `dict[str, Any]`; they now declare `NewReleasesStatus` (with `NewReleasesProgress`
+    and `NewReleasesRotation`) and `CheckStarted`. Additive, contract stays v1.
+  - **A loose shape and a wrong comment.** `purchase_links` was `dict[str, dict[str, str]]`, and
+    the comment beside it said `{url, label}` where `generate_release_search_urls` writes
+    `{name, url}`. It is `dict[str, PurchaseLink]` now, and the card's cast to `FindLink[]` is
+    gone.
+  - **A handwritten type that lied.** `discovery.ts` said `/new-releases` returns
+    `ExternalAlbum[]`; it returns `NewReleaseItem`, with no `match_score` or `seed_artist`. The
+    card accepts either, and reads only what they share.
+  - **Optional versus nullable.** `dump_openapi.py` hoists a nullable `$ref` to an *optional*
+    property, because swift-openapi-generator drops `anyOf [ref, null]`. For Swift that is exact;
+    for TypeScript, `progress?: SyncProgress` excludes the `null` the server sends. And a field
+    with a server default is optional in the schema though always sent. `SyncStatus` has both,
+    and cannot be tightened without changing familiar-apple's generated type, so `toSyncStatus`
+    fills the defaults once in the adapter; it is the one `viewModels` entry, and is tested.
+- **Not done:** Phase 3 (tracks, playlists) and Phase 4 (the worked example).
 
 Extends [ADR-0129](ADR-0129-the-web-client-is-generated-from-the-openapi-contract.md) and
 [ADR-0130](ADR-0130-the-backend-is-assembled-from-explicit-dependencies.md)
