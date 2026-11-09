@@ -18,7 +18,7 @@ from app.api.routes.library_maps import router as maps_router
 from app.api.routes.library_missing import router as missing_router
 from app.api.routes.library_sync import router as sync_router
 from app.api.schemas.common import UTCDateTime
-from app.db.models import Track, TrackAnalysis
+from app.db.models import Track
 
 logger = logging.getLogger(__name__)
 
@@ -116,9 +116,8 @@ async def get_library_stats(db: DbSession) -> LibraryStats:
     ``tests/test_library_stats.py`` asserts the agreement rather than the arithmetic, so a future
     change to either side has to move both.
     """
-    from sqlalchemy import and_, literal_column
+    from sqlalchemy import literal_column
 
-    from app.config import FEATURES_VERSION, MELODIC_VERSION, MOOD_TAGS_VERSION
     from app.db.models import Artist, TrackStatus
 
     active = Track.status == TrackStatus.ACTIVE
@@ -145,48 +144,16 @@ async def get_library_stats(db: DbSession) -> LibraryStats:
         .join(Track, Track.canonical_artist_id == Artist.id)
         .where(active)
     ) or 0
-    # Every analysis count joins ``Track`` and filters to active, for the same reason the totals
-    # do — and here it is load-bearing rather than cosmetic. ``pending_analysis`` below is
-    # ``total_tracks - analyzed_tracks``, so counting analyses of tracks that are no longer in the
-    # library against an active-only total produces a *negative* backlog. On the 26k library that
-    # was -41 the moment the total was corrected.
-    def analysis_count(*conditions):
-        return select(func.count(TrackAnalysis.id)).join(
-            Track, Track.id == TrackAnalysis.track_id
-        ).where(active, *conditions)
+    # ADR-0172: the one status model. Before it, this computed its own backlog as
+    # `active tracks - active analyses`, which agreed with nothing else on the server (and went to
+    # -41 before it was clamped).
+    from app.services.analysis_lifecycle import phase_counts
 
-    analyzed_tracks = await db.scalar(
-        analysis_count(TrackAnalysis.features_version >= FEATURES_VERSION)
-    ) or 0
-
-    # Per-phase pending counts
-    pending_backfill = await db.scalar(
-        analysis_count(
-            and_(
-                TrackAnalysis.features_version >= FEATURES_VERSION,
-                TrackAnalysis.analysis_detail.is_(None),
-            )
-        )
-    ) or 0
-
-    pending_melodic = await db.scalar(
-        analysis_count(
-            and_(
-                TrackAnalysis.features_version >= FEATURES_VERSION,
-                TrackAnalysis.analysis_detail.is_not(None),
-                TrackAnalysis.melodic_version < MELODIC_VERSION,
-            )
-        )
-    ) or 0
-
-    pending_mood_tags = await db.scalar(
-        analysis_count(
-            and_(
-                TrackAnalysis.embedding.isnot(None),
-                TrackAnalysis.mood_tags_version < MOOD_TAGS_VERSION,
-            )
-        )
-    ) or 0
+    counts = await phase_counts(db)
+    analyzed_tracks = counts["features"].complete
+    pending_backfill = counts["deep_backfill"].pending
+    pending_melodic = counts["melodic"].pending
+    pending_mood_tags = counts["mood_tags"].pending
 
     return LibraryStats(
         total_tracks=total_tracks,
@@ -197,8 +164,7 @@ async def get_library_stats(db: DbSession) -> LibraryStats:
         compilations=0,
         soundtracks=0,
         analyzed_tracks=analyzed_tracks,
-        # Clamped: a backlog is a count of work, and there is no such thing as -41 of it.
-        pending_analysis=max(0, total_tracks - analyzed_tracks),
+        pending_analysis=counts["features"].pending,
         pending_backfill=pending_backfill,
         pending_melodic=pending_melodic,
         pending_mood_tags=pending_mood_tags,

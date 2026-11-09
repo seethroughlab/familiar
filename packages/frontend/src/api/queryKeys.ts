@@ -118,6 +118,9 @@ export const queryKeys = {
   workerStatus: {
     all: ['worker-status'] as const,
   },
+  analysisFailures: {
+    all: ['analysis-failures'] as const,
+  },
   backupStatus: {
     all: ['backup-status'] as const,
   },

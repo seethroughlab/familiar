@@ -279,6 +279,90 @@ export type AnalysisDownloadRequest = {
 };
 
 /**
+ * AnalysisFailure
+ *
+ * A track one analysis phase failed on (ADR-0172 point 7).
+ */
+export type AnalysisFailure = {
+    /**
+     * Artist
+     */
+    artist?: string | null;
+    /**
+     * Attempts
+     */
+    attempts: number;
+    /**
+     * Error
+     */
+    error?: string | null;
+    /**
+     * Failed At
+     */
+    failed_at: string;
+    /**
+     * Final
+     */
+    final: boolean;
+    /**
+     * Phase
+     */
+    phase: 'features' | 'embeddings';
+    /**
+     * Reason
+     */
+    reason: string;
+    /**
+     * Title
+     */
+    title?: string | null;
+    /**
+     * Track Id
+     */
+    track_id: string;
+};
+
+/**
+ * AnalysisFailures
+ *
+ * Tracks in the library whose analysis failed, newest first.
+ */
+export type AnalysisFailures = {
+    /**
+     * Failures
+     */
+    failures: Array<AnalysisFailure>;
+    /**
+     * Total
+     */
+    total: number;
+};
+
+/**
+ * AnalysisProgress
+ *
+ * Feature analysis across the library: the headline the Analysis page shows.
+ */
+export type AnalysisProgress = {
+    /**
+     * Analyzed
+     */
+    analyzed: number;
+    /**
+     * Pending
+     */
+    pending: number;
+    /**
+     * Percent
+     */
+    percent: number;
+    /**
+     * Total
+     */
+    total: number;
+};
+
+/**
  * AnalysisStartResponse
  *
  * Response for starting analysis.
@@ -4952,6 +5036,10 @@ export type PhaseQueue = {
      */
     completed: number;
     /**
+     * Failed
+     */
+    failed?: number;
+    /**
      * Forced Exit Reason
      */
     forced_exit_reason?: string | null;
@@ -4968,9 +5056,17 @@ export type PhaseQueue = {
      */
     phase: string;
     /**
+     * Queued
+     */
+    queued?: number;
+    /**
      * Requeue Attempts
      */
     requeue_attempts?: number;
+    /**
+     * Retrying
+     */
+    retrying?: number;
     /**
      * Stall Recoveries
      */
@@ -4979,6 +5075,10 @@ export type PhaseQueue = {
      * Total
      */
     total: number;
+    /**
+     * Waiting
+     */
+    waiting?: number;
 };
 
 /**
@@ -8351,12 +8451,7 @@ export type WorkerInfo = {
  * Detailed worker and queue status.
  */
 export type WorkerStatus = {
-    /**
-     * Analysis Progress
-     */
-    analysis_progress: {
-        [key: string]: unknown;
-    };
+    analysis_progress: AnalysisProgress;
     /**
      * Background Events
      */
@@ -11629,6 +11724,52 @@ export type AnalysisResetExecutorResponses = {
 };
 
 export type AnalysisResetExecutorResponse = AnalysisResetExecutorResponses[keyof AnalysisResetExecutorResponses];
+
+export type AnalysisGetAnalysisFailuresData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/library/analysis/failures';
+};
+
+export type AnalysisGetAnalysisFailuresErrors = {
+    /**
+     * Bad Request
+     */
+    400: ErrorEnvelope;
+    /**
+     * Unauthorized
+     */
+    401: ErrorEnvelope;
+    /**
+     * Not Found
+     */
+    404: ErrorEnvelope;
+    /**
+     * Unprocessable Entity
+     */
+    422: ErrorEnvelope;
+    /**
+     * Internal Server Error
+     */
+    500: ErrorEnvelope;
+};
+
+export type AnalysisGetAnalysisFailuresError = AnalysisGetAnalysisFailuresErrors[keyof AnalysisGetAnalysisFailuresErrors];
+
+export type AnalysisGetAnalysisFailuresResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalysisFailures;
+};
+
+export type AnalysisGetAnalysisFailuresResponse = AnalysisGetAnalysisFailuresResponses[keyof AnalysisGetAnalysisFailuresResponses];
 
 export type AnalysisStartAnalysisData = {
     body?: never;

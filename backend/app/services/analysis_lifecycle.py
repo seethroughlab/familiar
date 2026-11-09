@@ -31,13 +31,14 @@ Features need no such columns: a feature failure already marks the track's featu
 
 from __future__ import annotations
 
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from enum import Enum
 
 from sqlalchemy import ColumnElement, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import EMBEDDING_VERSION, FEATURES_VERSION
+from app.config import EMBEDDING_VERSION, FEATURES_VERSION, MELODIC_VERSION, MOOD_TAGS_VERSION
 from app.db.models import Track, TrackAnalysis, TrackStatus
 from app.utils.time import utcnow
 
@@ -141,6 +142,165 @@ def embeddings_queueable(cutoff: datetime) -> ColumnElement[bool]:
     return and_(embeddings_needed(), embeddings_retryable(cutoff))
 
 
+# ── The later phases: no retry state, because their failures are terminal ────────────────────────
+#
+# Each needs the phase before it, so a track whose earlier phase is not done is *waiting*, not
+# pending. Melodic marks its version current on failure; mood tags derive from the embedding and do
+# not touch the file; deep backfill is a one-off that empties itself.
+
+
+def features_current() -> ColumnElement[bool]:
+    return TrackAnalysis.features_version >= FEATURES_VERSION
+
+
+def backfill_queueable() -> ColumnElement[bool]:
+    """Requires `join(TrackAnalysis)`."""
+    return and_(in_library(), features_current(), TrackAnalysis.analysis_detail.is_(None))
+
+
+def melodic_queueable() -> ColumnElement[bool]:
+    """Requires `join(TrackAnalysis)`."""
+    return and_(
+        in_library(),
+        features_current(),
+        TrackAnalysis.analysis_detail.is_not(None),
+        TrackAnalysis.melodic_version < MELODIC_VERSION,
+    )
+
+
+def mood_tags_queueable() -> ColumnElement[bool]:
+    """Requires `join(TrackAnalysis)`."""
+    return and_(
+        in_library(),
+        TrackAnalysis.embedding.is_not(None),
+        TrackAnalysis.mood_tags_version < MOOD_TAGS_VERSION,
+    )
+
+
+def _embedding_terminal() -> ColumnElement[bool]:
+    """Coalesced, because a failure recorded before reason codes has a NULL reason, and
+    `NOT (NULL IN …)` is NULL: negated, the row would be neither retrying nor failed."""
+    return or_(
+        func.coalesce(TrackAnalysis.embedding_failure_reason, "").in_([r.value for r in PERMANENT]),
+        func.coalesce(TrackAnalysis.embedding_attempts, 0) >= MAX_ATTEMPTS,
+    )
+
+
+# ── Counts by lifecycle state: the one status model (ADR-0172 point 6) ─────────────────────────
+
+
+PHASES = ("features", "embeddings", "deep_backfill", "melodic", "mood_tags")
+
+
+@dataclass(frozen=True)
+class PhaseCounts:
+    """One phase's tracks, by state. The states partition `total`: every track in the library is
+    in exactly one of them.
+
+    - `complete`: the current version is stored;
+    - `queued`: may be worked on now (including what a worker has in hand);
+    - `retrying`: failed, and will be tried again after the retry window;
+    - `failed`: failed, and will not be tried again until the file changes;
+    - `waiting`: an earlier phase has not finished for it.
+
+    `pending` is `queued + retrying`: the work that will still happen. It is the number every
+    endpoint reports as pending, so no two can disagree again.
+    """
+
+    phase: str
+    total: int
+    complete: int
+    queued: int
+    retrying: int
+    failed: int
+    waiting: int
+
+    @property
+    def pending(self) -> int:
+        return self.queued + self.retrying
+
+    @property
+    def percent(self) -> float:
+        return round(self.complete / self.total * 100, 1) if self.total else 100.0
+
+    def as_dict(self) -> dict[str, int | float | str]:
+        return {**asdict(self), "pending": self.pending, "percent": self.percent}
+
+
+def _states(now: datetime | None) -> dict[str, dict[str, ColumnElement[bool]]]:
+    cutoff = retry_cutoff(now)
+    features_failed = Track.analysis_failed_at.is_not(None)
+    embedding_failed = TrackAnalysis.embedding_failed_at.is_not(None)
+    return {
+        "features": {
+            "complete": and_(features_current(), ~features_failed),
+            # A feature failure marks the version current, so it is final on the first attempt.
+            "failed": and_(features_current(), features_failed),
+            "retrying": and_(features_needed(), Track.analysis_failed_at >= cutoff),
+            "queued": features_queueable(cutoff),
+        },
+        "embeddings": {
+            "complete": and_(features_current(), TrackAnalysis.embedding_version >= EMBEDDING_VERSION),
+            "failed": and_(embeddings_needed(), embedding_failed, _embedding_terminal()),
+            "retrying": and_(
+                embeddings_needed(),
+                embedding_failed,
+                ~_embedding_terminal(),
+                TrackAnalysis.embedding_failed_at >= cutoff,
+            ),
+            "queued": embeddings_queueable(cutoff),
+        },
+        "deep_backfill": {
+            "complete": and_(features_current(), TrackAnalysis.analysis_detail.is_not(None)),
+            "queued": backfill_queueable(),
+        },
+        "melodic": {
+            "complete": and_(features_current(), TrackAnalysis.melodic_version >= MELODIC_VERSION),
+            "queued": melodic_queueable(),
+        },
+        "mood_tags": {
+            "complete": TrackAnalysis.mood_tags_version >= MOOD_TAGS_VERSION,
+            "queued": mood_tags_queueable(),
+        },
+    }
+
+
+async def phase_counts(db: AsyncSession, now: datetime | None = None) -> dict[str, PhaseCounts]:
+    """Every phase's counts by state, in one query over the library.
+
+    `/health/system`, `/health/workers`, `/library/stats`, `/library/analysis/status` and the
+    Analysis page all read this; a number that answers a different question gets a different name.
+    """
+    states = _states(now)
+    columns = [func.count(Track.id).label("total")]
+    for phase, conditions in states.items():
+        for state, condition in conditions.items():
+            columns.append(func.count(Track.id).filter(condition).label(f"{phase}.{state}"))
+    query = (
+        select(*columns)
+        .select_from(Track)
+        .outerjoin(TrackAnalysis, Track.id == TrackAnalysis.track_id)
+        .where(in_library())
+    )
+    row = (await db.execute(query)).one()._mapping
+    total = row["total"]
+    counts: dict[str, PhaseCounts] = {}
+    for phase, conditions in states.items():
+        got = {state: row[f"{phase}.{state}"] for state in conditions}
+        complete, queued = got["complete"], got["queued"]
+        retrying, failed = got.get("retrying", 0), got.get("failed", 0)
+        counts[phase] = PhaseCounts(
+            phase=phase,
+            total=total,
+            complete=complete,
+            queued=queued,
+            retrying=retrying,
+            failed=failed,
+            waiting=total - complete - queued - retrying - failed,
+        )
+    return counts
+
+
 # ── What remains: the sync loop's exit condition ────────────────────────────────────────────────
 
 
@@ -164,5 +324,16 @@ async def embeddings_remaining(db: AsyncSession, now: datetime | None = None) ->
         select(func.count(Track.id))
         .join(TrackAnalysis, Track.id == TrackAnalysis.track_id)
         .where(embeddings_queueable(retry_cutoff(now)))
+    )
+    return (await db.execute(query)).scalar() or 0
+
+
+async def queueable_count(db: AsyncSession, condition: ColumnElement[bool]) -> int:
+    """How many tracks a later phase's queue could take now (`backfill_queueable` and the rest)."""
+    query = (
+        select(func.count(Track.id))
+        .select_from(Track)
+        .join(TrackAnalysis, Track.id == TrackAnalysis.track_id)
+        .where(condition)
     )
     return (await db.execute(query)).scalar() or 0

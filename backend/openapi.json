@@ -414,6 +414,123 @@
         "title": "AnalysisDownloadRequest",
         "type": "object"
       },
+      "AnalysisFailure": {
+        "description": "A track one analysis phase failed on (ADR-0172 point 7).",
+        "properties": {
+          "artist": {
+            "title": "Artist",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "error": {
+            "title": "Error",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "failed_at": {
+            "format": "date-time",
+            "title": "Failed At",
+            "type": "string"
+          },
+          "final": {
+            "title": "Final",
+            "type": "boolean"
+          },
+          "phase": {
+            "enum": [
+              "features",
+              "embeddings"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "track_id": {
+            "format": "uuid",
+            "title": "Track Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "track_id",
+          "phase",
+          "reason",
+          "attempts",
+          "final",
+          "failed_at"
+        ],
+        "title": "AnalysisFailure",
+        "type": "object"
+      },
+      "AnalysisFailures": {
+        "description": "Tracks in the library whose analysis failed, newest first.",
+        "properties": {
+          "failures": {
+            "items": {
+              "$ref": "#/components/schemas/AnalysisFailure"
+            },
+            "title": "Failures",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "failures"
+        ],
+        "title": "AnalysisFailures",
+        "type": "object"
+      },
+      "AnalysisProgress": {
+        "description": "Feature analysis across the library: the headline the Analysis page shows.",
+        "properties": {
+          "analyzed": {
+            "title": "Analyzed",
+            "type": "integer"
+          },
+          "pending": {
+            "title": "Pending",
+            "type": "integer"
+          },
+          "percent": {
+            "title": "Percent",
+            "type": "number"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "analyzed",
+          "pending",
+          "percent"
+        ],
+        "title": "AnalysisProgress",
+        "type": "object"
+      },
       "AnalysisStartResponse": {
         "description": "Response for starting analysis.",
         "properties": {
@@ -6915,6 +7032,11 @@
             "title": "Completed",
             "type": "integer"
           },
+          "failed": {
+            "default": 0,
+            "title": "Failed",
+            "type": "integer"
+          },
           "forced_exit_reason": {
             "title": "Forced Exit Reason",
             "type": [
@@ -6934,9 +7056,19 @@
             "title": "Phase",
             "type": "string"
           },
+          "queued": {
+            "default": 0,
+            "title": "Queued",
+            "type": "integer"
+          },
           "requeue_attempts": {
             "default": 0,
             "title": "Requeue Attempts",
+            "type": "integer"
+          },
+          "retrying": {
+            "default": 0,
+            "title": "Retrying",
             "type": "integer"
           },
           "stall_recoveries": {
@@ -6946,6 +7078,11 @@
           },
           "total": {
             "title": "Total",
+            "type": "integer"
+          },
+          "waiting": {
+            "default": 0,
+            "title": "Waiting",
             "type": "integer"
           }
         },
@@ -11879,9 +12016,7 @@
         "description": "Detailed worker and queue status.",
         "properties": {
           "analysis_progress": {
-            "additionalProperties": true,
-            "title": "Analysis Progress",
-            "type": "object"
+            "$ref": "#/components/schemas/AnalysisProgress"
           },
           "background_events": {
             "default": [],
@@ -18111,6 +18246,92 @@
           }
         },
         "summary": "Reset Executor",
+        "tags": [
+          "analysis"
+        ]
+      }
+    },
+    "/api/v1/library/analysis/failures": {
+      "get": {
+        "description": "The tracks whose analysis failed, with why, so nobody has to read the database to find them.\n\nFeatures and embeddings are the phases that record failures; a later phase's failure marks it\ndone. Only tracks in the library: a removed track's failure is not something to act on.",
+        "operationId": "analysis_get_analysis_failures",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisFailures"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get Analysis Failures",
         "tags": [
           "analysis"
         ]

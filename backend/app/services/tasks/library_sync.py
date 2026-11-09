@@ -15,7 +15,13 @@ from pathlib import Path
 from typing import Any
 
 from app.config import EMBEDDING_VERSION, FEATURES_VERSION, MELODIC_VERSION, settings
-from app.services.analysis_lifecycle import embeddings_remaining, features_remaining
+from app.services.analysis_lifecycle import (
+    backfill_queueable,
+    embeddings_remaining,
+    features_remaining,
+    melodic_queueable,
+    queueable_count,
+)
 from app.services.background.events import record_background_event
 from app.services.background.pause import background_pause
 from app.services.redis_client import get_redis
@@ -690,7 +696,8 @@ async def run_library_sync(
                     )
                     backfill_total = backfill_total_result.scalar() or 0
 
-                    pending_backfill = backfill_total - backfill_done
+                    # ADR-0172: what the queue could take, in the library only.
+                    pending_backfill = await queueable_count(db, backfill_queueable())
 
                 if pending_backfill == 0:
                     logger.info(
@@ -798,7 +805,8 @@ async def run_library_sync(
                         )
                         melodic_total = melodic_total_result.scalar() or 0
 
-                        pending_melodic = melodic_total - melodic_done
+                        # ADR-0172: what the queue could take, in the library only.
+                        pending_melodic = await queueable_count(db, melodic_queueable())
 
                     # Timeout
                     elapsed = time.time() - melodic_start_time

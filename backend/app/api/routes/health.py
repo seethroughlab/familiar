@@ -8,11 +8,10 @@ from typing import Any
 
 from fastapi import APIRouter
 from pydantic import BaseModel
-from sqlalchemy import func, select, text
+from sqlalchemy import select, text
 
 from app.api.deps import DbSession
-from app.config import FEATURES_VERSION, get_app_version
-from app.db.models import Track, TrackAnalysis
+from app.config import get_app_version
 from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
@@ -234,11 +233,11 @@ async def system_health_check(db: DbSession) -> SystemHealth:
     # Note: Analysis progress is informational, not a health concern.
     # We only warn if workers are DOWN and tracks are pending.
     try:
-        total_tracks = await db.scalar(select(func.count(Track.id))) or 0
-        analyzed_tracks = await db.scalar(
-            select(func.count(TrackAnalysis.id)).where(TrackAnalysis.features_version >= FEATURES_VERSION)
-        ) or 0
-        pending = total_tracks - analyzed_tracks
+        # ADR-0172: the one status model, so this agrees with /library/stats and the Analysis page.
+        from app.services.analysis_lifecycle import phase_counts
+
+        features = (await phase_counts(db))["features"]
+        total_tracks, analyzed_tracks, pending = features.total, features.complete, features.pending
 
         # Check if background processing is healthy
         bg_healthy = any(
@@ -338,13 +337,32 @@ class PhaseQueue(BaseModel):
     """Per-phase analysis queue status."""
 
     phase: str
+    #: `queued + retrying`: the work that will still happen (ADR-0172 point 6).
     pending: int
     completed: int
+    #: Tracks in the library. `completed + queued + retrying + failed + waiting == total`.
     total: int
     percent: float
+    #: May be worked on now, including what a worker has in hand.
+    queued: int = 0
+    #: Failed, and will be tried again after the retry window.
+    retrying: int = 0
+    #: Failed, and will not be tried again until the file changes.
+    failed: int = 0
+    #: An earlier phase has not finished for these.
+    waiting: int = 0
     stall_recoveries: int = 0
     requeue_attempts: int = 0
     forced_exit_reason: str | None = None
+
+
+class AnalysisProgress(BaseModel):
+    """Feature analysis across the library: the headline the Analysis page shows."""
+
+    total: int
+    analyzed: int
+    pending: int
+    percent: float
 
 
 class WorkerStatus(BaseModel):
@@ -352,7 +370,8 @@ class WorkerStatus(BaseModel):
 
     workers: list[WorkerInfo]
     queues: list[QueueStats]
-    analysis_progress: dict[str, Any]
+    # Typed since ADR-0172; it was `dict[str, Any]`, which the web client narrowed by hand.
+    analysis_progress: AnalysisProgress
     phase_queues: list[PhaseQueue] = []
     recent_failures: list[TaskFailure] = []
     background_events: list[BackgroundEvent] = []
@@ -363,7 +382,6 @@ async def get_worker_status(db: DbSession) -> WorkerStatus:
     """Get detailed status of background processing and task queues."""
     from datetime import datetime
 
-    from app.config import FEATURES_VERSION
     from app.services.background import get_background_manager
     from app.services.background.events import get_recent_background_events
     from app.services.tasks import get_recent_failures
@@ -428,48 +446,22 @@ async def get_worker_status(db: DbSession) -> WorkerStatus:
     except Exception as e:
         logger.warning(f"Could not get queue stats: {e}")
 
-    # Get analysis progress
-    total_tracks = await db.scalar(select(func.count(Track.id))) or 0
-    analyzed_tracks = await db.scalar(
-        select(func.count(TrackAnalysis.id)).where(TrackAnalysis.features_version >= FEATURES_VERSION)
-    ) or 0
-
-    analysis_progress = {
-        "total": total_tracks,
-        "analyzed": analyzed_tracks,
-        "pending": total_tracks - analyzed_tracks,
-        "percent": round((analyzed_tracks / total_tracks * 100), 1) if total_tracks > 0 else 0,
-    }
-
-    # Per-phase analysis queues
-    from app.config import EMBEDDING_VERSION, MELODIC_VERSION, MOOD_TAGS_VERSION
+    # ADR-0172: one status model. Every count below, and /library/stats, /health/system and
+    # /library/analysis/status, comes from `phase_counts`.
+    from app.services.analysis_lifecycle import phase_counts
     from app.services.tasks import get_sync_progress
+
+    counts = await phase_counts(db)
+    features = counts["features"]
+    analysis_progress = AnalysisProgress(
+        total=features.total,
+        analyzed=features.complete,
+        pending=features.pending,
+        percent=features.percent,
+    )
 
     phase_queues: list[PhaseQueue] = []
     try:
-        features_done = analyzed_tracks  # Already computed above
-
-        embeddings_done = await db.scalar(
-            select(func.count(TrackAnalysis.id)).where(
-                TrackAnalysis.features_version >= FEATURES_VERSION,
-                TrackAnalysis.embedding_version >= EMBEDDING_VERSION,
-            )
-        ) or 0
-
-        melodic_done = await db.scalar(
-            select(func.count(TrackAnalysis.id)).where(
-                TrackAnalysis.features_version >= FEATURES_VERSION,
-                TrackAnalysis.melodic_version >= MELODIC_VERSION,
-            )
-        ) or 0
-
-        mood_done = await db.scalar(
-            select(func.count(TrackAnalysis.id)).where(
-                TrackAnalysis.features_version >= FEATURES_VERSION,
-                TrackAnalysis.mood_tags_version >= MOOD_TAGS_VERSION,
-            )
-        ) or 0
-
         # Overlay runtime stats from sync progress if running
         sync_progress = get_sync_progress()
         requeue_attempts = {}
@@ -480,21 +472,18 @@ async def get_worker_status(db: DbSession) -> WorkerStatus:
             stall_recoveries = sync_progress.get("phase_stall_recoveries", {})
             forced_exit_reasons = sync_progress.get("phase_forced_exit_reasons", {})
 
-        phase_data = [
-            ("features", features_done, total_tracks),
-            ("embeddings", embeddings_done, total_tracks),
-            ("melodic", melodic_done, total_tracks),
-            ("mood_tags", mood_done, total_tracks),
-        ]
-        for phase_name, completed, total in phase_data:
-            pending = total - completed
-            pct = round((completed / total * 100), 1) if total > 0 else 0.0
+        for phase_name in ("features", "embeddings", "melodic", "mood_tags"):
+            c = counts[phase_name]
             phase_queues.append(PhaseQueue(
                 phase=phase_name,
-                pending=pending,
-                completed=completed,
-                total=total,
-                percent=pct,
+                pending=c.pending,
+                completed=c.complete,
+                total=c.total,
+                percent=c.percent,
+                queued=c.queued,
+                retrying=c.retrying,
+                failed=c.failed,
+                waiting=c.waiting,
                 stall_recoveries=stall_recoveries.get(phase_name, 0),
                 requeue_attempts=requeue_attempts.get(phase_name, 0),
                 forced_exit_reason=forced_exit_reasons.get(phase_name),

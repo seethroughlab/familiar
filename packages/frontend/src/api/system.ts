@@ -9,10 +9,13 @@
  */
 
 import {
+  analysisGetAnalysisFailures,
   systemDiscoverySourceHealth,
   systemGetBackgroundJobs,
   systemGetWorkerStatus,
   systemSystemHealthCheck,
+  type AnalysisFailure as WireAnalysisFailure,
+  type AnalysisFailures as WireAnalysisFailures,
   type BackgroundJob as WireBackgroundJob,
   type BackgroundJobsResponse as WireBackgroundJobsResponse,
   type DiscoveryHealthResponse,
@@ -30,6 +33,8 @@ export type PhaseQueue = WirePhaseQueue;
 export type DiscoveryHealth = DiscoveryHealthResponse;
 export type DiscoverySourceHealth = DiscoverySourceHealthResponse;
 export type BackgroundJob = WireBackgroundJob;
+export type AnalysisFailure = WireAnalysisFailure;
+export type AnalysisFailures = WireAnalysisFailures;
 export type BackgroundJobsResponse = WireBackgroundJobsResponse;
 
 export const systemApi = {
@@ -42,6 +47,15 @@ export const systemApi = {
   /** Workers, queues, overall analysis progress and the per-phase backlog. */
   workers: async (): Promise<WorkerStatus> => {
     const { data } = await systemGetWorkerStatus({ throwOnError: true });
+    return data;
+  },
+
+  /**
+   * Tracks in the library whose analysis failed, newest first, each with a reason code and whether
+   * it is final (ADR-0172 point 7).
+   */
+  analysisFailures: async (limit = 50): Promise<AnalysisFailures> => {
+    const { data } = await analysisGetAnalysisFailures({ query: { limit }, throwOnError: true });
     return data;
   },
 

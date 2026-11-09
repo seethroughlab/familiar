@@ -1,16 +1,18 @@
 """Audio analysis endpoints."""
 
 import logging
+from datetime import datetime
+from typing import Literal
+from uuid import UUID
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
 from app.api.deps import DbSession
 from app.api.exceptions import ConflictError
 from app.api.schemas.common import CancelResponse
-from app.db.models import Track, TrackAnalysis
-from app.utils.time import utcnow
+from app.db.models import TrackAnalysis
 
 logger = logging.getLogger(__name__)
 
@@ -92,49 +94,28 @@ async def get_analysis_status(db: DbSession) -> AnalysisStatus:
     Returns analysis progress and detects if the worker has stalled.
     Also reports embedding coverage to help detect silent failures.
     """
-    from datetime import timedelta
 
-    from sqlalchemy import or_
 
-    from app.config import FEATURES_VERSION
     from app.services.analysis import get_analysis_capabilities
 
     # Get analysis capabilities
     caps = get_analysis_capabilities()
 
-    # Get counts from database
-    total = await db.scalar(select(func.count(Track.id))) or 0
-    analyzed = await db.scalar(
-        select(func.count(TrackAnalysis.id)).where(
-            TrackAnalysis.features_version >= FEATURES_VERSION
-        )
-    ) or 0
-    failed = await db.scalar(
-        select(func.count(Track.id)).where(Track.analysis_failed_at.isnot(None))
-    ) or 0
+    # ADR-0172: the one status model, shared with /health/workers and /library/stats.
+    from app.services.analysis_lifecycle import phase_counts
+
+    counts = await phase_counts(db)
+    features = counts["features"]
+    total = features.total
+    analyzed = features.complete
+    pending = features.pending
+    failed = features.failed
 
     # Count tracks with/without embeddings
     with_embeddings = await db.scalar(
         select(func.count(TrackAnalysis.id)).where(TrackAnalysis.embedding.isnot(None))
     ) or 0
-    without_embeddings = analyzed - with_embeddings
-
-    # Pending = no TrackAnalysis row or outdated version, and not recently failed
-    failure_cutoff = utcnow() - timedelta(hours=24)
-    pending = await db.scalar(
-        select(func.count(Track.id))
-        .outerjoin(TrackAnalysis, Track.id == TrackAnalysis.track_id)
-        .where(
-            or_(
-                TrackAnalysis.id.is_(None),
-                TrackAnalysis.features_version < FEATURES_VERSION,
-            ),
-            or_(
-                Track.analysis_failed_at.is_(None),
-                Track.analysis_failed_at < failure_cutoff,
-            ),
-        )
-    ) or 0
+    without_embeddings = max(0, analyzed - with_embeddings)
 
     percent = (analyzed / total * 100) if total > 0 else 100.0
 
@@ -171,6 +152,112 @@ async def get_analysis_status(db: DbSession) -> AnalysisStatus:
     # Override percent to 100 for complete status
     common["percent"] = 100.0
     return AnalysisStatus(status="complete", **common)
+
+
+class AnalysisFailure(BaseModel):
+    """A track one analysis phase failed on (ADR-0172 point 7)."""
+
+    track_id: UUID
+    title: str | None = None
+    artist: str | None = None
+    phase: Literal["features", "embeddings"]
+    #: A stable code: undecodable, file_missing, worker_crashed, timeout or error.
+    reason: str
+    attempts: int
+    #: Will not be tried again until the file changes.
+    final: bool
+    failed_at: datetime
+    error: str | None = None
+
+
+class AnalysisFailures(BaseModel):
+    """Tracks in the library whose analysis failed, newest first."""
+
+    total: int
+    failures: list[AnalysisFailure]
+
+
+@router.get("/analysis/failures", response_model=AnalysisFailures)
+async def get_analysis_failures(
+    db: DbSession, limit: int = Query(100, ge=1, le=500)
+) -> AnalysisFailures:
+    """The tracks whose analysis failed, with why, so nobody has to read the database to find them.
+
+    Features and embeddings are the phases that record failures; a later phase's failure marks it
+    done. Only tracks in the library: a removed track's failure is not something to act on.
+    """
+    from sqlalchemy import and_, literal, union_all
+
+    from app.db.models import Track
+    from app.services.analysis_lifecycle import (
+        FailureReason,
+        classify,
+        embeddings_needed,
+        features_current,
+        in_library,
+        is_terminal,
+    )
+
+    features = (
+        select(
+            Track.id.label("track_id"),
+            Track.title,
+            Track.artist,
+            literal("features").label("phase"),
+            Track.analysis_error.label("error"),
+            Track.analysis_failed_at.label("failed_at"),
+            literal(None).label("reason"),
+            literal(1).label("attempts"),
+        )
+        .select_from(Track)
+        .join(TrackAnalysis, Track.id == TrackAnalysis.track_id)
+        # The failed state `phase_counts` counts: a failure marks the version current. One from
+        # before a version bump is being retried, and is counted as retrying instead.
+        .where(in_library(), features_current(), Track.analysis_failed_at.is_not(None))
+    )
+    embeddings = (
+        select(
+            Track.id.label("track_id"),
+            Track.title,
+            Track.artist,
+            literal("embeddings").label("phase"),
+            TrackAnalysis.embedding_error.label("error"),
+            TrackAnalysis.embedding_failed_at.label("failed_at"),
+            TrackAnalysis.embedding_failure_reason.label("reason"),
+            TrackAnalysis.embedding_attempts.label("attempts"),
+        )
+        .select_from(Track)
+        .join(TrackAnalysis, Track.id == TrackAnalysis.track_id)
+        .where(and_(embeddings_needed(), TrackAnalysis.embedding_failed_at.is_not(None)))
+    )
+    both = union_all(features, embeddings).subquery()
+    total = await db.scalar(select(func.count()).select_from(both)) or 0
+    rows = (
+        await db.execute(select(both).order_by(both.c.failed_at.desc()).limit(limit))
+    ).all()
+
+    failures = []
+    for row in rows:
+        # A failure recorded before reason codes has none; classify its message, as the migration did.
+        reason = FailureReason(row.reason) if row.reason else classify(row.error)
+        attempts = row.attempts or 1
+        # A feature failure is final on the first attempt: it marks the features version current.
+        final = row.phase == "features" or is_terminal(reason, attempts)
+        code = reason.value
+        failures.append(
+            AnalysisFailure(
+                track_id=row.track_id,
+                title=row.title,
+                artist=row.artist,
+                phase=row.phase,
+                reason=code,
+                attempts=attempts,
+                final=final,
+                failed_at=row.failed_at,
+                error=row.error,
+            )
+        )
+    return AnalysisFailures(total=total, failures=failures)
 
 
 @router.get("/analysis/executor", response_model=ExecutorStatus)
