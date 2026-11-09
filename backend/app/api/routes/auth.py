@@ -105,6 +105,19 @@ async def revoke_token(request: Request) -> TokenStatus:
     if not _authorised(request):
         raise AuthenticationError()
 
+    # A server that is not open on purpose serves only its own machine once tokenless (ADR-0171),
+    # so revoking from anywhere else would lock the caller out with no way back but a shell on the
+    # server. Rotate instead (`POST`), which keeps the server reachable.
+    from app import exposure
+    from app.api.exceptions import ConflictError
+
+    if exposure.current() is exposure.Exposure.LOCAL and not exposure.request_is_local(request.scope):
+        raise ConflictError(
+            "Rotate the token instead",
+            detail="Removing the token would leave this server answering only its own machine, "
+            "including to you. Rotate it instead, or remove it from the server itself.",
+        )
+
     get_app_settings_service().update(access_token=None)
     return TokenStatus(configured=False)
 

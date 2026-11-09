@@ -166,11 +166,14 @@ in that directory on the NAS makes the short command do the right thing as well.
 ## Security posture, stated plainly
 
 **Familiar has no login.** A server token exists ([ADR-0045](decisions/ADR-0045-familiar-authenticates-inbound-requests.md)):
-when one is configured, every REST and MCP request must present it. **It is not on by default**, and
-media — streams, artwork — cannot carry it, because an `<audio>` element and a Mac's casting target
-send no headers. So a Familiar port that is reachable from the internet is a public server. Keep it
-on your own network or a tailnet; the website's remote-access section says why, and never says how
-to port-forward.
+when one is configured, every REST and MCP request must present it. A new server reachable from other
+machines makes itself one at first start, and a server without one that was not opened on purpose
+answers only its own machine ([ADR-0171](decisions/ADR-0171-a-remotely-reachable-server-is-protected-by-default.md),
+`backend/app/exposure.py`). An existing tokenless installation keeps serving everyone, and warns.
+Media (streams, artwork) cannot carry the token, because an `<audio>` element and a Mac's casting
+target send no headers, so it stays exempt; the album-hash artwork route is an oracle over the
+collection until ADR-0171's media milestone. Keep the server on your own network or a tailnet; the
+website's remote-access section says why, and never says how to port-forward.
 
 ## Where to read next
 

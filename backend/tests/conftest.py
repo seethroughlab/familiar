@@ -45,6 +45,19 @@ settings.artist_gallery_fetch = False
 
 
 @pytest.fixture(autouse=True)
+def tokenless_server_is_open():
+    """Route tests run tokenless through `TestClient`, whose peer is `testclient` and whose Host is
+    `testserver`: not this machine under ADR-0171, so every one would be refused. They test routes,
+    not the gate, so they get an open server; `test_exposure.py` and `test_inbound_auth.py` choose
+    LOCAL explicitly. Reset afterwards, because `app.serve.main` records one too."""
+    from app import exposure
+
+    exposure.record(exposure.Exposure.OPEN)
+    yield
+    exposure.record(None)
+
+
+@pytest.fixture(autouse=True)
 def deterministic_random():
     """Seed stdlib random for reproducible test runs."""
     import random

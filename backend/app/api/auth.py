@@ -138,13 +138,53 @@ def extract_token(scope: Scope) -> str | None:
     return None
 
 
-class TokenAuthMiddleware:
-    """Refuse unauthenticated requests to the API and to MCP, when a token is configured.
+TOKEN_PATH = "/api/v1/auth/token"
 
-    **Off when no token is configured**, which is how ADR-0045 lands without breaking every client
-    at once. Point 5 — on by default, and refuse to listen on a non-loopback interface with no token
-    — is deliberately a later phase, because turning enforcement on before the clients can present a
-    token would take the library offline rather than secure it.
+#: What a remote caller is told by a tokenless server that serves only its own machine. It cannot be
+#: told the token, since there is none; it is told how the owner makes one (ADR-0171 point 4).
+LOCAL_ONLY_DETAIL = (
+    "This server has no token, so it only answers requests from its own machine. On the server, run "
+    "`python -m app.token --create` (in Docker: `docker exec familiar-api python -m app.token "
+    "--create`) and sign in with the link it prints."
+)
+
+#: What `/mcp` answers on an open server with no Host allow-list (ADR-0171 point 7).
+OPEN_MCP_DETAIL = (
+    "MCP is off on a server with no token, because nothing else would stop a web page from reaching "
+    "it through DNS rebinding. Create a token (Server → Access), or set MCP_ALLOWED_HOSTS."
+)
+
+
+def _claims_the_server(path: str, method: str) -> bool:
+    """Setting or clearing the token: public by design (`PUBLIC_PATHS`), but not to just anyone."""
+    return (path.rstrip("/") or "/") == TOKEN_PATH and method.upper() in {"POST", "DELETE"}
+
+
+def _tokenless_refusal(scope: Scope, path: str) -> str | None:
+    """Why a request is refused while no token is configured, or None to let it through."""
+    from app import exposure
+
+    if not exposure.tokenless_allows(scope):
+        return LOCAL_ONLY_DETAIL
+    if (path.rstrip("/") or "/") == "/mcp" and exposure.current() is exposure.Exposure.OPEN:
+        from app.config import settings
+
+        if not (settings.mcp_allowed_hosts or "").strip():
+            return OPEN_MCP_DETAIL
+    return None
+
+
+class TokenAuthMiddleware:
+    """Refuse unauthenticated requests to the API and to MCP.
+
+    With a token configured, the token decides. **With none, `app.exposure` decides** (ADR-0171):
+    a tokenless server serves only requests plainly from this machine, unless it is open by choice
+    (`FAMILIAR_OPEN_SERVER`) or is an existing installation the launcher found without one. Until
+    ADR-0171 the gate was simply off without a token, so a server started any way but
+    `python -m app.serve` served anyone who could reach it.
+
+    Claiming a tokenless server (`POST /api/v1/auth/token`) is under the same rule, or a remote
+    caller could set the token on a server that only serves its own machine.
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -162,7 +202,10 @@ class TokenAuthMiddleware:
             await self.app(scope, receive, send)
             return
 
-        if not path_requires_token(scope.get("path", ""), scope.get("method", "GET")):
+        path = scope.get("path", "")
+        method = scope.get("method", "GET")
+        claims = _claims_the_server(path, method)
+        if not claims and not path_requires_token(path, method):
             await self.app(scope, receive, send)
             return
 
@@ -170,6 +213,15 @@ class TokenAuthMiddleware:
 
         configured = get_app_settings_service().get().access_token
         if not configured:
+            refusal = _tokenless_refusal(scope, path)
+            if refusal is None:
+                await self.app(scope, receive, send)
+            else:
+                await self._refuse(scope, send, detail=refusal)
+            return
+
+        if claims:
+            # A configured token is checked by the route itself (`_authorised`).
             await self.app(scope, receive, send)
             return
 
@@ -180,7 +232,7 @@ class TokenAuthMiddleware:
         await self._refuse(scope, send)
 
     @staticmethod
-    async def _refuse(scope: Scope, send: Send) -> None:
+    async def _refuse(scope: Scope, send: Send, detail: str | None = None) -> None:
         """Emit the project's error envelope by hand.
 
         A middleware cannot raise `HTTPException` and have `main.py`'s handlers normalise it — those
@@ -194,7 +246,7 @@ class TokenAuthMiddleware:
             "error": True,
             "status_code": 401,
             "message": "Authentication required",
-            "detail": f"Send the server token in the {TOKEN_HEADER} header.",
+            "detail": detail or f"Send the server token in the {TOKEN_HEADER} header.",
             "code": ErrorCode.SERVER_TOKEN_REQUIRED.value,
         }
         if request_id:

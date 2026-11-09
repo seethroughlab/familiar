@@ -41,6 +41,60 @@ This pulls the latest image, refreshes the scripts, and restarts Familiar. Datab
 
 On macOS you can also double-click **Update Familiar.command** in the `docker` folder instead of using Terminal.
 
+## The server token
+
+A server that other machines can reach needs a token ([ADR-0171](decisions/ADR-0171-a-remotely-reachable-server-is-protected-by-default.md)).
+What happens without one depends on how the server came to be without one:
+
+| Server | No token means |
+|---|---|
+| New (an empty library), reachable from other machines | It makes itself a token at first start and prints a sign-in link |
+| Existing (has a library), reachable, and has never had a token | It keeps serving everyone, as it did before, and warns at every start. MCP stays off |
+| `FAMILIAR_OPEN_SERVER=1` | It serves everyone on purpose (the demo). MCP stays off unless `MCP_ALLOWED_HOSTS` is set |
+| Anything else, such as a token removed or a server started with plain `uvicorn` | It answers only its own machine |
+
+"Its own machine" means a loopback peer, a loopback `Host`, and no `Forwarded`, `X-Forwarded-For` or
+`X-Real-IP` header. A reverse proxy on the same host therefore does not count: a tokenless server
+behind nginx or Caddy refuses what the proxy forwards.
+
+**Find it.** `docker exec familiar-api python -m app.token` prints the sign-in link (outside Docker,
+`python -m app.token` from `backend/`). The web admin shows it under **Server → Access**.
+
+**Make one.** **Server → Access → Create server token**, or, from a shell on the server when
+nothing else can reach it:
+
+```bash
+docker exec familiar-api python -m app.token --create
+```
+
+It takes effect at once. It never replaces a token that already exists.
+
+**Rotate it** if it has been seen by someone it shouldn't have. There is no button for this yet;
+the API does it, given the current token, and prints the new one:
+
+```bash
+curl -X POST -H "X-Familiar-Token: $OLD" http://your-server:4400/api/v1/auth/token
+```
+
+Every app and device is then signed out and pairs again from **Server → Access**.
+
+**Remove it** with `curl -X DELETE` on the same URL. That works only from the server itself
+(`localhost`), or on a server that is open on purpose. From anywhere else it would lock you out, so
+the server refuses with a 409.
+
+**Behind a reverse proxy.** Nothing to configure for the token: the apps send `X-Familiar-Token`, and
+the proxy passes it through like any other header. Keep a token set, because without one the
+server refuses everything the proxy forwards.
+
+**MCP.** With a token, an MCP host sends it as `Authorization: Bearer <token>` or `X-Familiar-Token`.
+Without one, `/mcp` only works with `MCP_ALLOWED_HOSTS` set to the hosts the server is reached by
+(e.g. `nas:4400,localhost:4400`), so that a web page cannot reach it through DNS rebinding.
+
+**Roll back.** If an upgrade leaves a server you rely on refusing requests, set
+`FAMILIAR_OPEN_SERVER=1` in the `.env` beside the compose file and restart. It restores the old
+behaviour for that server until you make a token. Pinning the previous image tag in the compose file
+also works; migrations are forward-only, so pin only to the image you upgraded from.
+
 ---
 
 ## Docker (Standard)
