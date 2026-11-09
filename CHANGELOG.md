@@ -30,6 +30,10 @@ them from stored failures.
 
 ### Changed
 
+- **`/new-releases/status` and `/new-releases/check*` declare their responses** (ADR-0173), and
+  `purchase_links` is typed as `{name, url}` per store. The JSON is the same except that the status
+  response's `progress` no longer echoes the internal `profile_id`, which no client read. The
+  contract stays at v1.
 - **Playlist and favourite use cases live in `app/operations/`** (ADR-0173). The REST routes and the
   LLM/MCP tools are adapters over them; the boundary lint has no known exceptions left.
 - **One analysis status model** (ADR-0172). `/health/system`, `/health/workers`, `/library/stats`

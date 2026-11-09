@@ -7,85 +7,22 @@
  * - `/library/discover/external-albums` — listening-profile recommendations (Pass 2.5)
  * - `/playlists/{id}/recommendations/external-albums` — per-playlist (used in Pass 4)
  */
+import type * as Wire from '@familiar/api-client';
 import api from './base';
 
 // ============================================================================
 // Shared external-album shape
 // ============================================================================
 
-export interface ExternalAlbum {
-  id: string;
-  artist_name: string;
-  release_name: string;
-  release_type: string | null;
-  release_date: string | null;
-  artwork_url: string;
-  external_url: string | null;
-  track_count: number | null;
-  match_score?: number;
-  seed_artist?: string | null;
-  local_album_match: boolean;
-  dismissed: boolean;
-  discovered_at: string;
-  purchase_links: Record<string, { name: string; url: string }>;
-}
-
-// ============================================================================
-// New releases (#3)
-// ============================================================================
-
-export interface NewReleasesProgress {
-  status: 'running' | 'completed' | 'error' | string;
-  phase?: string;
-  message?: string;
-  artists_total?: number;
-  artists_checked?: number;
-  releases_found?: number;
-  releases_new?: number;
-  current_artist?: string | null;
-  started_at?: string;
-  last_heartbeat?: string;
-  errors?: string[];
-}
-
-export interface NewReleasesRotation {
-  total_artists_in_rotation: number;
-  checked_this_week: number;
-  remaining_this_week: number;
-  estimated_days_to_complete: number;
-}
-
-export interface NewReleasesStatus {
-  total_releases_found: number;
-  new_releases_available: number;
-  artists_in_library: number;
-  artists_checked: number;
-  last_check_at: string | null;
-  progress: NewReleasesProgress | null;
-  rotation: NewReleasesRotation;
-}
-
-export interface NewReleasesListResponse {
-  releases: ExternalAlbum[];
-  total: number;
-  limit: number;
-  offset: number;
-  /**
-   * When discovery last wrote a release, and how long ago. `null` means it has
-   * never written one — which is not the same as "there is nothing new". An empty
-   * list looks identical in both cases, so a client must not render it as
-   * "no new releases" without checking this (ADR-0099 points 7 and 8).
-   */
-  as_of: string | null;
-  age_hours: number | null;
-}
-
-export interface NewReleasesListParams {
-  limit?: number;
-  offset?: number;
-  include_dismissed?: boolean;
-  include_owned?: boolean;
-}
+// Response types are the schema's (ADR-0173).
+export type ExternalAlbum = Wire.ExternalAlbumResponse;
+export type NewReleaseItem = Wire.NewReleaseItem;
+export type NewReleasesProgress = Wire.NewReleasesProgress;
+export type NewReleasesRotation = Wire.NewReleasesRotation;
+export type NewReleasesStatus = Wire.NewReleasesStatus;
+export type NewReleasesListResponse = Wire.NewReleasesListResponse;
+/** The list endpoint's query parameters, as the schema declares them. */
+export type NewReleasesListParams = NonNullable<Wire.NewReleasesListNewReleasesData['query']>;
 
 export const newReleasesApi = {
   async list(params?: NewReleasesListParams): Promise<NewReleasesListResponse> {
@@ -98,7 +35,7 @@ export const newReleasesApi = {
     return data;
   },
 
-  async checkBatch(params?: { batch_size?: number; days_back?: number }): Promise<{ status: string; message: string }> {
+  async checkBatch(params?: { batch_size?: number; days_back?: number }): Promise<Wire.CheckStarted> {
     const { data } = await api.post('/new-releases/check/batch', null, { params });
     return data;
   },
@@ -108,9 +45,7 @@ export const newReleasesApi = {
 // External albums (generic dismiss + listening-profile + per-playlist)
 // ============================================================================
 
-export interface ExternalAlbumsResponse {
-  albums: ExternalAlbum[];
-}
+export type ExternalAlbumsResponse = Wire.ExternalAlbumsResponse;
 
 export const externalAlbumsApi = {
   async dismiss(externalAlbumId: string): Promise<void> {

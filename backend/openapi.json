@@ -2451,6 +2451,25 @@
         "title": "ChangeStatsResponse",
         "type": "object"
       },
+      "CheckStarted": {
+        "description": "A background check was started.",
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "message"
+        ],
+        "title": "CheckStarted",
+        "type": "object"
+      },
       "ClapStatus": {
         "description": "CLAP embeddings status details.",
         "properties": {
@@ -3727,10 +3746,7 @@
           },
           "purchase_links": {
             "additionalProperties": {
-              "additionalProperties": {
-                "type": "string"
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/PurchaseLink"
             },
             "title": "Purchase Links",
             "type": "object"
@@ -6383,10 +6399,7 @@
           },
           "purchase_links": {
             "additionalProperties": {
-              "additionalProperties": {
-                "type": "string"
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/PurchaseLink"
             },
             "title": "Purchase Links",
             "type": "object"
@@ -6478,6 +6491,163 @@
           "offset"
         ],
         "title": "NewReleasesListResponse",
+        "type": "object"
+      },
+      "NewReleasesProgress": {
+        "description": "A check in flight, or the last one's outcome, as the task records it.",
+        "properties": {
+          "artists_checked": {
+            "title": "Artists Checked",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "artists_total": {
+            "title": "Artists Total",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "current_artist": {
+            "title": "Current Artist",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "errors": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "last_heartbeat": {
+            "title": "Last Heartbeat",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "message": {
+            "title": "Message",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phase": {
+            "title": "Phase",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "releases_found": {
+            "title": "Releases Found",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "releases_new": {
+            "title": "Releases New",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "NewReleasesProgress",
+        "type": "object"
+      },
+      "NewReleasesRotation": {
+        "description": "How far this week's rotation through the profile's artists has got.",
+        "properties": {
+          "checked_this_week": {
+            "title": "Checked This Week",
+            "type": "integer"
+          },
+          "estimated_days_to_complete": {
+            "title": "Estimated Days To Complete",
+            "type": "integer"
+          },
+          "remaining_this_week": {
+            "title": "Remaining This Week",
+            "type": "integer"
+          },
+          "total_artists_in_rotation": {
+            "title": "Total Artists In Rotation",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_artists_in_rotation",
+          "checked_this_week",
+          "remaining_this_week",
+          "estimated_days_to_complete"
+        ],
+        "title": "NewReleasesRotation",
+        "type": "object"
+      },
+      "NewReleasesStatus": {
+        "description": "What discovery has found, what is running now, and the rotation behind it.\n\nTyped since ADR-0173, so the web client takes this shape from the schema rather than declaring\nits own (it was `dict[str, Any]`, and `discovery.ts` kept a handwritten copy).",
+        "properties": {
+          "artists_checked": {
+            "title": "Artists Checked",
+            "type": "integer"
+          },
+          "artists_in_library": {
+            "title": "Artists In Library",
+            "type": "integer"
+          },
+          "last_check_at": {
+            "title": "Last Check At",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "new_releases_available": {
+            "title": "New Releases Available",
+            "type": "integer"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/NewReleasesProgress"
+          },
+          "rotation": {
+            "$ref": "#/components/schemas/NewReleasesRotation"
+          },
+          "total_releases_found": {
+            "title": "Total Releases Found",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_releases_found",
+          "new_releases_available",
+          "artists_in_library",
+          "artists_checked",
+          "rotation"
+        ],
+        "title": "NewReleasesStatus",
         "type": "object"
       },
       "OfflineManifestRequest": {
@@ -7975,6 +8145,25 @@
           "applied_at"
         ],
         "title": "ProposedChangeResponse",
+        "type": "object"
+      },
+      "PurchaseLink": {
+        "description": "A store search for a release, from `generate_release_search_urls()`.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "url"
+        ],
+        "title": "PurchaseLink",
         "type": "object"
       },
       "QueueSource": {
@@ -22449,9 +22638,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response New-Releases Trigger Check",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CheckStarted"
                 }
               }
             },
@@ -22554,9 +22741,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response New-Releases Trigger Batch Check",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CheckStarted"
                 }
               }
             },
@@ -22633,9 +22818,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response New-Releases Get Status",
-                  "type": "object"
+                  "$ref": "#/components/schemas/NewReleasesStatus"
                 }
               }
             },

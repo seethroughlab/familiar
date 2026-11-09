@@ -14,19 +14,20 @@
  * affordances: dismiss button, context label, release type/date, purchase links.
  */
 import { X, Check } from 'lucide-react';
-import type { ExternalAlbum } from '../../api/discovery';
+import type { ExternalAlbum, NewReleaseItem } from '../../api/discovery';
 import { AlbumArtwork } from '../AlbumArtwork';
 import { FindDropdown, type FindLink } from './FindDropdown';
 
 export interface ExternalAlbumCardProps {
-  album: ExternalAlbum;
+  /** A recommendation or a new release: the card reads only the fields the two share. */
+  album: ExternalAlbum | NewReleaseItem;
   /** "New release · Apr 2026", "Recommended", "Recommended · matches this playlist" */
   contextLabel: string;
   onDismiss?: (id: string) => void;
   layout?: 'grid' | 'list';
 }
 
-function formatReleaseLabel(album: ExternalAlbum): string | null {
+function formatReleaseLabel(album: ExternalAlbumCardProps['album']): string | null {
   if (!album.release_type && !album.release_date) return null;
   const type = album.release_type ? album.release_type.toUpperCase() : '';
   if (!album.release_date) return type || null;
@@ -44,10 +45,8 @@ function formatReleaseLabel(album: ExternalAlbum): string | null {
   }
 }
 
-function purchaseLinksToFindLinks(
-  links: ExternalAlbum['purchase_links'],
-): FindLink[] {
-  return Object.values(links ?? {}) as FindLink[];
+function purchaseLinksToFindLinks(links: ExternalAlbumCardProps['album']['purchase_links']): FindLink[] {
+  return Object.values(links ?? {});
 }
 
 export function ExternalAlbumCard({

@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from app.api.deps import DbSession, RequiredProfile
+from app.api.routes._external_albums_schemas import PurchaseLink
 from app.services.new_releases import NewReleasesService
 from app.services.tasks import (
     clear_new_releases_progress,
@@ -36,8 +37,8 @@ class NewReleaseItem(BaseModel):
     local_album_match: bool
     dismissed: bool
     discovered_at: str
-    # {store_name: {"url": ..., "label": ...}} from generate_release_search_urls()
-    purchase_links: dict[str, dict[str, str]]
+    # {store_key: {"name": ..., "url": ...}} from generate_release_search_urls()
+    purchase_links: dict[str, PurchaseLink]
 
 
 class NewReleasesListResponse(BaseModel):
@@ -97,7 +98,55 @@ async def list_new_releases(
     }
 
 
-@router.get("/status")
+class NewReleasesProgress(BaseModel):
+    """A check in flight, or the last one's outcome, as the task records it."""
+
+    status: str
+    phase: str | None = None
+    message: str | None = None
+    artists_total: int | None = None
+    artists_checked: int | None = None
+    releases_found: int | None = None
+    releases_new: int | None = None
+    current_artist: str | None = None
+    started_at: str | None = None
+    last_heartbeat: str | None = None
+    errors: list[str] = []
+
+
+class NewReleasesRotation(BaseModel):
+    """How far this week's rotation through the profile's artists has got."""
+
+    total_artists_in_rotation: int
+    checked_this_week: int
+    remaining_this_week: int
+    estimated_days_to_complete: int
+
+
+class NewReleasesStatus(BaseModel):
+    """What discovery has found, what is running now, and the rotation behind it.
+
+    Typed since ADR-0173, so the web client takes this shape from the schema rather than declaring
+    its own (it was `dict[str, Any]`, and `discovery.ts` kept a handwritten copy).
+    """
+
+    total_releases_found: int
+    new_releases_available: int
+    artists_in_library: int
+    artists_checked: int
+    last_check_at: str | None = None
+    progress: NewReleasesProgress | None = None
+    rotation: NewReleasesRotation
+
+
+class CheckStarted(BaseModel):
+    """A background check was started."""
+
+    status: str
+    message: str
+
+
+@router.get("/status", response_model=NewReleasesStatus)
 async def get_status(
     db: DbSession,
     profile: RequiredProfile,
@@ -116,7 +165,7 @@ async def get_status(
     }
 
 
-@router.post("/check")
+@router.post("/check", response_model=CheckStarted)
 async def trigger_check(
     profile: RequiredProfile,
     days_back: int = Query(default=90, ge=1, le=365),
@@ -149,7 +198,7 @@ async def trigger_check(
     }
 
 
-@router.post("/check/batch")
+@router.post("/check/batch", response_model=CheckStarted)
 async def trigger_batch_check(
     profile: RequiredProfile,
     batch_size: int = Query(default=75, ge=10, le=200),
