@@ -484,7 +484,7 @@ export const commandsPlaybackCommands = <ThrowOnError extends boolean = false>(o
 /**
  * Get Api Contract
  *
- * Report the API contract this server implements, the oldest client it serves, and its identity.
+ * Report the API contract this server implements, the oldest client it serves, its identity, and what it can do.
  */
 export const systemGetApiContract = <ThrowOnError extends boolean = false>(options?: Options<SystemGetApiContractData, ThrowOnError>): RequestResult<SystemGetApiContractResponses, SystemGetApiContractErrors, ThrowOnError> => (options?.client ?? client).get<SystemGetApiContractResponses, SystemGetApiContractErrors, ThrowOnError>({
     responseType: 'json',

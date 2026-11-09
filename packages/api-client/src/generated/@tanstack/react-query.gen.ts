@@ -615,7 +615,7 @@ export const systemGetApiContractQueryKey = (options?: Options<SystemGetApiContr
 /**
  * Get Api Contract
  *
- * Report the API contract this server implements, the oldest client it serves, and its identity.
+ * Report the API contract this server implements, the oldest client it serves, its identity, and what it can do.
  */
 export const systemGetApiContractOptions = (options?: Options<SystemGetApiContractData>) => queryOptions<SystemGetApiContractResponse, AxiosError<SystemGetApiContractError>, SystemGetApiContractResponse, ReturnType<typeof systemGetApiContractQueryKey>>({
     queryFn: async ({ queryKey, signal }) => {

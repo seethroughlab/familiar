@@ -1827,6 +1827,10 @@ export type CommonValuesResponse = {
  */
 export type ContractInfo = {
     /**
+     * Capabilities
+     */
+    capabilities?: Array<string> | null;
+    /**
      * Contract Version
      */
     contract_version: number;

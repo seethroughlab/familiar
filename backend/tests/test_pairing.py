@@ -9,6 +9,7 @@ import pytest
 
 import app.services.app_settings as app_settings_module
 from app.api.auth import TOKEN_HEADER
+from app.config import SERVER_CAPABILITIES
 from app.services.app_settings import AppSettingsService
 from app.services.server_identity import get_server_identity, lan_addresses
 
@@ -30,7 +31,9 @@ class TestIdentity:
         reloaded = AppSettingsService(settings_path=settings_file.settings_path)
         assert reloaded.get().server_id == first
 
-    def test_the_name_defaults_to_the_host_without_its_mdns_suffix(self, settings_file, monkeypatch):
+    def test_the_name_defaults_to_the_host_without_its_mdns_suffix(
+        self, settings_file, monkeypatch
+    ):
         monkeypatch.setattr(socket, "gethostname", lambda: "Studio-MacBook.local")
         assert get_server_identity().server_name == "Studio-MacBook"
 
@@ -56,7 +59,10 @@ def test_lan_addresses_leave_out_what_a_phone_cannot_reach(monkeypatch):
         "net_if_addrs",
         lambda: {
             "lo0": [addr("127.0.0.1")],
-            "en0": [addr("192.168.1.20"), SimpleNamespace(family=socket.AF_INET6, address="fe80::1")],
+            "en0": [
+                addr("192.168.1.20"),
+                SimpleNamespace(family=socket.AF_INET6, address="fe80::1"),
+            ],
             "awdl": [addr("169.254.3.4")],
             "utun": [addr("100.101.102.103")],
         },
@@ -78,6 +84,11 @@ class TestContract:
         assert body["server_id"] == get_server_identity().server_id
         assert body["server_name"]
 
+    def test_the_handshake_says_what_this_server_can_do(self, client, settings_file):
+        """ADR-0168: by name, from the constant, on every deploy channel."""
+        body = client.get("/api/v1/contract").json()
+        assert body["capabilities"] == list(SERVER_CAPABILITIES)
+
 
 class TestPairingEndpoint:
     def test_a_server_without_a_token_has_nothing_to_pair_with(self, client, settings_file):
@@ -90,9 +101,7 @@ class TestPairingEndpoint:
 
     def test_it_returns_what_a_pairing_link_needs(self, client, settings_file, monkeypatch):
         settings_file.update(access_token="secret-token")
-        monkeypatch.setattr(
-            "app.services.server_identity.lan_addresses", lambda: ["192.168.1.20"]
-        )
+        monkeypatch.setattr("app.services.server_identity.lan_addresses", lambda: ["192.168.1.20"])
         body = client.get("/api/v1/auth/pairing", headers={TOKEN_HEADER: "secret-token"}).json()
         assert body["token"] == "secret-token"
         assert body["server_id"] == get_server_identity().server_id

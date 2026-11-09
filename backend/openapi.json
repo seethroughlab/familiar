@@ -2562,6 +2562,16 @@
       "ContractInfo": {
         "description": "What a client needs to decide whether it can talk to this server.",
         "properties": {
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": [
+              "array",
+              "null"
+            ]
+          },
           "contract_version": {
             "title": "Contract Version",
             "type": "integer"
@@ -14109,7 +14119,7 @@
     },
     "/api/v1/contract": {
       "get": {
-        "description": "Report the API contract this server implements, the oldest client it serves, and its identity.",
+        "description": "Report the API contract this server implements, the oldest client it serves, its identity, and what it can do.",
         "operationId": "system_get_api_contract",
         "responses": {
           "200": {
