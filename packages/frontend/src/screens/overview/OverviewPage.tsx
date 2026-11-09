@@ -82,7 +82,7 @@ function SyncNowButton() {
       type="button"
       onClick={start}
       disabled={starting}
-      className="self-start mt-1 inline-flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white hover:bg-accent/90 disabled:opacity-60"
+      className="self-start mt-1 inline-flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-zinc-950 hover:bg-accent/90 disabled:opacity-60"
     >
       <RefreshCw className={`w-4 h-4 ${starting ? 'animate-spin' : ''}`} />
       Sync library

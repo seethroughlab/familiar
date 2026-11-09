@@ -55,6 +55,10 @@ pnpm --filter @familiar/frontend test
 pnpm --filter @familiar/web run build
 ```
 
+The browser suite (`cd packages/web && npx playwright test`) includes `e2e/accessibility.spec.ts`,
+which fails on an axe-core violation on any destination (ADR-0174). Before a release, also make the
+keyboard and screen-reader pass in [`docs/RELEASE-CHECKLIST.md`](docs/RELEASE-CHECKLIST.md).
+
 If a check cannot run locally because an external service is missing, say that in the PR.
 
 ## Code Guidelines

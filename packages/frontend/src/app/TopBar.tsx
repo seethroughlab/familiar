@@ -50,7 +50,9 @@ export function TopBar() {
           `justify-between` would centre the nav between the brand and the right edge, which drifts
           as the wordmark shows and hides at the `sm` breakpoint. */}
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-3 sm:px-4 py-1.5">
-        <span className="hidden sm:block text-sm font-semibold text-white justify-self-start">Familiar</span>
+        {/* The page's one <h1> (ADR-0174): destinations are <h2>, sections <h3>. Shown from `sm`, as
+            the label always was; below it, there for a screen reader and not the eye. */}
+        <h1 className="sr-only sm:not-sr-only sm:block text-sm font-semibold text-white justify-self-start">Familiar</h1>
         {/* Holds the first column open on small screens, where the wordmark is hidden. */}
         <span className="sm:hidden" aria-hidden="true" />
 
