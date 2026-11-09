@@ -574,4 +574,3 @@ export interface LibraryDiscoverResponse {
   recommended_artists: DiscoverRecommendedArtist[];
   recently_added_count: number;
 }
-export const deliberateTypeError: number = 'ADR-0170 proof: CI must fail on this';
