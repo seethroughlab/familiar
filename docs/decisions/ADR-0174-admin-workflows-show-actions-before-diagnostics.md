@@ -21,6 +21,19 @@ Implementation:
   `e2e/`. `packages/web/scripts/check-e2e-skips.mjs` runs after the suite in CI and fails on any
   skipped test unless it names a capability from its `CAPABILITIES` list (empty today), which it
   reports on a line of its own (point 2).
+- **Phases 2 and 3, 2026-11-09.** `backend/app/services/failure_report.py` gives each task failure
+  a stable `kind` (point 3): the analysis reasons ADR-0172 already classifies (`undecodable`,
+  `file_missing`, `worker_crashed`, `timeout`, `error`) plus `database` and `network`, told apart
+  first because their messages also say "timeout" and "connection". Each kind has a plain summary
+  and a next action. `_record_task_failure` stores the kind and a **redacted** message: DSN
+  passwords, `X-Familiar-Token`, bearer tokens, `api_key=`/`token=`/`password=` values and
+  `sk-`/`AKIA` key shapes become `***` before anything is kept or sent (point 5).
+  `/health/workers` gains `failure_groups` (kind, task, summary, next action, count, distinct tracks
+  affected, last occurrence, up to five redacted examples), most frequent first; `recent_failures`
+  stays, redacted and with `kind`, and records from before this are classified and redacted on
+  read. Analysis → Status shows the groups (`screens/analysis/FailureGroups.tsx`) with the raw
+  messages behind a closed `<details>` and a copy button; the Overview's attention item names the
+  top group and its next action instead of a raw count (point 4). Contract stays v1 (additive).
 
 Extends [ADR-0126](ADR-0126-the-admin-ui-is-organized-around-operator-workflows.md)
 

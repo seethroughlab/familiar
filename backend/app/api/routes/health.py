@@ -323,6 +323,30 @@ class TaskFailure(BaseModel):
     error: str
     track: str | None = None
     timestamp: str
+    #: Stable code (ADR-0174 point 3); `failure_report.KINDS` lists them.
+    kind: str | None = None
+
+
+class FailureExample(BaseModel):
+    """One occurrence, redacted (ADR-0174 point 5)."""
+
+    error: str
+    track: str | None = None
+    timestamp: str | None = None
+
+
+class FailureGroup(BaseModel):
+    """Failures of one kind in one task: what failed, how much, and what to do (ADR-0174 point 4)."""
+
+    kind: str
+    task: str
+    summary: str
+    next_action: str
+    count: int
+    #: Distinct tracks or artists named, where the failure named one.
+    affected: int
+    last_at: str | None = None
+    examples: list[FailureExample] = []
 
 
 class BackgroundEvent(BaseModel):
@@ -374,6 +398,8 @@ class WorkerStatus(BaseModel):
     analysis_progress: AnalysisProgress
     phase_queues: list[PhaseQueue] = []
     recent_failures: list[TaskFailure] = []
+    #: The same failures grouped by kind and task, most frequent first (ADR-0174).
+    failure_groups: list[FailureGroup] = []
     background_events: list[BackgroundEvent] = []
 
 
@@ -389,12 +415,23 @@ async def get_worker_status(db: DbSession) -> WorkerStatus:
     workers: list[WorkerInfo] = []
     queues: list[QueueStats] = []
     recent_failures: list[TaskFailure] = []
+    failure_groups: list[FailureGroup] = []
     background_events: list[BackgroundEvent] = []
 
     # Get recent failures
     try:
-        failures = get_recent_failures(limit=10)
-        recent_failures = [TaskFailure(**f) for f in failures]
+        from app.services.failure_report import failure_kind, group_failures, redact
+
+        stored = get_recent_failures(limit=50)
+        # Redacted and classified here as well, for records written before ADR-0174.
+        recent_failures = [
+            TaskFailure(**{**f, "error": redact(f.get("error")), "kind": f.get("kind") or failure_kind(f.get("error"))})
+            for f in stored[:10]
+        ]
+        failure_groups = [
+            FailureGroup(**{**g.__dict__, "examples": [FailureExample(**e) for e in g.examples]})
+            for g in group_failures(stored)
+        ]
     except Exception as e:
         logger.warning(f"Could not get recent failures: {e}")
 
@@ -497,6 +534,7 @@ async def get_worker_status(db: DbSession) -> WorkerStatus:
         analysis_progress=analysis_progress,
         phase_queues=phase_queues,
         recent_failures=recent_failures,
+        failure_groups=failure_groups,
         background_events=background_events,
     )
 
