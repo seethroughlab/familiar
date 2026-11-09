@@ -30,6 +30,15 @@ Implementation:
   naming a code this build does not know fails the typed envelope's decode and the call reads as
   `malformed`, status lost. The fix is on the schema side (an open enum); until then a new code
   ships to the app before the server.
+- **Audited 2026-11-08 — the vertical slice is sound; migration remains mostly ahead.**
+  `GeneratedResponses`, `RepositoryError` and the casting mapping remain one coherent vocabulary,
+  and their tests pass. Twenty-five files under `App/` still refer directly to generated
+  `Operations`, `Components.Schemas`, client methods or generated output cases; examples include
+  `BrowseStores`, `DetailStore`, `SetupView`, `LibraryStore`, `ListeningReporter` and
+  `LibraryView`. Five files in `FamiliarAppCore` still switch on generated responses, which is
+  appropriate only inside repository/configuration adapters. Point 6 remains the migration rule:
+  move one capability when it changes, with mapping tests, rather than wrapping all operations in a
+  flag-day shadow client. No new ADR is needed to continue the accepted direction.
 
 Extends [ADR-0007](ADR-0007-clients-are-generated-from-openapi.md) and
 [ADR-0122](ADR-0122-the-apple-client-has-explicit-module-boundaries.md).
