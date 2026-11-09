@@ -4,6 +4,23 @@ Status: accepted
 
 Date: 2026-11-08
 
+Implementation:
+
+- **Backend pilot built 2026-11-09** (Phase 1). `app/operations/playlists.py` (`list_playlists`,
+  `get_playlist`, `add_tracks`) and `app/operations/favorites.py` (`add`, `remove`) hold the five
+  use cases the LLM/MCP tools shared with REST; `app/operations/errors.py` has the transport-free
+  `PlaylistNotFound` and `TrackNotFound`, since rule 1 of `lint_boundaries.py` forbids
+  `app.api.exceptions` there. The routes and `app/services/llm/handlers/playlists.py` are adapters,
+  and `KNOWN` in `lint_boundaries.py` is empty. The handler's two workarounds went with it: passing
+  `include_auto` explicitly because the route's `Query(...)` default arrived as a FastAPI object, and
+  reading the playlist before and after an append to count what was added.
+  `tests/test_playlist_operations.py` tests the behaviour once; route and tool tests keep their own
+  concerns. **Two route defects surfaced while extracting:** `max(position) or -1` treated a
+  playlist whose last position was 0 as empty, so the next track also got position 0; and an id
+  repeated in one request was added twice. The operation fixes both, with tests.
+- **Not done:** Phases 2–4, the frontend's 74 handwritten response types in `library.ts`,
+  `discovery.ts`, `tracks.ts` and `playlists.ts`, and the check that stops new ones.
+
 Extends [ADR-0129](ADR-0129-the-web-client-is-generated-from-the-openapi-contract.md) and
 [ADR-0130](ADR-0130-the-backend-is-assembled-from-explicit-dependencies.md)
 

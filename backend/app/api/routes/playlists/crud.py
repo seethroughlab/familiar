@@ -10,7 +10,9 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import DbSession, RequiredProfile
 from app.api.exceptions import PlaylistNotFoundError
 from app.api.schemas.common import UTCDateTime
-from app.db.models import Playlist, PlaylistTrack, ProfilePlayHistory, Track
+from app.db.models import Playlist, PlaylistTrack, Track
+from app.operations import playlists as playlist_ops
+from app.operations.errors import PlaylistNotFound
 
 router = APIRouter()
 
@@ -105,49 +107,22 @@ async def list_playlists(
     include_auto: bool = Query(True, description="Include auto-generated playlists"),
 ) -> list[PlaylistResponse]:
     """List all playlists for the current profile."""
-    query = select(Playlist).where(Playlist.profile_id == profile.id)
+    summaries = await playlist_ops.list_playlists(db, profile.id, include_auto=include_auto)
+    return [playlist_response(s.playlist, s.track_count) for s in summaries]
 
-    if not include_auto:
-        query = query.where(Playlist.is_auto_generated.is_(False))
 
-    query = query.order_by(Playlist.updated_at.desc())
-
-    result = await db.execute(query)
-    playlists = result.scalars().all()
-
-    # Batch all track counts in a single GROUP BY query instead of 2N queries
-    playlist_ids = [p.id for p in playlists]
-    counts: dict[UUID, tuple[int, int]] = {}
-    if playlist_ids:
-        count_result = await db.execute(
-            select(
-                PlaylistTrack.playlist_id,
-                func.count(PlaylistTrack.id).label("total"),
-                func.count(PlaylistTrack.track_id).label("local"),  # count() ignores NULLs
-            )
-            .where(PlaylistTrack.playlist_id.in_(playlist_ids))
-            .group_by(PlaylistTrack.playlist_id)
-        )
-        for row in count_result.all():
-            counts[row.playlist_id] = (row.total, row.local)
-
-    responses = []
-    for playlist in playlists:
-        total_count, local_count = counts.get(playlist.id, (0, 0))
-
-        responses.append(PlaylistResponse(
-            id=str(playlist.id),
-            name=playlist.name,
-            description=playlist.description,
-            is_auto_generated=playlist.is_auto_generated,
-            generation_prompt=playlist.generation_prompt,
-            track_count=total_count,
-            auto_download=playlist.auto_download,
-            created_at=playlist.created_at,
-            updated_at=playlist.updated_at,
-        ))
-
-    return responses
+def playlist_response(playlist: Playlist, track_count: int) -> PlaylistResponse:
+    return PlaylistResponse(
+        id=str(playlist.id),
+        name=playlist.name,
+        description=playlist.description,
+        is_auto_generated=playlist.is_auto_generated,
+        generation_prompt=playlist.generation_prompt,
+        track_count=track_count,
+        auto_download=playlist.auto_download,
+        created_at=playlist.created_at,
+        updated_at=playlist.updated_at,
+    )
 
 
 async def create_playlist(
@@ -241,58 +216,39 @@ async def get_playlist(
 
     Returns both local and external tracks mixed together by position.
     """
-    playlist = await db.get(Playlist, playlist_id)
+    try:
+        detail = await playlist_ops.get_playlist(db, profile.id, playlist_id)
+    except PlaylistNotFound:
+        raise PlaylistNotFoundError() from None
+    return playlist_detail_response(detail)
 
-    if not playlist or playlist.profile_id != profile.id:
-        raise PlaylistNotFoundError()
 
-    result = await db.execute(
-        select(PlaylistTrack)
-        .where(PlaylistTrack.playlist_id == playlist_id)
-        .order_by(PlaylistTrack.position)
-        .options(
-            selectinload(PlaylistTrack.track).selectinload(Track.analyses),
+def playlist_detail_response(detail: playlist_ops.PlaylistDetail) -> PlaylistDetailResponse:
+    """The wire shape of a playlist and its tracks: what the routes that return one serialise."""
+    playlist = detail.playlist
+    tracks = [
+        TrackInPlaylist(
+            id=str(e.track.id),
+            playlist_track_id=str(e.item.id),
+            type="local",
+            title=e.track.title,
+            artist=e.track.artist,
+            album=e.track.album,
+            duration_seconds=e.track.duration_seconds,
+            position=e.item.position,
+            format=e.track.format,
+            year=e.track.year,
+            genre=e.track.genre,
+            track_number=e.track.track_number,
+            disc_number=e.track.disc_number,
+            album_artist=e.track.album_artist,
+            album_type=e.track.album_type.value if e.track.album_type else None,
+            analysis_version=e.track.analysis_version,
+            last_played_at=e.history.last_played_at if e.history and e.history.last_played_at else None,
+            play_count=e.history.play_count if e.history else None,
         )
-    )
-    playlist_tracks = result.scalars().all()
-
-    # Fetch play history for all tracks in the playlist
-    local_track_ids = [pt.track.id for pt in playlist_tracks if pt.track]
-    play_history_map = {}
-    if local_track_ids:
-        ph_result = await db.execute(
-            select(ProfilePlayHistory).where(
-                ProfilePlayHistory.profile_id == profile.id,
-                ProfilePlayHistory.track_id.in_(local_track_ids),
-            )
-        )
-        play_history_map = {ph.track_id: ph for ph in ph_result.scalars().all()}
-
-    tracks = []
-    for pt in playlist_tracks:
-        if pt.track:
-            ph = play_history_map.get(pt.track.id)
-            tracks.append(TrackInPlaylist(
-                id=str(pt.track.id),
-                playlist_track_id=str(pt.id),
-                type="local",
-                title=pt.track.title,
-                artist=pt.track.artist,
-                album=pt.track.album,
-                duration_seconds=pt.track.duration_seconds,
-                position=pt.position,
-                format=pt.track.format,
-                year=pt.track.year,
-                genre=pt.track.genre,
-                track_number=pt.track.track_number,
-                disc_number=pt.track.disc_number,
-                album_artist=pt.track.album_artist,
-                album_type=pt.track.album_type.value if pt.track.album_type else None,
-                analysis_version=pt.track.analysis_version,
-                last_played_at=ph.last_played_at if ph and ph.last_played_at else None,
-                play_count=ph.play_count if ph else None,
-            ))
-
+        for e in detail.entries
+    ]
     return PlaylistDetailResponse(
         id=str(playlist.id),
         name=playlist.name,

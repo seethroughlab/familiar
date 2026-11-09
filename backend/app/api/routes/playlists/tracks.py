@@ -4,12 +4,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, Body, status
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, select, update
 
 from app.api.deps import DbSession, RequiredProfile
 from app.api.exceptions import PlaylistNotFoundError
 from app.api.routes.playlists.crud import PlaylistDetailResponse, get_playlist
-from app.db.models import Playlist, PlaylistTrack, Track
+from app.db.models import Playlist, PlaylistTrack
+from app.operations import playlists as playlist_ops
+from app.operations.errors import PlaylistNotFound
 
 router = APIRouter()
 
@@ -29,62 +31,10 @@ async def add_tracks_to_playlist(
     track_ids: list[str] = Body(...),
 ) -> PlaylistDetailResponse:
     """Add tracks to an existing playlist."""
-    playlist = await db.get(Playlist, playlist_id)
-
-    if not playlist or playlist.profile_id != profile.id:
-        raise PlaylistNotFoundError()
-
-    # Get current max position
-    result = await db.execute(
-        select(func.max(PlaylistTrack.position)).where(
-            PlaylistTrack.playlist_id == playlist_id
-        )
-    )
-    max_position = result.scalar() or -1
-
-    # Batch-fetch all candidate tracks and existing playlist memberships
-    valid_track_ids = []
-    for track_id_str in track_ids:
-        try:
-            valid_track_ids.append(UUID(track_id_str))
-        except ValueError:
-            continue
-
-    existing_track_ids: set[UUID] = set()
-    tracks_by_id: dict[UUID, Track] = {}
-    if valid_track_ids:
-        # Fetch existing tracks in one query
-        tracks_result = await db.execute(
-            select(Track).where(Track.id.in_(valid_track_ids))
-        )
-        tracks_by_id = {t.id: t for t in tracks_result.scalars().all()}
-
-        # Check which are already in the playlist
-        existing_result = await db.execute(
-            select(PlaylistTrack.track_id).where(
-                PlaylistTrack.playlist_id == playlist_id,
-                PlaylistTrack.track_id.in_(valid_track_ids),
-            )
-        )
-        existing_track_ids = {row[0] for row in existing_result.all() if row[0]}
-
-    # Add new tracks
-    for i, track_id in enumerate(valid_track_ids):
-        if track_id not in tracks_by_id:
-            continue
-        if track_id in existing_track_ids:
-            continue
-
-        playlist_track = PlaylistTrack(
-            playlist_id=playlist.id,
-            track_id=track_id,
-            position=max_position + 1 + i,
-        )
-        db.add(playlist_track)
-
-    await db.commit()
-
-    # Return updated playlist
+    try:
+        await playlist_ops.add_tracks(db, profile.id, playlist_id, track_ids)
+    except PlaylistNotFound:
+        raise PlaylistNotFoundError() from None
     return await get_playlist(playlist_id, db, profile)
 
 
