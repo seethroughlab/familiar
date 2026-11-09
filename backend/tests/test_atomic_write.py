@@ -118,3 +118,60 @@ class TestAtomicWriteVia:
             # No temp files
             files = list(Path(tmpdir).iterdir())
             assert files == [target]
+
+
+class TestARewriteKeepsTheFile:
+    """ADR-0171's drill: `docker exec` (root) rewrote settings.json as a root-owned 0600 file, and
+    the server (`familiar`) then ran on defaults, without the token it had just been given."""
+
+    def test_the_mode_survives_a_rewrite(self, tmp_path):
+        import os
+        import stat
+
+        target = tmp_path / "settings.json"
+        target.write_text("{}")
+        os.chmod(target, 0o640)
+        atomic_write_text(target, '{"a": 1}')
+        assert stat.S_IMODE(os.stat(target).st_mode) == 0o640
+        assert target.read_text() == '{"a": 1}'
+
+    def test_root_gives_the_replacement_the_old_owner(self, tmp_path, monkeypatch):
+        import os
+
+        target = tmp_path / "settings.json"
+        target.write_text("{}")
+        st = os.stat(target)
+        chowned: list[tuple[int, int]] = []
+        monkeypatch.setattr(os, "geteuid", lambda: 0)
+        monkeypatch.setattr(os, "chown", lambda path, uid, gid: chowned.append((uid, gid)))
+        atomic_write_text(target, "{}")
+        atomic_write_via(target, lambda p: p.write_text("{}"))
+        assert chowned == [(st.st_uid, st.st_gid)] * 2
+
+    def test_a_non_root_writer_does_not_try_to_chown(self, tmp_path, monkeypatch):
+        import os
+
+        target = tmp_path / "settings.json"
+        target.write_text("{}")
+        monkeypatch.setattr(os, "geteuid", lambda: 1000)
+
+        def chown(*_):
+            raise AssertionError("chown attempted without root")
+
+        monkeypatch.setattr(os, "chown", chown)
+        atomic_write_text(target, "{}")
+
+    def test_root_creating_a_file_gives_it_the_directory_owner(self, tmp_path, monkeypatch):
+        import os
+
+        st = os.stat(tmp_path)
+        chowned: list[tuple[int, int]] = []
+        monkeypatch.setattr(os, "geteuid", lambda: 0)
+        monkeypatch.setattr(os, "chown", lambda path, uid, gid: chowned.append((uid, gid)))
+        atomic_write_text(tmp_path / "settings.json", "{}")
+        assert chowned == [(st.st_uid, st.st_gid)]
+
+    def test_a_new_file_is_unaffected(self, tmp_path):
+        target = tmp_path / "new.json"
+        atomic_write_text(target, "{}")
+        assert target.read_text() == "{}"

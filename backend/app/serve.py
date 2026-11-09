@@ -84,6 +84,13 @@ def configured_token() -> str | None:
     return get_app_settings_service().get().access_token
 
 
+def had_a_token() -> bool:
+    """Whether this server ever had a token: only a library that never did is grandfathered."""
+    from app.services.app_settings import get_app_settings_service
+
+    return get_app_settings_service().get().had_access_token
+
+
 def library_has_tracks() -> bool:
     """Whether this server has imported anything: the same "new" a first import uses."""
     import asyncio
@@ -138,6 +145,7 @@ def main(
     token: Callable[[], str | None] = configured_token,
     has_tracks: Callable[[], bool] = library_has_tracks,
     mint: Callable[[], str] = mint_token,
+    had_token: Callable[[], bool] = had_a_token,
 ) -> Start:
     args = parse_args(argv)
     migrate()
@@ -149,6 +157,7 @@ def main(
         token=token() if not is_loopback(args.host) else None,
         open_server=settings.open_server,
         has_tracks=has_tracks,
+        had_token=had_token() if not is_loopback(args.host) else False,
     )
     exposure.record(exposure_for(start))
     if start is Start.LOOPBACK:
@@ -163,6 +172,10 @@ def main(
         say("WARNING: this server has no token, so anyone who can reach it can use it. Create one "
             "under Server → Access in the web admin, or run `python -m app.token --create`; every "
             "client then pairs once. MCP stays off until then (ADR-0171).")
+    elif start is Start.TOKEN_REMOVED:
+        say("this server's token was removed, so it answers only its own machine (ADR-0171). Run "
+            "`python -m app.token --create` to make a new one, or set FAMILIAR_OPEN_SERVER=1 to "
+            "serve everyone without one.")
     elif start is Start.OPEN_BY_CHOICE:
         say("running without a token by choice (FAMILIAR_OPEN_SERVER).")
     if start in (Start.HAS_TOKEN, Start.NEW) and args.advertise and settings.advertise_port is None:

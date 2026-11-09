@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   from a shell on the server. `DELETE /api/v1/auth/token` from another machine is refused (409) where
   it would lock the caller out. Token operations, recovery and rollback are in
   `docs/INSTALLATION.md` under "The server token".
+- **A removed token no longer reopens a server at its next start** (ADR-0171, found by the upgrade
+  drill). Only a library that never had a token is grandfathered as open; `settings.json` now
+  records `had_access_token`.
+
+### Fixed
+
+- **`docker exec familiar-api python -m app.token --create` no longer breaks the server's
+  settings.** `docker exec` runs as root, so the rewrite left `settings.json` root-owned and
+  unreadable to the server, which then ran on defaults, without its token. An atomic rewrite now
+  keeps the file's owner and mode, and a new file takes its directory's owner.
 
 ### Added
 
