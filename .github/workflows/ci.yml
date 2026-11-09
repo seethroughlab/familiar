@@ -751,8 +751,12 @@ jobs:
       - name: Check generated API client is current
         run: pnpm --filter @familiar/api-client run check
 
-      - name: Type-check generated API client
-        run: pnpm --filter @familiar/api-client run typecheck
+      # ADR-0170: every workspace package, not just the generated client. Vite strips types
+      # without checking them, so a build alone never proved the frontend compiled — and it did
+      # not, for months. The coverage script fails on a package with TypeScript and no
+      # `typecheck` script, which `pnpm -r` would otherwise skip in silence.
+      - name: Type-check every workspace package
+        run: pnpm run typecheck
 
   frontend-test:
     name: Frontend Test
@@ -791,14 +795,10 @@ jobs:
       - name: Run unit tests
         run: pnpm --filter @familiar/frontend test
 
-      # ADR-0125 point 4: the bridge against the recorded protocol, and every visualizer type-checked.
-      # The visualizers had never been through `tsc` — Vite strips types without looking, which is
-      # how an import of a type nothing exported shipped for months.
-      - name: Visualizer SDK tests and type checks
-        run: |
-          pnpm --filter @familiar/visualizer-sdk test
-          pnpm --filter @familiar/visualizer-sdk typecheck
-          pnpm -r --filter './packages/visualizers/*' typecheck
+      # ADR-0125 point 4: the bridge against the recorded protocol. The SDK and the visualizers
+      # are type-checked with every other package in Frontend Lint (ADR-0170).
+      - name: Visualizer SDK tests
+        run: pnpm --filter @familiar/visualizer-sdk test
 
   # The marketing site's own tests (site/e2e). Until 2026-10-03 nothing ran them: the deploy runs
   # check-claims.py, which audits links and claims but not what the page does, so the install
@@ -897,7 +897,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: frontend-perf-metrics
-          path: artifacts/perf
+          path: packages/web/dist/perf
           retention-days: 7
 
   docker-build:

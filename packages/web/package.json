@@ -8,10 +8,12 @@
     "dev:remote": "VITE_API_TARGET=http://openmediavault:4400 vite",
     "build": "vite build",
     "check:bundle-budgets": "node ./scripts/check-bundle-budgets.mjs",
+    "update:bundle-metrics": "BUNDLE_METRICS_DIR=artifacts/perf node ./scripts/check-bundle-budgets.mjs",
     "preview": "vite preview",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "screenshots": "playwright test e2e/screenshots.spec.ts --project=chromium"
+    "screenshots": "playwright test e2e/screenshots.spec.ts --project=chromium",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@familiar/frontend": "workspace:*",

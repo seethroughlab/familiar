@@ -40,7 +40,12 @@ const webDir = process.cwd();
 const distDir = path.join(webDir, 'dist');
 const manifestPath = path.join(distDir, '.vite', 'manifest.json');
 const repoRoot = path.resolve(webDir, '..', '..');
-const perfArtifactsDir = path.join(repoRoot, 'artifacts', 'perf');
+// The report lands in the ignored build output by default, so checking the budgets never dirties
+// the worktree (ADR-0170 point 6). `pnpm --filter @familiar/web update:bundle-metrics` writes the
+// committed copy under artifacts/perf instead, on purpose and by name.
+const perfArtifactsDir = process.env.BUNDLE_METRICS_DIR
+  ? path.resolve(repoRoot, process.env.BUNDLE_METRICS_DIR)
+  : path.join(distDir, 'perf');
 
 if (!fs.existsSync(manifestPath)) {
   console.error(`[bundle-budget] Missing manifest: ${manifestPath}`);

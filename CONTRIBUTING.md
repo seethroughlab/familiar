@@ -49,6 +49,7 @@ make test                                          # or: TEST_DATABASE_URL=… u
 
 # Frontend
 pnpm --filter @familiar/frontend run lint
+pnpm run typecheck                                 # every workspace package (Vite does not check types)
 pnpm --filter @familiar/frontend run check:boundaries
 pnpm --filter @familiar/frontend test
 pnpm --filter @familiar/web run build

@@ -6,9 +6,12 @@
   "description": "The first-party visualizer documents' contract check (ADR-0125 point 4): every built document against the same recorded host events.",
   "scripts": {
     "build": "pnpm -r --filter './*' build",
-    "test:documents": "playwright test"
+    "test:documents": "playwright test",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
-    "@playwright/test": "^1.58.2"
+    "@playwright/test": "^1.58.2",
+    "@types/node": "^24.10.1",
+    "typescript": "~5.9.3"
   }
 }

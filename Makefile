@@ -111,13 +111,13 @@ doctor:
 check:
 	@echo "── backend lint, types, contracts"
 	cd backend && uv run ruff check . && uv run mypy app --ignore-missing-imports && $(MAKE) -s lint-contracts && uv run python scripts/dump_openapi.py --check && uv run python scripts/check_contract_bump.py --check
-	@echo "── frontend lint, boundaries, unit tests, generated client"
+	@echo "── frontend lint, types, boundaries, unit tests, generated client"
 	pnpm --filter @familiar/frontend run lint
+	pnpm run typecheck
 	pnpm --filter @familiar/frontend run check:boundaries
 	pnpm --filter @familiar/frontend run check:embed-guardrails
 	pnpm --filter @familiar/frontend test
 	pnpm --filter @familiar/api-client run check
-	pnpm --filter @familiar/api-client run typecheck
 	@echo "── docs, images"
 	python3 scripts/check_docs.py
 	python3 scripts/adr_index.py --check
