@@ -1,41 +1,18 @@
+import type * as Wire from '@familiar/api-client';
 import type { Track, TrackListResponse } from '../types';
 import api from './base';
 import { getApiUrl } from './base';
 
 // Track IDs response (lightweight for shuffle-all)
-export interface TrackIdsResponse {
-  ids: string[];
-  total: number;
-}
+export type TrackIdsResponse = Wire.TrackIdsResponse;
 
 /** One visualizer offered for ranking, with whatever affinity it declared (ADR-0064). */
-export interface VisualizerRankingCandidate {
-  id: string;
-  affinity?: {
-    tags: string[];
-    ranges: { feature: string; minimum?: number; maximum?: number }[];
-  };
-}
+export type VisualizerRankingCandidate = Wire.VisualizerCandidate;
 
 /** One visualizer's placing, and why. `ignored` is what the server did not recognise. */
-export interface RankedVisualizer {
-  id: string;
-  score: number;
-  matched_tags: string[];
-  matched_ranges: string[];
-  unmatched_ranges: string[];
-  ignored: string[];
-}
+export type RankedVisualizer = Wire.RankedVisualizer;
 
-export interface VisualizerRankingResponse {
-  visualizers: RankedVisualizer[];
-  /**
-   * False when the track has no analysis to rank against — an ordinary state on a library still
-   * being analysed, **not** an error. The client must keep whatever it is showing rather than
-   * pick, so `visualizers` comes back in the order it was submitted.
-   */
-  ranked: boolean;
-}
+export type VisualizerRankingResponse = Wire.VisualizerRankingResponse;
 
 export const tracksApi = {
   list: async (params?: {
@@ -231,85 +208,21 @@ export const tracksApi = {
 };
 
 // Audio fingerprint identification types
-export interface IdentifyCandidate {
-  acoustid_score: number;
-  musicbrainz_recording_id: string;
-  title: string | null;
-  artist: string | null;
-  album: string | null;
-  album_artist: string | null;
-  year: number | null;
-  track_number: number | null;
-  disc_number: number | null;
-  genre: string | null;
-  composer: string | null;
-  artwork_url: string | null;
-  features: Record<string, number | string | null>;
-  musicbrainz_url: string;
-}
+export type IdentifyCandidate = Wire.IdentifyCandidateResponse;
 
-export interface IdentifyTrackResponse {
-  track_id: string;
-  fingerprint_generated: boolean;
-  error: string | null;
-  error_type: string | null;
-  candidates: IdentifyCandidate[];
-}
+export type IdentifyTrackResponse = Wire.IdentifyTrackResponse;
 
 // Bulk identification types
-export interface BulkIdentifyTaskResponse {
-  task_id: string;
-  status: string;
-  message: string;
-}
+export type BulkIdentifyTaskResponse = Wire.BulkIdentifyTaskResponse;
 
-export interface BulkIdentifyProgress {
-  task_id: string;
-  status: 'running' | 'completed' | 'error';
-  phase: string;
-  total_tracks: number;
-  processed_tracks: number;
-  current_track: string | null;
-  results: IdentifyTrackResponse[];
-  errors: string[];
-  started_at: string | null;
-}
+export type BulkIdentifyProgress = Wire.BulkIdentifyProgress;
 
 // Bulk edit types
-export interface BulkEditErrorResponse {
-  track_id: string;
-  file_path: string;
-  error: string;
-}
+export type BulkEditErrorResponse = Wire.BulkEditErrorResponse;
 
-export interface BulkEditResultResponse {
-  total: number;
-  successful: number;
-  failed: number;
-  errors: BulkEditErrorResponse[];
-  fields_updated: string[];
-}
+export type BulkEditResultResponse = Wire.BulkEditResultResponse;
 
-export interface CommonValuesResponse {
-  title: string | null;
-  artist: string | null;
-  album: string | null;
-  album_artist: string | null;
-  track_number: number | null;
-  disc_number: number | null;
-  year: number | null;
-  genre: string | null;
-  composer: string | null;
-  conductor: string | null;
-  lyricist: string | null;
-  grouping: string | null;
-  comment: string | null;
-  sort_artist: string | null;
-  sort_album: string | null;
-  sort_title: string | null;
-  lyrics: string | null;
-  track_count: number;
-}
+export type CommonValuesResponse = Wire.CommonValuesResponse;
 
 export const bulkTracksApi = {
   startIdentify: async (trackIds: string[]): Promise<BulkIdentifyTaskResponse> => {
@@ -344,117 +257,14 @@ export const bulkTracksApi = {
 };
 
 // Track metadata types
-export interface TrackMetadataUpdate {
-  // Core metadata
-  title?: string | null;
-  artist?: string | null;
-  album?: string | null;
-  album_artist?: string | null;
-  track_number?: number | null;
-  disc_number?: number | null;
-  year?: number | null;
-  genre?: string | null;
+export type TrackMetadataUpdate = Wire.TrackMetadataUpdateRequest;
 
-  // Extended metadata
-  composer?: string | null;
-  conductor?: string | null;
-  lyricist?: string | null;
-  grouping?: string | null;
-  comment?: string | null;
+export type TrackMetadataResponse = Wire.TrackMetadataResponse;
 
-  // Sort fields
-  sort_artist?: string | null;
-  sort_album?: string | null;
-  sort_title?: string | null;
+export type LyricLine = Wire.LyricLineResponse;
 
-  // Lyrics
-  lyrics?: string | null;
+export type LyricsResponse = Wire.LyricsResponse;
 
-  // User overrides for analysis values
-  user_overrides?: Record<string, number | string | null>;
-}
+export type TrackDiscoverSimilarArtist = Wire.SimilarArtistInfo;
 
-export interface TrackMetadataResponse {
-  id: string;
-  file_path: string;
-
-  // Core metadata
-  title: string | null;
-  artist: string | null;
-  album: string | null;
-  album_artist: string | null;
-  track_number: number | null;
-  disc_number: number | null;
-  year: number | null;
-  genre: string | null;
-
-  // Extended metadata
-  composer: string | null;
-  conductor: string | null;
-  lyricist: string | null;
-  grouping: string | null;
-  comment: string | null;
-
-  // Sort fields
-  sort_artist: string | null;
-  sort_album: string | null;
-  sort_title: string | null;
-
-  // Lyrics
-  lyrics: string | null;
-
-  // User overrides
-  user_overrides: Record<string, number | string | null>;
-
-  // Audio info
-  duration_seconds: number | null;
-  format: string | null;
-
-  // Analysis features (with user overrides applied)
-  features: {
-    bpm: number | null;
-    key: string | null;
-    energy: number | null;
-    danceability: number | null;
-    valence: number | null;
-    acousticness: number | null;
-    instrumentalness: number | null;
-    speechiness: number | null;
-  } | null;
-
-  // Write status (only present after update)
-  file_write_status?: string | null;
-  file_write_error?: string | null;
-}
-
-export interface LyricLine {
-  time: number;
-  text: string;
-}
-
-export interface LyricsResponse {
-  synced: boolean;
-  lines: LyricLine[];
-  plain_text: string;
-  source: string;
-}
-
-export interface TrackDiscoverSimilarArtist {
-  name: string;
-  match_score: number;
-  in_library: boolean;
-  track_count: number | null;
-  image_url: string | null;
-  lastfm_url: string | null;
-  bandcamp_url: string | null;
-}
-
-export interface TrackDiscoverResponse {
-  track_id: string;
-  artist: string | null;
-  title: string | null;
-  similar_tracks: Track[];
-  similar_artists: TrackDiscoverSimilarArtist[];
-  bandcamp_artist_url: string | null;
-  bandcamp_track_url: string | null;
-}
+export type TrackDiscoverResponse = Wire.TrackDiscoverResponse;

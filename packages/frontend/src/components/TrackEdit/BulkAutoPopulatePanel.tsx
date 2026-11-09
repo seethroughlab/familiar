@@ -268,10 +268,11 @@ export function BulkAutoPopulatePanel({ trackIds, onApplyToTrack }: Props) {
       const updated = new Map(prev);
 
       // Update results from progress
-      for (const result of progress.results) {
+      for (const result of progress.results ?? []) {
         const existing = updated.get(result.track_id);
         if (existing && !existing.applied) {
-          const hasMatches = result.candidates.length > 0;
+          const candidates = result.candidates ?? [];
+          const hasMatches = candidates.length > 0;
           const hasError = !!result.error;
 
           updated.set(result.track_id, {
@@ -280,8 +281,8 @@ export function BulkAutoPopulatePanel({ trackIds, onApplyToTrack }: Props) {
             result,
             // Auto-select best match if score > 0.8
             selectedCandidateId:
-              hasMatches && result.candidates[0].acoustid_score >= 0.8
-                ? result.candidates[0].musicbrainz_recording_id
+              hasMatches && candidates[0].acoustid_score >= 0.8
+                ? candidates[0].musicbrainz_recording_id
                 : existing.selectedCandidateId,
           });
         }

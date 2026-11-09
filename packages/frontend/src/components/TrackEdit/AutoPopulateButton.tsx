@@ -248,7 +248,7 @@ export function AutoPopulateButton({ trackId, onApply }: Props) {
 
             {/* No matches */}
             {!identifyMutation.data.error &&
-              identifyMutation.data.candidates.length === 0 && (
+              (identifyMutation.data.candidates ?? []).length === 0 && (
                 <div className="text-zinc-500 text-sm py-6 text-center">
                   <Music className="w-8 h-8 mx-auto mb-2 opacity-50" />
                   <p>No matches found for this audio fingerprint</p>
@@ -259,14 +259,14 @@ export function AutoPopulateButton({ trackId, onApply }: Props) {
               )}
 
             {/* Candidate list */}
-            {identifyMutation.data.candidates.length > 0 && (
+            {(identifyMutation.data.candidates ?? []).length > 0 && (
               <>
                 <p className="text-xs text-zinc-500 mb-2">
-                  Found {identifyMutation.data.candidates.length} match
-                  {identifyMutation.data.candidates.length !== 1 ? 'es' : ''}.
+                  Found {(identifyMutation.data.candidates ?? []).length} match
+                  {(identifyMutation.data.candidates ?? []).length !== 1 ? 'es' : ''}.
                   Click to apply:
                 </p>
-                {identifyMutation.data.candidates.map((candidate) => (
+                {(identifyMutation.data.candidates ?? []).map((candidate) => (
                   <CandidateCard
                     key={candidate.musicbrainz_recording_id}
                     candidate={candidate}

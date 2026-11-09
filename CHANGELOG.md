@@ -12,6 +12,8 @@ them from stored failures.
 
 ### Fixed
 
+- **Track Edit's Analysis tab no longer shows "NaN%"** for a detected feature the server left out
+  (found moving tracks to generated types, ADR-0173).
 - **Adding a track to a one-track playlist no longer ties it with the first** (found extracting
   ADR-0173's operations): the next position was computed as `max(position) or -1`, which read a
   last position of 0 as an empty playlist. A track id repeated in one request is now added once.

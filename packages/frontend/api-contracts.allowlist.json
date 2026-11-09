@@ -99,25 +99,6 @@
         "PairingTarget"
       ]
     },
-    "playlists.ts": {
-      "until": "ADR-0173 Phase 3: playlists move to generated types",
-      "types": [
-        "AvailableFields",
-        "GeneratePlaylistSeed",
-        "GeneratedPlaylist",
-        "Playlist",
-        "PlaylistCreate",
-        "PlaylistDetail",
-        "PlaylistRecommendations",
-        "PlaylistTrack",
-        "RecommendedArtist",
-        "RecommendedTrack",
-        "SmartPlaylist",
-        "SmartPlaylistCreate",
-        "SmartPlaylistRule",
-        "SmartPlaylistTracksResponse"
-      ]
-    },
     "profiles.ts": {
       "until": "when this domain is next changed (ADR-0173 point 8); outside the three named domains",
       "types": [
@@ -164,28 +145,6 @@
         "AppSettingsResponse",
         "AppSettingsUpdate",
         "ClapStatus"
-      ]
-    },
-    "tracks.ts": {
-      "until": "ADR-0173 Phase 3: tracks move to generated types",
-      "types": [
-        "BulkEditErrorResponse",
-        "BulkEditResultResponse",
-        "BulkIdentifyProgress",
-        "BulkIdentifyTaskResponse",
-        "CommonValuesResponse",
-        "IdentifyCandidate",
-        "IdentifyTrackResponse",
-        "LyricLine",
-        "LyricsResponse",
-        "RankedVisualizer",
-        "TrackDiscoverResponse",
-        "TrackDiscoverSimilarArtist",
-        "TrackIdsResponse",
-        "TrackMetadataResponse",
-        "TrackMetadataUpdate",
-        "VisualizerRankingCandidate",
-        "VisualizerRankingResponse"
       ]
     }
   },
