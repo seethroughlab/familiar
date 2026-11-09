@@ -28,10 +28,24 @@ Implementation:
   `tests/test_analysis_converges.py` seeds one track of each NAS shape and runs the real
   `run_library_sync` with only the scan stubbed: it finishes at once without a forced exit. Against
   the previous loop it spins until the test's 60-second timeout.
-- **Not done (PR 2, Phase 4):** one status query for `/health/system`, `/library/stats` and the
-  Analysis page, and a failed-tracks list with reasons. The deep-backfill and melodic phases still
-  count `total - done` over every analysis row; the NAS log shows neither spinning, and they move to
-  the domain query with the rest.
+- **Unified (PR 2, Phase 4).** `analysis_lifecycle.phase_counts` is the one status query: for each
+  of features, embeddings, deep backfill, melodic and mood tags, the library's tracks split into
+  complete / queued / retrying / failed / waiting (an earlier phase is not done), which partition
+  the total. `pending` means `queued + retrying` everywhere. Before it, four places defined pending
+  four ways: `/health/system` and `/health/workers` as every track minus current analyses,
+  `/library/stats` as active tracks minus active analyses (clamped after reaching -41), and
+  `/library/analysis/status` as no current analysis and not failed in 24 hours, any status. All four
+  now read `phase_counts`; `/health/workers.phase_queues` gains `queued`, `retrying`, `failed` and
+  `waiting`, and `analysis_progress` is typed (`AnalysisProgress`) instead of a free-form object.
+  The deep-backfill, melodic and mood-tag queues and loop counts take the same in-library
+  conditions, closing the status asymmetry there too. `GET /library/analysis/failures` lists each
+  failed track with its phase, reason code, attempts and whether it is final (point 7). The
+  Analysis → Status page shows the five states and the failed tracks.
+  `tests/test_analysis_status_model.py` seeds every state, requires the states to sum to the
+  library, and requires all four endpoints to report the same numbers. Contract stays at v1
+  (additive).
+- **Exit condition:** met in code and tests. The NAS confirmation (two syncs without a forced exit)
+  is tracked in `docs/HEALTH.md` until it runs this.
 
 ## Context
 

@@ -20,6 +20,20 @@ them from stored failures.
   reason code and an attempt count; `undecodable` and `file_missing` are final until the file
   changes, and other failures stop after three attempts.
 
+- **`docker exec familiar-api python -m app.token --create` no longer breaks the server's
+  settings.** `docker exec` runs as root, so the rewrite left `settings.json` root-owned and
+  unreadable to the server, which then ran on defaults, without its token. An atomic rewrite now
+  keeps the file's owner and mode, and a new file takes its directory's owner.
+
+### Changed
+
+- **One analysis status model** (ADR-0172). `/health/system`, `/health/workers`, `/library/stats`
+  and `/library/analysis/status` used to define "pending" four different ways and disagreed on the
+  same library. All four now read one query, which splits each phase into complete, queued,
+  retrying, failed and waiting; `pending` is queued plus retrying everywhere.
+  `/health/workers.phase_queues` gains those states, and `analysis_progress` is now a typed object.
+  Additive: the contract stays at v1.
+
 ### Security
 
 - **A server with no token no longer serves everyone by default** (ADR-0171). One policy,
@@ -36,14 +50,11 @@ them from stored failures.
   drill). Only a library that never had a token is grandfathered as open; `settings.json` now
   records `had_access_token`.
 
-### Fixed
-
-- **`docker exec familiar-api python -m app.token --create` no longer breaks the server's
-  settings.** `docker exec` runs as root, so the rewrite left `settings.json` root-owned and
-  unreadable to the server, which then ran on defaults, without its token. An atomic rewrite now
-  keeps the file's owner and mode, and a new file takes its directory's owner.
-
 ### Added
+
+- **`GET /api/v1/library/analysis/failures`**: tracks whose analysis failed, with the phase, a
+  reason code, attempts and whether it is final. Analysis → Status shows them, and splits each
+  phase into the five states.
 
 - **The server names what it can do** (ADR-0168). `GET /api/v1/contract` gains `capabilities`, a
   list of feature names (`lyrics.status`, `visualizer.paired_page`, `albums.move_to_album`), so a

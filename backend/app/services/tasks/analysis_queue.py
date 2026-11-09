@@ -7,8 +7,13 @@ from analysis_pipeline for consistent retry-window logic.
 
 import logging
 
-from app.config import FEATURES_VERSION, MELODIC_VERSION
-from app.services.analysis_lifecycle import embeddings_queueable, features_queueable
+from app.services.analysis_lifecycle import (
+    backfill_queueable,
+    embeddings_queueable,
+    features_queueable,
+    melodic_queueable,
+    mood_tags_queueable,
+)
 from app.services.tasks.analysis_pipeline import _analysis_failure_cutoff
 
 logger = logging.getLogger(__name__)
@@ -119,7 +124,7 @@ async def queue_tracks_for_melodic(limit: int | None = None) -> int:
     if limit is None:
         from app.config import adaptive_queue_limit
         limit = adaptive_queue_limit()
-    from sqlalchemy import and_, select
+    from sqlalchemy import select
 
     from app.db.models import Track, TrackAnalysis
     from app.db.session import async_session_maker
@@ -130,13 +135,7 @@ async def queue_tracks_for_melodic(limit: int | None = None) -> int:
         result = await db.execute(
             select(TrackAnalysis.track_id)
             .join(Track, Track.id == TrackAnalysis.track_id)
-            .where(
-                and_(
-                    TrackAnalysis.features_version >= FEATURES_VERSION,
-                    TrackAnalysis.analysis_detail.is_not(None),
-                    TrackAnalysis.melodic_version < MELODIC_VERSION,
-                )
-            )
+            .where(melodic_queueable())  # ADR-0172: in the library only, as every phase
             .order_by(Track.duration_seconds.asc().nullsfirst())
             .limit(limit)
         )
@@ -163,7 +162,7 @@ async def queue_tracks_for_backfill(limit: int | None = None) -> int:
     if limit is None:
         from app.config import adaptive_queue_limit
         limit = adaptive_queue_limit()
-    from sqlalchemy import and_, select
+    from sqlalchemy import select
 
     from app.db.models import Track, TrackAnalysis
     from app.db.session import async_session_maker
@@ -174,12 +173,7 @@ async def queue_tracks_for_backfill(limit: int | None = None) -> int:
         result = await db.execute(
             select(TrackAnalysis.track_id)
             .join(Track, Track.id == TrackAnalysis.track_id)
-            .where(
-                and_(
-                    TrackAnalysis.features_version >= FEATURES_VERSION,
-                    TrackAnalysis.analysis_detail.is_(None),
-                )
-            )
+            .where(backfill_queueable())  # ADR-0172: in the library only, as every phase
             .order_by(Track.duration_seconds.asc().nullsfirst())
             .limit(limit)
         )
@@ -277,10 +271,9 @@ async def queue_tracks_for_mood_tags(limit: int | None = None) -> int:
     if limit is None:
         from app.config import adaptive_queue_limit
         limit = adaptive_queue_limit()
-    from sqlalchemy import and_, select
+    from sqlalchemy import select
 
-    from app.config import MOOD_TAGS_VERSION
-    from app.db.models import TrackAnalysis
+    from app.db.models import Track, TrackAnalysis
     from app.db.session import async_session_maker
     from app.services.background import get_background_manager
 
@@ -288,12 +281,8 @@ async def queue_tracks_for_mood_tags(limit: int | None = None) -> int:
     async with async_session_maker() as db:
         result = await db.execute(
             select(TrackAnalysis.track_id)
-            .where(
-                and_(
-                    TrackAnalysis.embedding.isnot(None),
-                    TrackAnalysis.mood_tags_version < MOOD_TAGS_VERSION,
-                )
-            )
+            .join(Track, Track.id == TrackAnalysis.track_id)
+            .where(mood_tags_queueable())  # ADR-0172: in the library only, as every phase
             .limit(limit)
         )
         track_ids = [str(row[0]) for row in result.fetchall()]
