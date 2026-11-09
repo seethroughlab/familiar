@@ -296,10 +296,11 @@ def _transport_security() -> TransportSecuritySettings:
     `localhost` — is rejected with `421 Misdirected Request` until named. A 421 reads as a proxy
     fault, which is a bad way to learn about a setting.
 
-    Configure `mcp_allowed_hosts` and the protection is on. Leave it empty and it is off, with a
-    warning, because Familiar's actual inbound control is Tailscale today and a token under
-    ADR-0045 tomorrow — and a server that 421s every request out of the box teaches people to
-    disable security they never understood.
+    Configure `mcp_allowed_hosts` and the SDK's protection is on. Leave it empty and the SDK's is
+    off, because a server that 421s every request out of the box teaches people to disable security
+    they never understood. The token gate covers the gap instead (ADR-0171 point 7): with a token,
+    a rebinding page cannot present it; without one, a LOCAL server refuses a non-loopback `Host`,
+    and an OPEN server refuses `/mcp` outright until this list is set.
     """
     hosts = [h.strip() for h in (app_config.mcp_allowed_hosts or "").split(",") if h.strip()]
     if hosts:
@@ -308,9 +309,9 @@ def _transport_security() -> TransportSecuritySettings:
             allowed_hosts=hosts,
             allowed_origins=hosts,
         )
-    logger.warning(
-        "MCP DNS-rebinding protection is OFF (mcp_allowed_hosts is unset). Set it to the hosts "
-        "this server is reached by — e.g. 'localhost:4400,myserver:4400' — to enable it."
+    logger.info(
+        "MCP Host allow-list unset (mcp_allowed_hosts): /mcp relies on the server token, and on a "
+        "tokenless server is limited to this machine, or off if the server is open (ADR-0171)."
     )
     return TransportSecuritySettings(
         enable_dns_rebinding_protection=False, allowed_hosts=["*"], allowed_origins=["*"]

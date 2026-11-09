@@ -19,6 +19,10 @@ after the migration, because "new server" means an empty library:
   that anyone who can reach it can use it;
 - `FAMILIAR_OPEN_SERVER=1` runs without a token on purpose (the public demo), and says so once.
 
+The decision itself lives in `app.exposure`, which the token gate reads too (ADR-0171): what is
+decided here is recorded there, so a tokenless server that was not opened on purpose answers only
+its own machine, however it was started.
+
 This replaced ADR-0045 point 5's refusal, which as written would have taken every existing tokenless
 server offline on the upgrade that shipped it. Familiar Server starts on loopback and mints its own
 token through the API (ADR-0134 point 2), so none of this applies to it until it already has one.
@@ -27,12 +31,14 @@ token through the API (ADR-0134 point 2), so none of this applies to it until it
 from __future__ import annotations
 
 import argparse
-import ipaddress
 import sys
 from collections.abc import Callable, Sequence
-from enum import Enum
 
+from app import exposure
 from app.config import BACKEND_ROOT
+from app.exposure import Start, decide, exposure_for, is_loopback
+
+__all__ = ["Start", "decide", "is_loopback", "main"]
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 4400
@@ -72,37 +78,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def is_loopback(host: str) -> bool:
-    if host == "localhost":
-        return True
-    try:
-        return ipaddress.ip_address(host).is_loopback
-    except ValueError:
-        return False  # a host name other than localhost: assume it is reachable
-
-
 def configured_token() -> str | None:
     from app.services.app_settings import get_app_settings_service
 
     return get_app_settings_service().get().access_token
-
-
-class Start(Enum):
-    """What a server listening beyond loopback does about its token (ADR-0141)."""
-
-    HAS_TOKEN = "has a token"
-    OPEN_BY_CHOICE = "open by choice"
-    NEW = "new: mint a token"
-    EXISTING_OPEN = "existing, open"
-
-
-def decide(*, token: str | None, open_server: bool, has_tracks: Callable[[], bool]) -> Start:
-    """The decision alone, without doing any of it. `has_tracks` is only asked when it matters."""
-    if token:
-        return Start.HAS_TOKEN
-    if open_server:
-        return Start.OPEN_BY_CHOICE
-    return Start.EXISTING_OPEN if has_tracks() else Start.NEW
 
 
 def library_has_tracks() -> bool:
@@ -159,25 +138,35 @@ def main(
     token: Callable[[], str | None] = configured_token,
     has_tracks: Callable[[], bool] = library_has_tracks,
     mint: Callable[[], str] = mint_token,
-) -> Start | None:
+) -> Start:
     args = parse_args(argv)
     migrate()
-    start = None
-    if not is_loopback(args.host):
-        from app.config import settings
+    from app.config import settings
 
-        start = decide(token=token(), open_server=settings.open_server, has_tracks=has_tracks)
-        if start is Start.NEW:
-            say("this is a new server, so it has made itself a token (ADR-0141). Sign in to the web "
-                f"admin with this link, then pair your devices there:\n\n    {sign_in_link(mint())}\n\n"
-                "Run `python -m app.token` to see it again.")
-        elif start is Start.EXISTING_OPEN:
-            say("WARNING: this server has no token, so anyone who can reach it can use it. Create one "
-                "under Server → Access in the web admin; every client then pairs once.")
-        elif start is Start.OPEN_BY_CHOICE:
-            say("running without a token by choice (FAMILIAR_OPEN_SERVER).")
-        if start in (Start.HAS_TOKEN, Start.NEW) and args.advertise and settings.advertise_port is None:
-            settings.advertise_port = args.port
+    # `token` and `has_tracks` are only asked beyond loopback: the second needs the database.
+    start = decide(
+        host=args.host,
+        token=token() if not is_loopback(args.host) else None,
+        open_server=settings.open_server,
+        has_tracks=has_tracks,
+    )
+    exposure.record(exposure_for(start))
+    if start is Start.LOOPBACK:
+        if not token():
+            say(f"listening on {args.host} only, without a token: only this machine can use it "
+                "(ADR-0171 point 3).")
+    elif start is Start.NEW:
+        say("this is a new server, so it has made itself a token (ADR-0141). Sign in to the web "
+            f"admin with this link, then pair your devices there:\n\n    {sign_in_link(mint())}\n\n"
+            "Run `python -m app.token` to see it again.")
+    elif start is Start.EXISTING_OPEN:
+        say("WARNING: this server has no token, so anyone who can reach it can use it. Create one "
+            "under Server → Access in the web admin, or run `python -m app.token --create`; every "
+            "client then pairs once. MCP stays off until then (ADR-0171).")
+    elif start is Start.OPEN_BY_CHOICE:
+        say("running without a token by choice (FAMILIAR_OPEN_SERVER).")
+    if start in (Start.HAS_TOKEN, Start.NEW) and args.advertise and settings.advertise_port is None:
+        settings.advertise_port = args.port
     run(args.host, args.port)
     return start
 

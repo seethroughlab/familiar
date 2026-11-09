@@ -142,8 +142,9 @@ class TestTheMiddlewareGate:
         return passed_through, status
 
     @pytest.mark.asyncio
-    async def test_unconfigured_server_lets_everything_through(self, monkeypatch):
-        """ADR-0045 ships in phases; enforcement before clients hold a token is an outage."""
+    async def test_an_open_unconfigured_server_lets_everything_through(self, monkeypatch):
+        """An open tokenless server (the conftest default) serves anyone; which tokenless servers
+        are open, and what a LOCAL one refuses, is `test_exposure.py` (ADR-0171)."""
         passed, status = await self._call(monkeypatch, None, {}, "/api/v1/tracks")
         assert passed and status is None
 

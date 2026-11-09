@@ -128,8 +128,8 @@ class TestServe:
         def asked():
             raise AssertionError("has_tracks consulted")
 
-        assert decide(token="t", open_server=False, has_tracks=asked) is Start.HAS_TOKEN
-        assert decide(token=None, open_server=True, has_tracks=asked) is Start.OPEN_BY_CHOICE
+        assert decide(host="0.0.0.0", token="t", open_server=False, has_tracks=asked) is Start.HAS_TOKEN
+        assert decide(host="0.0.0.0", token=None, open_server=True, has_tracks=asked) is Start.OPEN_BY_CHOICE
 
     def test_loopback_needs_no_token(self):
         assert self._run([], token=None)[-1] == (DEFAULT_HOST, DEFAULT_PORT)

@@ -4,6 +4,34 @@ Status: accepted
 
 Date: 2026-11-08
 
+Implementation:
+
+- **Phases 1 and 2 built 2026-11-09.** `backend/app/exposure.py` is the one policy: `decide()` is the
+  start-up decision (`Start.LOOPBACK` added), `exposure_for()` says what it means for a tokenless
+  request, and `request_is_local()` is the request rule (loopback peer, loopback `Host`, no
+  `Forwarded`/`X-Forwarded-For`/`X-Real-IP`). `app.serve` records the decision in-process; a server
+  started without it (bare `uvicorn`) gets LOCAL unless `FAMILIAR_OPEN_SERVER` is set. Docker,
+  Familiar Server and `python -m app.serve` all start through `app.serve.main`, so point 2's one
+  function is that one. `tests/test_exposure.py` is the matrix; 12 of its cases fail against the
+  previous `TokenAuthMiddleware`.
+- **Point 1:** a new reachable server mints a token (ADR-0141, unchanged). A tokenless server that
+  is not open answers only its own machine, and cannot be claimed (`POST /api/v1/auth/token`) from
+  anywhere else.
+- **Point 4:** an existing tokenless library is grandfathered as OPEN and warns at every start; it
+  is not locked out. Recovery is `python -m app.token --create`; `DELETE /api/v1/auth/token` from
+  another machine is refused where it would lock the caller out. `docs/INSTALLATION.md`, "The
+  server token", covers finding, making, rotating, removing, reverse proxies, MCP and rollback.
+  **Not done:** an upgrade-and-recovery drill on a real installation. The exit condition needs one.
+- **Point 7:** a LOCAL tokenless server refuses a non-loopback `Host`, which is the DNS-rebinding
+  case. An OPEN tokenless server refuses `/mcp` unless `MCP_ALLOWED_HOSTS` is set, which turns on
+  FastMCP's own protection. With a token, `/mcp` needs the token, which a rebinding page cannot
+  supply.
+- **Point 5:** media is untouched. `docs/HEALTH.md` keeps the artwork entry for Phases 3–4.
+- **Found while building:** the web admin has no rotate or remove control. Both exist only as
+  `POST`/`DELETE /api/v1/auth/token`, and the docs say so. The Overview's "open to anyone" warning
+  also shows on a LOCAL tokenless server, where only this machine can reach it. Telling them apart
+  needs a field on `TokenStatus`, a schema change left for a follow-up.
+
 Extends [ADR-0045](ADR-0045-familiar-authenticates-inbound-requests.md) and
 [ADR-0141](ADR-0141-every-new-server-starts-with-a-token.md)
 

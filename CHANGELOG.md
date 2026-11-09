@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **A server with no token no longer serves everyone by default** (ADR-0171). One policy,
+  `app/exposure.py`, is read by every launcher and by the token gate. A tokenless server answers only
+  its own machine (loopback peer and `Host`, nothing forwarded), unless it was opened on purpose
+  (`FAMILIAR_OPEN_SERVER`) or is an existing library the launcher found without a token, which keeps
+  serving everyone and warns, as before. A bare `uvicorn --host 0.0.0.0` used to skip the decision
+  and serve anyone. A tokenless server can no longer be claimed remotely, and `/mcp` is off on an open
+  tokenless server unless `MCP_ALLOWED_HOSTS` is set. `python -m app.token --create` makes a token
+  from a shell on the server. `DELETE /api/v1/auth/token` from another machine is refused (409) where
+  it would lock the caller out. Token operations, recovery and rollback are in
+  `docs/INSTALLATION.md` under "The server token".
+
 ### Added
 
 - **The server names what it can do** (ADR-0168). `GET /api/v1/contract` gains `capabilities`, a
