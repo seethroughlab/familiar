@@ -1,6 +1,6 @@
 # ADR-0171: A Remotely Reachable Server Requires an Authentication Token
 
-Status: proposed
+Status: accepted
 
 Date: 2026-11-08
 

@@ -1,6 +1,6 @@
 # ADR-0172: Analysis Work Converges and Has One Status Model
 
-Status: proposed
+Status: accepted
 
 Date: 2026-11-08
 

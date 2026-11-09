@@ -1,6 +1,6 @@
 # ADR-0170: CI Type-Checks Every Maintained Package
 
-Status: proposed
+Status: accepted
 
 Date: 2026-11-08
 
