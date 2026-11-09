@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+One migration: `20261109_embed_failure_reason` adds two columns to `track_analysis` and backfills
+them from stored failures.
+
+### Fixed
+
+- **A sync with nothing new finishes instead of spinning until the churn guard** (ADR-0172). Every
+  periodic sync on the NAS spent about four minutes ending in `queue_churn_limit_exceeded`: the loop
+  counted tracks that are not `active` as pending, but never queued them. One definition in
+  `app/services/analysis_lifecycle.py` now drives the queues and the loop's counts.
+- **A file that cannot be decoded stops being retried every day.** Embedding failures carry a
+  reason code and an attempt count; `undecodable` and `file_missing` are final until the file
+  changes, and other failures stop after three attempts.
+
 ### Security
 
 - **A server with no token no longer serves everyone by default** (ADR-0171). One policy,

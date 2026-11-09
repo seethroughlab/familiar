@@ -7,7 +7,8 @@ from analysis_pipeline for consistent retry-window logic.
 
 import logging
 
-from app.config import EMBEDDING_VERSION, FEATURES_VERSION, MELODIC_VERSION
+from app.config import FEATURES_VERSION, MELODIC_VERSION
+from app.services.analysis_lifecycle import embeddings_queueable, features_queueable
 from app.services.tasks.analysis_pipeline import _analysis_failure_cutoff
 
 logger = logging.getLogger(__name__)
@@ -22,9 +23,9 @@ async def queue_tracks_for_features(limit: int | None = None) -> int:
     if limit is None:
         from app.config import adaptive_queue_limit
         limit = adaptive_queue_limit()
-    from sqlalchemy import or_, select
+    from sqlalchemy import select
 
-    from app.db.models import Track, TrackAnalysis, TrackStatus
+    from app.db.models import Track, TrackAnalysis
     from app.db.session import async_session_maker
     from app.services.background import get_background_manager
 
@@ -37,20 +38,11 @@ async def queue_tracks_for_features(limit: int | None = None) -> int:
         # 2. Outdated features_version
         # 3. Previously failed but 24h has passed (retry window open)
         # Only analyze ACTIVE tracks (not PENDING_REVIEW or SKIPPED)
+        # ADR-0172: the same condition the sync loop counts by (`analysis_lifecycle`).
         result = await db.execute(
             select(Track.id)
             .outerjoin(TrackAnalysis, Track.id == TrackAnalysis.track_id)
-            .where(
-                Track.status == TrackStatus.ACTIVE,
-                or_(
-                    TrackAnalysis.id.is_(None),
-                    TrackAnalysis.features_version < FEATURES_VERSION,
-                ),
-                or_(
-                    Track.analysis_failed_at.is_(None),
-                    Track.analysis_failed_at < failure_cutoff,
-                ),
-            )
+            .where(features_queueable(failure_cutoff))
             .limit(limit)
         )
         track_ids = [str(row[0]) for row in result.fetchall()]
@@ -73,9 +65,9 @@ async def queue_tracks_for_embeddings(limit: int | None = None) -> int:
     if limit is None:
         from app.config import adaptive_queue_limit
         limit = adaptive_queue_limit()
-    from sqlalchemy import and_, or_, select
+    from sqlalchemy import select
 
-    from app.db.models import Track, TrackAnalysis, TrackStatus
+    from app.db.models import Track, TrackAnalysis
     from app.db.session import async_session_maker
     from app.services.analysis import _models_missing
     from app.services.app_settings import get_app_settings_service
@@ -91,41 +83,20 @@ async def queue_tracks_for_embeddings(limit: int | None = None) -> int:
     async with async_session_maker() as db:
         failure_cutoff = _analysis_failure_cutoff()
 
-        # Find tracks with analysis record but outdated/missing embedding
-        # Exclude tracks that recently failed embedding (within 24h) to avoid infinite retry
+        # The condition is `analysis_lifecycle.embeddings_queueable`, which the sync loop also
+        # counts by (ADR-0172). Two histories it encodes:
+        #
+        # - **Only tracks in the library.** On 2026-09-03 one missing file took the whole analysis
+        #   pipeline down repeatedly: the worker died on it, and because the *process* died it
+        #   never recorded `embedding_failed_at`, so it was requeued at once and killed the pool
+        #   again. That track was `pending_deletion`: the features queue filtered on status and
+        #   this one did not. The asymmetry was the bug, and one shared condition removes it.
+        # - **A failure ends somewhere.** Retried after 24 hours, unless its reason is permanent
+        #   (an undecodable file) or it has failed three times.
         result = await db.execute(
             select(Track.id)
             .join(TrackAnalysis, Track.id == TrackAnalysis.track_id)
-            .where(
-                and_(
-                    # A track whose file is gone cannot be embedded, and trying is
-                    # not harmless. On 2026-09-03 one missing file took the whole
-                    # analysis pipeline down repeatedly: the worker died on it, and
-                    # because the *process* died it never got to record
-                    # `embedding_failed_at` — so the retry guard below never
-                    # engaged and it was requeued immediately, killing the pool
-                    # again. The executor's circuit breaker then disabled analysis
-                    # entirely until somebody POSTed to reset it.
-                    #
-                    # The tell was a failure count frozen at 4 while the executor
-                    # kept disabling itself after hundreds of "terminated abruptly"
-                    # errors. A crash that cannot record its own failure defeats
-                    # every guard keyed on that record.
-                    # `queue_tracks_for_features` filters on status and this did
-                    # not — the asymmetry is the bug. The crashing track was
-                    # `pending_deletion`, so the features phase never touched it
-                    # while the embeddings phase picked it up every pass.
-                    Track.status == TrackStatus.ACTIVE,
-                    Track.missing_since.is_(None),
-                    TrackAnalysis.features_version >= FEATURES_VERSION,
-                    TrackAnalysis.embedding_version < EMBEDDING_VERSION,
-                    # Exclude recently-failed embeddings (use TrackAnalysis.embedding_failed_at)
-                    or_(
-                        TrackAnalysis.embedding_failed_at.is_(None),
-                        TrackAnalysis.embedding_failed_at < failure_cutoff,
-                    ),
-                )
-            )
+            .where(embeddings_queueable(failure_cutoff))
             .limit(limit)
         )
         track_ids = [str(row[0]) for row in result.fetchall()]
@@ -234,9 +205,9 @@ async def queue_unanalyzed_tracks(limit: int | None = None) -> int:
     if limit is None:
         from app.config import adaptive_queue_limit
         limit = adaptive_queue_limit()
-    from sqlalchemy import and_, or_, select
+    from sqlalchemy import select
 
-    from app.db.models import Track, TrackAnalysis, TrackStatus
+    from app.db.models import Track, TrackAnalysis
     from app.db.session import async_session_maker
     from app.services.analysis import get_analysis_capabilities
     from app.services.background import get_background_manager
@@ -251,17 +222,7 @@ async def queue_unanalyzed_tracks(limit: int | None = None) -> int:
         result = await db.execute(
             select(Track.id)
             .outerjoin(TrackAnalysis, Track.id == TrackAnalysis.track_id)
-            .where(
-                Track.status == TrackStatus.ACTIVE,
-                or_(
-                    TrackAnalysis.id.is_(None),
-                    TrackAnalysis.features_version < FEATURES_VERSION,
-                ),
-                or_(
-                    Track.analysis_failed_at.is_(None),
-                    Track.analysis_failed_at < failure_cutoff,
-                ),
-            )
+            .where(features_queueable(failure_cutoff))
             .limit(limit)
         )
         track_ids = set(str(row[0]) for row in result.fetchall())
@@ -272,16 +233,9 @@ async def queue_unanalyzed_tracks(limit: int | None = None) -> int:
             result = await db.execute(
                 select(Track.id)
                 .join(TrackAnalysis, Track.id == TrackAnalysis.track_id)
-                .where(
-                    and_(
-                        TrackAnalysis.features_version >= FEATURES_VERSION,
-                        TrackAnalysis.embedding_version < EMBEDDING_VERSION,
-                        or_(
-                            Track.analysis_failed_at.is_(None),
-                            Track.analysis_failed_at < failure_cutoff,
-                        ),
-                    )
-                )
+                # This branch had no status filter and no embedding-failure check, the same
+                # asymmetry `queue_tracks_for_embeddings` records (ADR-0172).
+                .where(embeddings_queueable(failure_cutoff))
                 .limit(remaining_limit)
             )
             missing_embedding_ids = set(str(row[0]) for row in result.fetchall())

@@ -4,6 +4,35 @@ Status: accepted
 
 Date: 2026-11-08
 
+Implementation:
+
+- **Observed 2026-11-09 on the NAS** (Phase 1). Every two-hourly sync spun features and then
+  embeddings for about two minutes each, until `queue_churn_limit_exceeded:61/60:300s`: the loop's
+  2-second cadence makes 60 attempts in two minutes, and the loop's own "nothing queueable" exit
+  waits for a five-minute stall, so the guard always fired first. Two causes, neither a churn of
+  real work:
+  - the loop counted pending as `count(Track) - current analyses`, but the queue takes only `active`
+    tracks. 30 tracks (27 `skipped`, 2 `missing`, 1 `pending_deletion`) were pending for features,
+    and 1 `pending_deletion` track for embeddings, for ever;
+  - 4 active tracks fail embedding with "could not decode … Unspecified internal error" and were
+    retried every 24 hours indefinitely. Feature failures were already terminal: a failure marks
+    the features version current.
+- **Converged (PR 1, Phases 2–3).** `backend/app/services/analysis_lifecycle.py` defines each
+  phase's population (`active`, not missing) and what may be tried now, once. The features and
+  embeddings queues, `queue_unanalyzed_tracks` (whose embedding branch had no status filter), and
+  the sync loop's exit counts all use it. Embedding failures carry `embedding_failure_reason` and
+  `embedding_attempts` (migration `20261109_embed_failure_reason`, which backfills reasons from the
+  stored message): `undecodable` and `file_missing` are terminal, anything else after three
+  attempts. A changed file is retried because the scanner deletes its analysis row. Failures log
+  `phase`, `track`, `reason` and `attempt`. The churn limit is unchanged.
+  `tests/test_analysis_converges.py` seeds one track of each NAS shape and runs the real
+  `run_library_sync` with only the scan stubbed: it finishes at once without a forced exit. Against
+  the previous loop it spins until the test's 60-second timeout.
+- **Not done (PR 2, Phase 4):** one status query for `/health/system`, `/library/stats` and the
+  Analysis page, and a failed-tracks list with reasons. The deep-backfill and melodic phases still
+  count `total - done` over every analysis row; the NAS log shows neither spinning, and they move to
+  the domain query with the rest.
+
 ## Context
 
 A periodic NAS sync that finds no new music can spend most of six minutes in feature and embedding
