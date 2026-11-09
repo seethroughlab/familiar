@@ -115,6 +115,7 @@ check:
 	pnpm --filter @familiar/frontend run lint
 	pnpm run typecheck
 	pnpm --filter @familiar/frontend run check:boundaries
+	pnpm --filter @familiar/frontend run check:contracts
 	pnpm --filter @familiar/frontend run check:embed-guardrails
 	pnpm --filter @familiar/frontend test
 	pnpm --filter @familiar/api-client run check

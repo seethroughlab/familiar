@@ -18,8 +18,18 @@ Implementation:
   concerns. **Two route defects surfaced while extracting:** `max(position) or -1` treated a
   playlist whose last position was 0 as empty, so the next track also got position 0; and an id
   repeated in one request was added twice. The operation fixes both, with tests.
-- **Not done:** Phases 2–4, the frontend's 74 handwritten response types in `library.ts`,
-  `discovery.ts`, `tracks.ts` and `playlists.ts`, and the check that stops new ones.
+- **The check, 2026-11-09.** `packages/frontend/scripts/check-api-contracts.mjs` (`pnpm
+  check:contracts`, in CI's Frontend Lint job and `make check`) reads `src/api/*.ts` with the
+  TypeScript parser: an exported `interface`, or an exported `type` whose body has an object
+  literal, is a handwritten contract and must be listed in
+  `packages/frontend/api-contracts.allowlist.json`. An alias of a generated type is not. The list
+  ratchets: a new contract fails, and so does an entry that is no longer one. It found **149**, not
+  the 74 the four named domain files hold: every adapter file declares its own shapes. All 149 are
+  `migrating`, by file; the three named domains carry their phase, and the other fourteen files move
+  when that domain next changes (point 8). `viewModels` is for UI state and deliberate transformed
+  views, with a reason, and starts empty: each domain's migration sorts its types into one or the
+  other.
+- **Not done:** Phases 2–4, moving discovery/library, tracks and playlists to generated types.
 
 Extends [ADR-0129](ADR-0129-the-web-client-is-generated-from-the-openapi-contract.md) and
 [ADR-0130](ADR-0130-the-backend-is-assembled-from-explicit-dependencies.md)
