@@ -85,7 +85,7 @@ export function useAutoSelectedVisualizer(trackId: string | null | undefined): s
 
         const ignoredByVisualizer: Record<string, string[]> = {};
         for (const entry of response.visualizers) {
-          if (entry.ignored.length > 0) ignoredByVisualizer[entry.id] = entry.ignored;
+          if (entry.ignored?.length) ignoredByVisualizer[entry.id] = entry.ignored;
         }
 
         if (!response.ranked || response.visualizers.length === 0) {

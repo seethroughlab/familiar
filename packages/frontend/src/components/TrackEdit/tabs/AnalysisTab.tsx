@@ -18,10 +18,11 @@ export function AnalysisTab({ formData, metadata, onChange }: Props) {
   const features = metadata?.features;
 
   // Get effective value (user override if set, otherwise detected)
-  const getEffectiveValue = (key: 'bpm' | 'key') => {
-    if (userOverrides[key] !== undefined && userOverrides[key] !== null) {
-      return userOverrides[key];
-    }
+  // `user_overrides` is a free-form object in the schema, so its values are `unknown`: narrowed here
+  // rather than trusted. A number or a string is an override; anything else is not.
+  const getEffectiveValue = (key: 'bpm' | 'key'): number | string | null => {
+    const override = userOverrides[key];
+    if (typeof override === 'number' || typeof override === 'string') return override;
     return features?.[key] ?? null;
   };
 
@@ -137,37 +138,37 @@ export function AnalysisTab({ formData, metadata, onChange }: Props) {
         <div className="pt-4 border-t border-zinc-800">
           <h4 className="text-sm font-medium text-zinc-400 mb-3">Other Detected Values (read-only)</h4>
           <div className="grid grid-cols-2 gap-3 text-sm">
-            {features.energy !== null && (
+            {features.energy != null && (
               <div className="flex justify-between">
                 <span className="text-zinc-500">Energy</span>
                 <span className="text-zinc-300">{(features.energy * 100).toFixed(0)}%</span>
               </div>
             )}
-            {features.danceability !== null && (
+            {features.danceability != null && (
               <div className="flex justify-between">
                 <span className="text-zinc-500">Danceability</span>
                 <span className="text-zinc-300">{(features.danceability * 100).toFixed(0)}%</span>
               </div>
             )}
-            {features.valence !== null && (
+            {features.valence != null && (
               <div className="flex justify-between">
                 <span className="text-zinc-500">Valence</span>
                 <span className="text-zinc-300">{(features.valence * 100).toFixed(0)}%</span>
               </div>
             )}
-            {features.acousticness !== null && (
+            {features.acousticness != null && (
               <div className="flex justify-between">
                 <span className="text-zinc-500">Acousticness</span>
                 <span className="text-zinc-300">{(features.acousticness * 100).toFixed(0)}%</span>
               </div>
             )}
-            {features.instrumentalness !== null && (
+            {features.instrumentalness != null && (
               <div className="flex justify-between">
                 <span className="text-zinc-500">Instrumentalness</span>
                 <span className="text-zinc-300">{(features.instrumentalness * 100).toFixed(0)}%</span>
               </div>
             )}
-            {features.speechiness !== null && (
+            {features.speechiness != null && (
               <div className="flex justify-between">
                 <span className="text-zinc-500">Speechiness</span>
                 <span className="text-zinc-300">{(features.speechiness * 100).toFixed(0)}%</span>

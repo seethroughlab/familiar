@@ -77,6 +77,41 @@ Important boundaries:
 - Visualizers are sandboxed documents, not React components injected into the host page.
 - Profile IDs select a listener. The server token, when configured, authorizes access to the server.
 
+## Worked Example: One Use Case, Two Transports, One Contract
+
+ADR-0173's pilot, as a pattern to copy. Adding a track to a playlist is reachable from REST and from
+an LLM/MCP tool, and has one implementation:
+
+1. **The operation** is `app/operations/playlists.py:add_tracks(db, profile_id, playlist_id,
+   track_ids)`. It takes plain values, decides the transaction, returns a domain value
+   (`TracksAdded`), and raises `PlaylistNotFound` from `app/operations/errors.py`. It imports nothing
+   from `fastapi` or `app.api`; `scripts/lint_boundaries.py` fails the build if it does.
+2. **The REST adapter** (`app/api/routes/playlists/tracks.py`) reads the request, calls the
+   operation, turns `PlaylistNotFound` into the HTTP `PlaylistNotFoundError` (with its `code`), and
+   serialises the response model.
+3. **The tool adapter** (`app/services/llm/handlers/playlists.py`) calls the same operation, turns
+   `PlaylistNotFound` into a sentence the model can act on, and summarises rather than returning the
+   whole playlist. It never imports a route: a service that needs a route's behaviour needs an
+   operation.
+4. **Tests** cover behaviour once (`tests/test_playlist_operations.py`); each adapter's tests cover
+   only what it adds.
+
+On the browser side the response type is the generated one. `packages/frontend/src/api/playlists.ts`
+declares `export type PlaylistDetail = Wire.PlaylistDetailResponse` rather than an interface of its
+own; `pnpm generate:api` is what changes it. An adapter keeps only real policy (defaults,
+cancellation, URL building) and any transformation is tested, as `toSyncStatus` in
+`api/library.ts` is. `scripts/check-api-contracts.mjs` fails on a new handwritten response shape;
+UI state that is not a response is listed under `viewModels` in
+`packages/frontend/api-contracts.allowlist.json` with its reason.
+
+Two schema properties to know when a generated type looks looser than the wire:
+
+- A Pydantic field with a default is optional in the schema though the server always sends it.
+- `dump_openapi.py` turns a nullable `$ref` into an optional property, because the Swift generator
+  drops `anyOf [ref, null]`. TypeScript then reads "absent" where the server sends `null`.
+
+Test with `!= null` or `?? default`, not `!== null`: the absent case is what the type promises.
+
 ## Known Large Surfaces
 
 These modules are important and large enough to treat with extra care:

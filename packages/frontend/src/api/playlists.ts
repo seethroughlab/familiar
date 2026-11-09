@@ -1,86 +1,16 @@
+import type * as Wire from '@familiar/api-client';
 import api from './base';
 
 // Smart Playlists
-export interface SmartPlaylistRule {
-  field: string;
-  operator: string;
-  value?: unknown;
-}
+export type SmartPlaylistRule = Wire.RuleSchema;
 
-export interface SmartPlaylist {
-  id: string;
-  name: string;
-  description: string | null;
-  rules: SmartPlaylistRule[];
-  match_mode: 'all' | 'any';
-  order_by: string;
-  order_direction: 'asc' | 'desc';
-  max_tracks: number | null;
-  cached_track_count: number;
-  last_refreshed_at: string | null;
-  auto_download: boolean;
-  created_at: string;
-  updated_at: string;
-}
+export type SmartPlaylist = Wire.SmartPlaylistResponse;
 
-export interface SmartPlaylistCreate {
-  name: string;
-  description?: string;
-  rules: SmartPlaylistRule[];
-  match_mode?: 'all' | 'any';
-  order_by?: string;
-  order_direction?: 'asc' | 'desc';
-  max_tracks?: number;
-}
+export type SmartPlaylistCreate = Wire.SmartPlaylistCreate;
 
-export interface SmartPlaylistTracksResponse {
-  playlist: SmartPlaylist;
-  tracks: Array<{
-    id: string;
-    file_path: string;
-    title: string | null;
-    artist: string | null;
-    album: string | null;
-    album_artist: string | null;
-    album_type: string;
-    track_number: number | null;
-    disc_number: number | null;
-    year: number | null;
-    genre: string | null;
-    duration_seconds: number | null;
-    format: string | null;
-    analysis_version: number;
-    last_played_at?: string | null;
-    play_count?: number | null;
-  }>;
-  total: number;
-}
+export type SmartPlaylistTracksResponse = Wire.SmartPlaylistTracksResponse;
 
-export interface AvailableFields {
-  track_fields: Array<{
-    name: string;
-    type: string;
-    description: string;
-  }>;
-  analysis_fields: Array<{
-    name: string;
-    type: string;
-    description: string;
-    range?: [number, number];
-  }>;
-  play_history_fields?: Array<{
-    name: string;
-    type: string;
-    description: string;
-  }>;
-  operators: {
-    string: string[];
-    number: string[];
-    date: string[];
-    boolean?: string[];
-    list: string[];
-  };
-}
+export type AvailableFields = Wire.AvailableFieldsResponse;
 
 export const smartPlaylistsApi = {
   list: async (): Promise<SmartPlaylist[]> => {
@@ -131,109 +61,25 @@ export const smartPlaylistsApi = {
 };
 
 // Playlists API (static playlists with track IDs)
-export interface Playlist {
-  id: string;
-  name: string;
-  description: string | null;
-  is_auto_generated: boolean;
-  generation_prompt: string | null;
-  track_count: number;
-  local_track_count: number;
-  auto_download: boolean;
-  created_at: string;
-  updated_at: string;
-}
+export type Playlist = Wire.PlaylistResponse;
 
-export interface PlaylistTrack {
-  id: string; // track_id
-  playlist_track_id: string; // PlaylistTrack.id for reordering/removal
-  type: 'local';
-  title: string | null;
-  artist: string | null;
-  album: string | null;
-  duration_seconds: number | null;
-  position: number;
+export type PlaylistTrack = Wire.TrackInPlaylist;
 
-  // Full track fields
-  format?: string | null;
-  year?: number | null;
-  genre?: string | null;
-  track_number?: number | null;
-  disc_number?: number | null;
-  album_artist?: string | null;
-  album_type?: string | null;
-  analysis_version?: number | null;
-  last_played_at?: string | null;
-  play_count?: number | null;
-}
+export type PlaylistDetail = Wire.PlaylistDetailResponse;
 
-export interface PlaylistDetail {
-  id: string;
-  name: string;
-  description: string | null;
-  is_auto_generated: boolean;
-  generation_prompt: string | null;
-  tracks: PlaylistTrack[];
-  auto_download: boolean;
-  created_at: string;
-  updated_at: string;
-}
+export type PlaylistCreate = Wire.PlaylistCreate;
 
-export interface PlaylistCreate {
-  name: string;
-  description?: string;
-  track_ids: string[];
-  is_auto_generated?: boolean;
-  generation_prompt?: string;
-}
+export type RecommendedArtist = Wire.RecommendedArtistResponse;
 
-export interface RecommendedArtist {
-  name: string;
-  source: string;
-  match_score: number;
-  image_url: string | null;
-  external_url: string | null;
-  local_track_count: number;
-}
+export type RecommendedTrack = Wire.RecommendedTrackResponse;
 
-export interface RecommendedTrack {
-  title: string;
-  artist: string;
-  source: string;
-  match_score: number;
-  external_url: string | null;
-  local_track_id: string | null;
-  album: string | null;
-}
-
-export interface PlaylistRecommendations {
-  artists: RecommendedArtist[];
-  tracks: RecommendedTrack[];
-  sources_used: string[];
-}
+export type PlaylistRecommendations = Wire.RecommendationsResponse;
 
 
 /** A structured seed for `POST /playlists/generate` (ADR-0048 point 2). Exactly one shape. */
-export interface GeneratePlaylistSeed {
-  track_id?: string;
-  album?: string;
-  artist?: string;
-  track_ids?: string[];
-  /** A set of artist names — VibeMap's map selection. See ADR-0048's Context. */
-  artists?: string[];
-  limit?: number;
-  max_per_artist?: number;
-  include_seed?: boolean;
-  name?: string;
-}
+export type GeneratePlaylistSeed = Wire.GeneratePlaylistRequest;
 
-export interface GeneratedPlaylist {
-  playlist_id: string;
-  name: string;
-  track_count: number;
-  seed_track_ids: string[];
-  pool_size: number;
-}
+export type GeneratedPlaylist = Wire.GeneratePlaylistResponse;
 
 export const playlistsApi = {
   list: async (includeAuto = true): Promise<Playlist[]> => {

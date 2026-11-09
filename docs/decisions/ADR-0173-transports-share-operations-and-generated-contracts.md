@@ -51,7 +51,20 @@ Implementation:
     with a server default is optional in the schema though always sent. `SyncStatus` has both,
     and cannot be tightened without changing familiar-apple's generated type, so `toSyncStatus`
     fills the defaults once in the adapter; it is the one `viewModels` entry, and is tested.
-- **Not done:** Phase 3 (tracks, playlists) and Phase 4 (the worked example).
+- **Phase 3, tracks and playlists, 2026-11-09.** `tracks.ts` and `playlists.ts` alias the generated
+  types too, request bodies included (`TrackMetadataUpdate` is `TrackMetadataUpdateRequest`,
+  `GeneratePlaylistSeed` is `GeneratePlaylistRequest`). Allowlist 108 → 77. What it turned up was
+  the same schema property each time, a server default making a field optional, and handling it
+  found **one real defect**: Track Edit's Analysis tab tested `features.energy !== null`, so a
+  feature absent rather than null rendered as "NaN%". It tests `!= null` now, with a test that fails
+  against the old tab. `user_overrides` is a free-form object in the schema; the tab narrows an
+  override to a number or string instead of trusting it.
+- **Phase 4, 2026-11-09.** `docs/ARCHITECTURE.md`, "Worked Example: One Use Case, Two Transports,
+  One Contract".
+- **Exit condition met:** `lint_boundaries.py` has zero known exceptions; playlists are tested at
+  operation and adapter level; discovery/library, tracks and playlists have one transport contract;
+  and `check:contracts` fails a new duplicate. The 76 handwritten types left in the fourteen other
+  adapter files are listed and move when those domains next change (point 8).
 
 Extends [ADR-0129](ADR-0129-the-web-client-is-generated-from-the-openapi-contract.md) and
 [ADR-0130](ADR-0130-the-backend-is-assembled-from-explicit-dependencies.md)
