@@ -54,17 +54,23 @@ class Settings(BaseSettings):
     open_server: bool = Field(default=False, validation_alias=AliasChoices("FAMILIAR_OPEN_SERVER"))
     # Watch the library and scan folders that change (ADR-0142). Off only for the test suite, which
     # starts the app many times against fixture folders.
-    watch_library: bool = Field(default=True, validation_alias=AliasChoices("FAMILIAR_WATCH_LIBRARY"))
+    watch_library: bool = Field(
+        default=True, validation_alias=AliasChoices("FAMILIAR_WATCH_LIBRARY")
+    )
     # Fetch artist photo galleries in the background (ADR-0149). Off only for the test suite, where an
     # artist page opened by one test would start a real fetch that outlives it, reaches the network,
     # and holds locks a migration test's DROP TABLE then deadlocks on.
-    artist_gallery_fetch: bool = Field(default=True, validation_alias=AliasChoices("FAMILIAR_ARTIST_GALLERY_FETCH"))
+    artist_gallery_fetch: bool = Field(
+        default=True, validation_alias=AliasChoices("FAMILIAR_ARTIST_GALLERY_FETCH")
+    )
 
     # Advertise this server on the local network as `_familiar._tcp` on this port (ADR-0134 point
     # 4). Unset, nothing is advertised: in Docker's default bridge network mDNS does not reach the
     # LAN and the container's port is not the host's, so advertising there would announce the wrong
     # address. `python -m app.serve` sets it when it binds beyond loopback.
-    advertise_port: int | None = Field(default=None, validation_alias=AliasChoices("FAMILIAR_ADVERTISE_PORT"))
+    advertise_port: int | None = Field(
+        default=None, validation_alias=AliasChoices("FAMILIAR_ADVERTISE_PORT")
+    )
 
     # Redis, when there is one. Unset, the server keeps the same state in Postgres instead
     # (ADR-0133): every Docker install sets REDIS_URL, and a server outside Docker need not.
@@ -144,7 +150,6 @@ class Settings(BaseSettings):
     acoustid_api_key: str | None = None
     # fanart.tv, for artist photos (ADR-0149). FANARTTV_API_KEY; optional.
     fanarttv_api_key: str | None = None
-
 
     # Network audio outputs (Sonos / WiiM / AirPlay / Chromecast).
     # DEVICE_STREAM_BASE_URL: LAN-reachable base URL (e.g. http://192.168.1.50:4400) that network
@@ -256,6 +261,23 @@ class Settings(BaseSettings):
 #   v1: Initial handshake — GET /api/v1/contract (ADR-0113)
 API_CONTRACT_VERSION = 1
 MIN_CLIENT_CONTRACT = 1
+
+# What this server can do, by name (ADR-0168). Published by GET /api/v1/contract so a newer client can
+# say "this needs a newer server" by name instead of quietly doing less. A name is a feature a client
+# offers, not an endpoint. Add one in the same change as the feature; adding is additive (re-lock,
+# no contract bump). Never remove one while a shipped client may ask for it: that is a breaking
+# change and bumps API_CONTRACT_VERSION. `tests/test_contract_lock.py` pins every name ever published.
+#
+# Capability history:
+#   0.2.0-beta23 (first published in the release after it; app 1.7 relies on all three):
+#     lyrics.status          GET /tracks/{id}/lyrics reports `status` (ADR-0163)
+#     visualizer.paired_page the app's visualizer page is an allowed, token-carrying client (ADR-0164)
+#     albums.move_to_album   Proposed Changes can merge or split an album (ADR-0166)
+SERVER_CAPABILITIES: tuple[str, ...] = (
+    "lyrics.status",
+    "visualizer.paired_page",
+    "albums.move_to_album",
+)
 
 # Per-phase analysis version constants
 # Bump ONLY the phase that changed; other phases won't re-run

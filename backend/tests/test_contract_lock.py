@@ -13,11 +13,12 @@ from __future__ import annotations
 
 import inspect
 import json
+import re
 from pathlib import Path
 
 from app.api.auth import path_requires_token
 from app.api.routes import contract as contract_route
-from app.config import API_CONTRACT_VERSION, MIN_CLIENT_CONTRACT
+from app.config import API_CONTRACT_VERSION, MIN_CLIENT_CONTRACT, SERVER_CAPABILITIES
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
 LOCK_PATH = BACKEND_ROOT / "contract.lock.json"
@@ -84,3 +85,34 @@ class TestTheEndpointCannotFailForTheWrongReason:
         fields = contract_route.ContractInfo.model_fields
         assert "contract_version" in fields
         assert "min_client_contract" in fields
+
+
+class TestCapabilities:
+    """ADR-0168: what the server can do, by name."""
+
+    #: Every name ever published. A shipped client may ask for any of them, so none may disappear
+    #: without a contract bump. Append here when adding to `SERVER_CAPABILITIES`; never delete.
+    PUBLISHED = {
+        "lyrics.status",
+        "visualizer.paired_page",
+        "albums.move_to_album",
+    }
+
+    def test_no_published_name_is_dropped(self) -> None:
+        missing = self.PUBLISHED - set(SERVER_CAPABILITIES)
+        assert not missing, (
+            f"{sorted(missing)} left SERVER_CAPABILITIES. A shipped client may rely on them: removing "
+            "one is a breaking change, so bump API_CONTRACT_VERSION (ADR-0113) and say why."
+        )
+
+    def test_every_name_is_recorded_as_published(self) -> None:
+        unrecorded = set(SERVER_CAPABILITIES) - self.PUBLISHED
+        assert not unrecorded, f"add {sorted(unrecorded)} to TestCapabilities.PUBLISHED"
+
+    def test_names_are_dotted_lower_case_and_unique(self) -> None:
+        assert len(SERVER_CAPABILITIES) == len(set(SERVER_CAPABILITIES))
+        for name in SERVER_CAPABILITIES:
+            assert re.fullmatch(r"[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+", name), name
+
+    def test_the_response_carries_them(self) -> None:
+        assert "capabilities" in contract_route.ContractInfo.model_fields

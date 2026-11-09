@@ -18,7 +18,12 @@ ADR-0113.
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from app.config import API_CONTRACT_VERSION, MIN_CLIENT_CONTRACT, get_app_version
+from app.config import (
+    API_CONTRACT_VERSION,
+    MIN_CLIENT_CONTRACT,
+    SERVER_CAPABILITIES,
+    get_app_version,
+)
 
 router = APIRouter(prefix="/contract", tags=["system"])
 
@@ -35,11 +40,16 @@ class ContractInfo(BaseModel):
     #: this endpoint must answer whatever else is wrong.
     server_id: str | None = None
     server_name: str | None = None
+    #: The features this server has, by name (ADR-0168). A client maps its own features to these
+    #: and names what is missing. Optional in the schema on purpose: servers up to 0.2.0-beta23 do
+    #: not send it, and a client must decode their handshake and read the absence as "unknown",
+    #: never as "has nothing". This server always sends it.
+    capabilities: list[str] | None = None
 
 
 @router.get("", response_model=ContractInfo)
 async def get_api_contract() -> ContractInfo:
-    """Report the API contract this server implements, the oldest client it serves, and its identity."""
+    """Report the API contract this server implements, the oldest client it serves, its identity, and what it can do."""
     from app.services.server_identity import get_server_identity
 
     try:
@@ -53,4 +63,5 @@ async def get_api_contract() -> ContractInfo:
         server_version=get_app_version(),
         server_id=server_id,
         server_name=server_name,
+        capabilities=list(SERVER_CAPABILITIES),
     )

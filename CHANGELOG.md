@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The server names what it can do** (ADR-0168). `GET /api/v1/contract` gains `capabilities`, a
+  list of feature names (`lyrics.status`, `visualizer.paired_page`, `albums.move_to_album`), so a
+  newer app can say "this needs a newer server" by name instead of quietly doing less. Additive:
+  the contract stays at v1.
+
 ## [0.2.0-beta23] - 2026-11-08
 
 No migrations; the API contract stays at v1 (one optional field added). This is the server half
