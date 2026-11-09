@@ -1,6 +1,6 @@
 # ADR-0176: Media Is Authorized by Header, Cookie or Signed URL
 
-Status: proposed
+Status: accepted
 
 Date: 2026-11-09
 
