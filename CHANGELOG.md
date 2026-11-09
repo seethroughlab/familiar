@@ -7,8 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-No migrations; the API contract stays at v1 (one optional field added). These are the server half
-of the Apple apps' 1.7 (lyrics, two visualizers).
+## [0.2.0-beta23] - 2026-11-08
+
+No migrations; the API contract stays at v1 (one optional field added). This is the server half
+of the Apple apps' 1.7 (lyrics, two visualizers), plus album and cover fixes every client sees.
 
 ### Lyrics
 
@@ -37,6 +39,26 @@ of the Apple apps' 1.7 (lyrics, two visualizers).
   and names Familiar in `User-Agent` and `Lrclib-App-Id`. LRCLIB's authorization document is linked
   from `familiar-apple`'s App Review notes.
 
+### Albums and covers
+
+- **Albums that were wrongly split or fused are put right, through Proposed Changes** (ADR-0166,
+  ADR-0167). Any title shared by more than one artist across the library had been labelled "Various
+  Artists". That fused different artists' albums of the same name (Portishead's *Third* and Soft
+  Machine's *Third* became one album) and split real albums whose tracks had a release id. Now a
+  compilation is one folder with no majority artist, or several folders whose disc and track numbers
+  never collide. The label is only ever written into a blank album artist.
+  - A new proposed change, `move_to_album`, merges a split album or splits a fused one. It carries
+    the album artist, aliases and cover, and undoing it brings the original albums back with their
+    original ids. Merges are suggested after every sync. Splits are suggested only by
+    `POST /proposed-changes/scan`, since a wrong split breaks a real compilation.
+  - Applying a proposed change of a type the server can't carry out is now refused. It used to be
+    marked applied and do nothing.
+- **A track with no embedded cover finds one** from its own album's other files, from a cover image
+  in its folder, or, in the background, from the Cover Art Archive or Last.fm. Only the web app's
+  album cards had ever asked for the online lookup. Only files on the same album lend a cover, and a
+  track with no album tag borrows none, so a single in a shared folder no longer shows a
+  neighbour's cover.
+
 ### Visualizers
 
 - **The Apple app's visualizer page can reach its server** (ADR-0164). `familiar-visualizer://bundle`
@@ -47,6 +69,11 @@ of the Apple apps' 1.7 (lyrics, two visualizers).
 - **Two first-party visualizers: Beat Tiles and Reactive Terrain** (ADR-0161). The Lyrics and Lyric
   Storm packages are deleted, since lyrics are a native mode in the app (ADR-0160), and the site's
   gallery drops them along with Spectrum.
+- **Beat Tiles looks finished on a phone.** The whole grid fits a tall screen instead of being cut
+  off at the sides. An album with no cover gets its own colour, and its tiles mix worn CC0
+  materials (plaster, gold, painted and plated metal, rust, steel) that reflect a studio light. Only
+  tiles that pop glow: covers no longer bloom on every loud passage. The glow was set by eye on an
+  iPhone. Material credits are in `packages/visualizers/beat-tiles/public/CREDITS.md`.
 - **Audio-reactive motion glides** at the screen's rate instead of stepping at the 10 frames a
   second a native host sends. The debug panel no longer calls 30 fps healthy.
 
