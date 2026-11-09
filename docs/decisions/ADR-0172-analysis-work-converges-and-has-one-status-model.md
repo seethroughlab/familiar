@@ -44,8 +44,14 @@ Implementation:
   `tests/test_analysis_status_model.py` seeds every state, requires the states to sum to the
   library, and requires all four endpoints to report the same numbers. Contract stays at v1
   (additive).
-- **Exit condition:** met in code and tests. The NAS confirmation (two syncs without a forced exit)
-  is tracked in `docs/HEALTH.md` until it runs this.
+- **Exit condition: met, confirmed on the NAS 2026-11-09.** Deployed at 21:16 UTC (migration
+  `20261109_embed_failure_reason` applied; the four undecodable files backfilled as `undecodable`).
+  On the 27,287-track library `features_remaining` and `embeddings_remaining` were both 0. The last
+  two syncs on the old code (18:00, 20:00) each ended both phases in
+  `queue_churn_limit_exceeded:61/60:300s`, the 20:00 one at 20:06:15; the first two on the new code
+  (21:18, 22:00) logged no forced exit, the 22:00 one complete at 22:01:53. `phase_counts` also
+  surfaced 48 failed feature extractions that no screen had shown. The `docs/HEALTH.md` row is
+  removed.
 
 ## Context
 
