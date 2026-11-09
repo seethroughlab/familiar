@@ -33,9 +33,9 @@ export interface AudioEngineCapabilities {
 /**
  * Unified interface for audio playback engines.
  *
- * Two implementations:
- * - WebAudioEngine: Desktop browser (AudioContext + HTMLAudioElement)
- * - CapacitorEngine: Native iOS/Android (FamiliarAudio Capacitor plugin)
+ * Registered per entry point through `registerEngineFactory`. The web app no longer plays music
+ * (ADR-0058), so the one shipping implementation is `NullAudioEngine` (packages/web), which the
+ * embedded pages register so a missed intent is inert rather than a second engine (ADR-0017).
  */
 export interface AudioEngine {
   readonly capabilities: AudioEngineCapabilities;

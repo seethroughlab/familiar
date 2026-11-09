@@ -1,3 +1,4 @@
+import type { RediscoverySuggestion } from '@familiar/api-client';
 import type { LibraryStats } from '../types';
 import api from './base';
 import { getApiUrl, encodePathSegment } from './base';

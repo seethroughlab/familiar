@@ -8,7 +8,8 @@
     "check:embed-guardrails": "node ./scripts/check-embed-guardrails.mjs",
     "check:boundaries": "depcruise --validate .dependency-cruiser.cjs src/",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@familiar/api-client": "workspace:*",

@@ -9,74 +9,10 @@
 // What stays is the part that was never about Capacitor: a contract any `AudioEngine` must satisfy,
 // run against a fake. The next engine to exist is what it is for.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AudioEngine, EngineEvent } from '../types';
-
-vi.hoisted(() => {
-  const g = globalThis as unknown as { window?: Record<string, unknown> };
-  if (!g.window) {
-    g.window = {};
-  }
-  g.window.Capacitor = {
-    isNativePlatform: () => true,
-  };
-});
-
-const familiarAudioMock = vi.hoisted(() => {
-  const listeners = new Map<string, Set<(data?: unknown) => void>>();
-  type CrossfadeResult = Awaited<ReturnType<FamiliarAudioPlugin['executeCrossfade']>>;
-  return {
-  load: vi.fn(async () => {}),
-  loadLocal: vi.fn(async () => {}),
-  play: vi.fn(async () => {}),
-  pause: vi.fn(async () => {}),
-  seek: vi.fn(async () => {}),
-  stop: vi.fn(async () => {}),
-  setVolume: vi.fn(async () => {}),
-  getDuration: vi.fn(async () => ({ duration: 180 })),
-  preloadNext: vi.fn(async () => ({ success: true, state: 'ready' })),
-  preloadNextLocal: vi.fn(async () => ({ success: true, state: 'ready' })),
-  isNextReady: vi.fn(async () => ({ ready: true })),
-  getPreloadingTrackId: vi.fn(async () => ({ trackId: null })),
-  isCrossfading: vi.fn(async () => ({ crossfading: false })),
-  executeCrossfade: vi.fn(async (): Promise<CrossfadeResult> => ({ success: true })),
-  cancelCrossfade: vi.fn(async () => {}),
-  setNextNormalizationVolume: vi.fn(async () => {}),
-  setNowPlayingInfo: vi.fn(async () => {}),
-  setPendingTrackInfo: vi.fn(async () => {}),
-  addListener: vi.fn(async (event: string, handler: (data?: unknown) => void) => {
-    if (!listeners.has(event)) listeners.set(event, new Set());
-    listeners.get(event)!.add(handler);
-    return {
-      remove: vi.fn(() => {
-        listeners.get(event)?.delete(handler);
-      }),
-    };
-  }),
-  __emit(event: string, data?: unknown) {
-    listeners.get(event)?.forEach((handler) => handler(data));
-  },
-  __resetListeners() {
-    listeners.clear();
-  },
-};
-});
-
-vi.mock('../../../../../ios/src/plugins/familiarAudio', () => ({
-  FamiliarAudio: familiarAudioMock,
-}));
-
-vi.mock('@familiar/frontend/src/services/offlineService', () => ({
-  getOfflineTrackNativeUri: vi.fn(async () => null),
-}));
-
-vi.mock('@familiar/frontend/src/api', () => ({
-  tracksApi: {
-    getStreamUrl: (id: string) => `/api/v1/tracks/${id}/stream`,
-  },
-}));
+import type { AudioEngine, AudioEngineCapabilities, EngineEvent } from '../types';
 
 class WebLikeAdapter implements AudioEngine {
-  readonly capabilities = { crossfade: true };
+  readonly capabilities: AudioEngineCapabilities = { crossfade: true, visualizer: false, effects: 'none' };
   private loadedTrackId: string | null = null;
   private handlers = new Set<(event: EngineEvent) => void>();
   initialize(): boolean { return true; }

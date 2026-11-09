@@ -5,6 +5,7 @@
     "dev:remote": "pnpm --filter @familiar/web dev:remote",
     "build": "pnpm --filter @familiar/web build",
     "lint": "pnpm --filter @familiar/frontend lint",
+    "typecheck": "python3 scripts/check_typecheck_coverage.py && pnpm -r typecheck",
     "test": "pnpm --filter @familiar/frontend test && pnpm --filter @familiar/visualizer-sdk test",
     "test:watch": "pnpm --filter @familiar/frontend test:watch",
     "generate:api": "pnpm --filter @familiar/api-client run generate",
