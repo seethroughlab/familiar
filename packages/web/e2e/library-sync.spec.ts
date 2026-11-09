@@ -51,6 +51,9 @@ test.describe('Library Sync', () => {
     // The global setup's sync can still be running (it waits 120 s, and a cold CI library can take
     // longer). That used to skip this test, so a run could pass without ever pressing the button
     // (ADR-0174 point 1). Wait it out instead, then require the button.
+    // Up to three minutes for that sync, then 30 s for the one this test starts; the default
+    // 30 s test timeout would end the test while it was still waiting for the first.
+    test.setTimeout(240000);
     await waitForSyncComplete(page, 180000);
     await expect(syncButton).toBeEnabled({ timeout: 10000 });
 
