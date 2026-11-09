@@ -745,6 +745,10 @@ jobs:
       - name: Dependency Boundary Checks
         run: pnpm --filter @familiar/frontend run check:boundaries
 
+      # ADR-0173: no new handwritten response contracts in src/api/; the allowlist only shrinks.
+      - name: API Contract Check
+        run: pnpm --filter @familiar/frontend run check:contracts
+
       # ADR-0129 point 2: the web client is generated from backend/openapi.json and committed.
       # Regenerate and fail on a diff, so a contract change, its lock and its generated clients
       # are one reviewable change. Pure file transformation; needs no backend.

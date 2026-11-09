@@ -1,0 +1,245 @@
+{
+  "$comment": "ADR-0173: handwritten response contracts in src/api/. Checked by scripts/check-api-contracts.mjs. 'migrating' only shrinks; 'viewModels' is UI state or a deliberate transformed view, with the reason.",
+  "migrating": {
+    "admin.ts": {
+      "until": "when this domain is next changed (ADR-0173 point 8); outside the three named domains",
+      "types": [
+        "ArtistSearchResponse",
+        "ArtistSearchResult",
+        "DiagnosticsExport",
+        "MergeArtistsRequest",
+        "MergeArtistsResponse",
+        "MergeCandidate",
+        "MergeSuggestion",
+        "MergeSuggestionsResponse",
+        "UpdateStatus"
+      ]
+    },
+    "analysis.ts": {
+      "until": "when this domain is next changed (ADR-0173 point 8); outside the three named domains",
+      "types": [
+        "AnalysisResult",
+        "AnalysisStatus",
+        "BulkAnalysisStatus"
+      ]
+    },
+    "backup.ts": {
+      "until": "when this domain is next changed (ADR-0173 point 8); outside the three named domains",
+      "types": [
+        "BackupRequest",
+        "ImportResultCategory",
+        "RestoreExecuteRequest",
+        "RestoreExecuteResponse",
+        "RestoreLibraryResults",
+        "RestorePreviewMatching",
+        "RestorePreviewResponse",
+        "RestorePreviewSummary",
+        "RestoreProfileResults"
+      ]
+    },
+    "base.ts": {
+      "until": "when this domain is next changed (ADR-0173 point 8); outside the three named domains",
+      "types": [
+        "RequestOptions"
+      ]
+    },
+    "diagnosticsLogs.ts": {
+      "until": "when this domain is next changed (ADR-0173 point 8); outside the three named domains",
+      "types": [
+        "FrontendLogEntry",
+        "FrontendLogEntryPayload",
+        "ListFrontendLogsResponse"
+      ]
+    },
+    "discovery.ts": {
+      "until": "ADR-0173 Phase 2: discovery/library move to generated types",
+      "types": [
+        "ExternalAlbum",
+        "ExternalAlbumsResponse",
+        "NewReleasesListParams",
+        "NewReleasesListResponse",
+        "NewReleasesProgress",
+        "NewReleasesRotation",
+        "NewReleasesStatus"
+      ]
+    },
+    "integrations.ts": {
+      "until": "when this domain is next changed (ADR-0173 point 8); outside the three named domains",
+      "types": [
+        "LastfmStatus",
+        "VideoSearchResult",
+        "VideoStatus"
+      ]
+    },
+    "library.ts": {
+      "until": "ADR-0173 Phase 2: discovery/library move to generated types",
+      "types": [
+        "AlbumDetailResponse",
+        "AlbumListResponse",
+        "AlbumSummary",
+        "AlbumTrack",
+        "ArtistAlbum",
+        "ArtistDetailResponse",
+        "ArtistListResponse",
+        "ArtistSummary",
+        "ArtistTrack",
+        "ArtworkCoverage",
+        "DeduplicatePreview",
+        "DiscoverAlbumInfo",
+        "DiscoverRecommendedArtist",
+        "DiscoverTrack",
+        "DuplicateGroup",
+        "DuplicateTrackInfo",
+        "EgoMapArtist",
+        "EgoMapCenter",
+        "EgoMapResponse",
+        "ImportResult",
+        "LetterIndexResponse",
+        "LibraryDiscoverResponse",
+        "MapEdge",
+        "MapNode",
+        "MapNode3D",
+        "MoodCell",
+        "MoodDistributionResponse",
+        "MusicMap3DResponse",
+        "MusicMapResponse",
+        "RecentImport",
+        "SimilarAlbumInfo",
+        "SyncProgress",
+        "SyncStatus",
+        "YearCount",
+        "YearDistributionResponse"
+      ]
+    },
+    "metadata.ts": {
+      "until": "when this domain is next changed (ADR-0173 point 8); outside the three named domains",
+      "types": [
+        "ApplyResult",
+        "ArtworkQueueBatchResponse",
+        "ArtworkQueueBatchResult",
+        "ArtworkQueueRequest",
+        "ArtworkQueueResponse",
+        "ArtworkStatusBatchResponse",
+        "ArtworkUploadResponse",
+        "ChangePreview",
+        "ChangeStats",
+        "CreateChangeRequest",
+        "OrganizeResult",
+        "OrganizeStats",
+        "OrganizeTemplate",
+        "ProposedChange"
+      ]
+    },
+    "mixtapes.ts": {
+      "until": "when this domain is next changed (ADR-0173 point 8); outside the three named domains",
+      "types": [
+        "MixTape",
+        "MixTapeCreateRequest",
+        "MixTapeProgress"
+      ]
+    },
+    "outputs.ts": {
+      "until": "when this domain is next changed (ADR-0173 point 8); outside the three named domains",
+      "types": [
+        "DiscoverAllResult",
+        "Output"
+      ]
+    },
+    "pairing.ts": {
+      "until": "when this domain is next changed (ADR-0173 point 8); outside the three named domains",
+      "types": [
+        "PairingTarget"
+      ]
+    },
+    "playlists.ts": {
+      "until": "ADR-0173 Phase 3: playlists move to generated types",
+      "types": [
+        "AvailableFields",
+        "GeneratePlaylistSeed",
+        "GeneratedPlaylist",
+        "Playlist",
+        "PlaylistCreate",
+        "PlaylistDetail",
+        "PlaylistRecommendations",
+        "PlaylistTrack",
+        "RecommendedArtist",
+        "RecommendedTrack",
+        "SmartPlaylist",
+        "SmartPlaylistCreate",
+        "SmartPlaylistRule",
+        "SmartPlaylistTracksResponse"
+      ]
+    },
+    "profiles.ts": {
+      "until": "when this domain is next changed (ADR-0173 point 8); outside the three named domains",
+      "types": [
+        "FavoriteStatusResponse",
+        "FavoriteTrack",
+        "FavoritesListResponse",
+        "ListenEventBody",
+        "ListenEventResponse",
+        "PlayRecordResponse",
+        "PlayStatsResponse",
+        "ProfileCreate",
+        "ProfileResponse"
+      ]
+    },
+    "queue.ts": {
+      "until": "when this domain is next changed (ADR-0173 point 8); outside the three named domains",
+      "types": [
+        "ArchivedSession",
+        "OfflineManifestRequest",
+        "OfflineManifestResponse",
+        "OfflineManifestVariantResponse",
+        "PlaybackSessionBody",
+        "PlaybackSessionResponse",
+        "PlaybackSessionWrite",
+        "QueueSuggestion",
+        "QueueSuggestionsRequest",
+        "QueueSuggestionsResponse"
+      ]
+    },
+    "s3Backup.ts": {
+      "until": "when this domain is next changed (ADR-0173 point 8); outside the three named domains",
+      "types": [
+        "BackupCostEstimate",
+        "BackupManifest",
+        "BackupProgress",
+        "BackupStatus",
+        "BackupValidation",
+        "RestoreThawResult"
+      ]
+    },
+    "settings.ts": {
+      "until": "when this domain is next changed (ADR-0173 point 8); outside the three named domains",
+      "types": [
+        "AppSettingsResponse",
+        "AppSettingsUpdate",
+        "ClapStatus"
+      ]
+    },
+    "tracks.ts": {
+      "until": "ADR-0173 Phase 3: tracks move to generated types",
+      "types": [
+        "BulkEditErrorResponse",
+        "BulkEditResultResponse",
+        "BulkIdentifyProgress",
+        "BulkIdentifyTaskResponse",
+        "CommonValuesResponse",
+        "IdentifyCandidate",
+        "IdentifyTrackResponse",
+        "LyricLine",
+        "LyricsResponse",
+        "RankedVisualizer",
+        "TrackDiscoverResponse",
+        "TrackDiscoverSimilarArtist",
+        "TrackIdsResponse",
+        "TrackMetadataResponse",
+        "TrackMetadataUpdate",
+        "VisualizerRankingCandidate",
+        "VisualizerRankingResponse"
+      ]
+    }
+  },
+  "viewModels": {}
+}
