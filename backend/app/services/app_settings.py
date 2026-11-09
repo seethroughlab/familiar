@@ -140,6 +140,11 @@ class AppSettings(BaseModel):
     # is configured and the gate is off, which is the pre-ADR-0045 posture and is what lets this ship
     # before the clients can present one. See `app/api/auth.py` for why it is stored in the clear.
     access_token: str | None = None
+    # Whether this server has ever had a token (ADR-0171 point 4). Only a library that never had one
+    # is grandfathered as open; one whose token was removed answers only its own machine, or an
+    # upgrade drill's "remove the token, restart" would have made it public again. Set by any write
+    # of `access_token`, a removal included; never cleared.
+    had_access_token: bool = False
 
     # This server's identity (ADR-0134 point 4). A client remembers a server by `server_id`, not by
     # its address, which changes with DHCP; minted on first use by `app/services/server_identity.py`
@@ -220,6 +225,9 @@ class AppSettingsService:
                 updated_data[key] = value if value != "" else None
             elif value is not None:
                 updated_data[key] = value if value != "" else None
+
+        if "access_token" in kwargs or updated_data.get("access_token"):
+            updated_data["had_access_token"] = True
 
         self._settings = AppSettings(**updated_data)
         self._save(self._settings)

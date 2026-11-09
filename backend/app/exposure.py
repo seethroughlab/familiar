@@ -17,8 +17,9 @@ plainly from this machine:
 OPEN serves anyone, and something has to choose it:
 
 - `FAMILIAR_OPEN_SERVER=1` (the demo, and the documented rollback), or
-- the launcher finding an existing library with no token (`Start.EXISTING_OPEN`). ADR-0171 point 4:
-  an upgrade must not lock out a working installation. That server already warns at every start.
+- the launcher finding an existing library that has never had a token (`Start.EXISTING_OPEN`).
+  ADR-0171 point 4: an upgrade must not lock out a working installation. That server warns at
+  every start. A library whose token was *removed* is `Start.TOKEN_REMOVED`, and LOCAL.
 
 A server with a token is unaffected: the token decides.
 """
@@ -44,6 +45,7 @@ class Start(Enum):
     OPEN_BY_CHOICE = "open by choice"
     NEW = "new: mint a token"
     EXISTING_OPEN = "existing, open"
+    TOKEN_REMOVED = "had a token, removed"
 
 
 class Exposure(Enum):
@@ -64,7 +66,12 @@ def is_loopback(host: str) -> bool:
 
 
 def decide(
-    *, host: str, token: str | None, open_server: bool, has_tracks: Callable[[], bool]
+    *,
+    host: str,
+    token: str | None,
+    open_server: bool,
+    has_tracks: Callable[[], bool],
+    had_token: bool = False,
 ) -> Start:
     """The start-up decision alone, without doing any of it. `has_tracks` is only asked when it
     matters, since it needs the database."""
@@ -74,7 +81,9 @@ def decide(
         return Start.HAS_TOKEN
     if open_server:
         return Start.OPEN_BY_CHOICE
-    return Start.EXISTING_OPEN if has_tracks() else Start.NEW
+    if not has_tracks():
+        return Start.NEW
+    return Start.TOKEN_REMOVED if had_token else Start.EXISTING_OPEN
 
 
 def exposure_for(start: Start) -> Exposure:

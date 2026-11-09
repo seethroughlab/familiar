@@ -51,7 +51,7 @@ What happens without one depends on how the server came to be without one:
 | New (an empty library), reachable from other machines | It makes itself a token at first start and prints a sign-in link |
 | Existing (has a library), reachable, and has never had a token | It keeps serving everyone, as it did before, and warns at every start. MCP stays off |
 | `FAMILIAR_OPEN_SERVER=1` | It serves everyone on purpose (the demo). MCP stays off unless `MCP_ALLOWED_HOSTS` is set |
-| Anything else, such as a token removed or a server started with plain `uvicorn` | It answers only its own machine |
+| Anything else: a token removed (the server remembers it had one), or a server started with plain `uvicorn` | It answers only its own machine, and says how to recover |
 
 "Its own machine" means a loopback peer, a loopback `Host`, and no `Forwarded`, `X-Forwarded-For` or
 `X-Real-IP` header. A reverse proxy on the same host therefore does not count: a tokenless server

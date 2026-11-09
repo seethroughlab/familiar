@@ -293,3 +293,76 @@ async def test_a_remote_caller_cannot_revoke_into_a_lockout(monkeypatch):
         allowed = await client.delete("/api/v1/auth/token", headers=headers)
     assert allowed.status_code == 200
     assert state["access_token"] is None
+
+
+# ── A removed token is not a grandfathered one (found by the upgrade drill) ─────────────────────
+
+
+def test_a_library_whose_token_was_removed_is_local():
+    """Point 1: only a library that never had a token is grandfathered as open."""
+    start = decide(
+        host="0.0.0.0", token=None, open_server=False, has_tracks=lambda: True, had_token=True
+    )
+    assert start is Start.TOKEN_REMOVED
+    assert exposure_for(start) is Exposure.LOCAL
+    never = decide(
+        host="0.0.0.0", token=None, open_server=False, has_tracks=lambda: True, had_token=False
+    )
+    assert never is Start.EXISTING_OPEN
+
+
+def test_the_choice_still_opens_a_server_whose_token_was_removed():
+    """FAMILIAR_OPEN_SERVER is the documented rollback, and wins."""
+    start = decide(
+        host="0.0.0.0", token=None, open_server=True, has_tracks=lambda: True, had_token=True
+    )
+    assert start is Start.OPEN_BY_CHOICE
+
+
+def test_the_launcher_says_a_removed_token_leaves_it_local(monkeypatch, capsys):
+    from app.config import settings
+    from app.serve import main
+
+    monkeypatch.setattr(settings, "open_server", False)
+    exposure.record(None)
+    start = main(
+        ["--host", "0.0.0.0", "--no-advertise"],
+        migrate=lambda: None,
+        run=lambda h, p: None,
+        token=lambda: None,
+        has_tracks=lambda: True,
+        had_token=lambda: True,
+    )
+    assert start is Start.TOKEN_REMOVED
+    assert exposure.current() is Exposure.LOCAL
+    assert "app.token --create" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "updates",
+    [
+        [{"access_token": "t"}],
+        [{"access_token": "t"}, {"access_token": None}],
+        [{"server_name": "nas"}],  # with a token already in the file: back-fills
+    ],
+)
+def test_settings_remember_that_a_token_existed(tmp_path, updates):
+    import json
+
+    from app.services.app_settings import AppSettingsService
+
+    path = tmp_path / "settings.json"
+    if updates[0] == {"server_name": "nas"}:
+        path.write_text(json.dumps({"access_token": "existing"}))
+    service = AppSettingsService(settings_path=path)
+    for update in updates:
+        service.update(**update)
+    assert service.get().had_access_token is True
+
+
+def test_settings_without_a_token_never_claim_one(tmp_path):
+    from app.services.app_settings import AppSettingsService
+
+    service = AppSettingsService(settings_path=tmp_path / "settings.json")
+    service.update(server_name="nas")
+    assert service.get().had_access_token is False

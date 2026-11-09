@@ -21,7 +21,20 @@ Implementation:
   is not locked out. Recovery is `python -m app.token --create`; `DELETE /api/v1/auth/token` from
   another machine is refused where it would lock the caller out. `docs/INSTALLATION.md`, "The
   server token", covers finding, making, rotating, removing, reverse proxies, MCP and rollback.
-  **Not done:** an upgrade-and-recovery drill on a real installation. The exit condition needs one.
+- **Upgrade-and-recovery drill, 2026-11-09** (#458's follow-up). A scratch Docker install of the
+  released `0.2.0-beta23` image with a `/app/data` volume as in `docker-compose.prod.yml`: a fresh
+  start minted; with a library and the token removed it served everyone and warned; upgraded to
+  `main` it kept serving, warned, and refused `/mcp`; `docker exec … python -m app.token --create`
+  recovered it; a restart kept the token; `FAMILIAR_OPEN_SERVER=1` rolled it back. **It found two
+  defects, both fixed before the drill passed:**
+  - `docker exec` runs as root and the server as `familiar`, so `--create` replaced
+    `settings.json` with a root-owned 0600 file. The server could not read it, logged one warning,
+    and ran on default settings: no token, and every other setting gone. `atomic_write` now keeps
+    the replaced file's owner and mode, and a new file takes its directory's owner.
+  - A library whose token was *removed* was grandfathered as open at the next start, because the
+    test was only "has tracks, no token". `settings.json` now records `had_access_token`, and such
+    a server starts `Start.TOKEN_REMOVED`: LOCAL, saying how to recover.
+  Phases 1–2 of the exit condition are met. Media (Phases 3–4) remains.
 - **Point 7:** a LOCAL tokenless server refuses a non-loopback `Host`, which is the DNS-rebinding
   case. An OPEN tokenless server refuses `/mcp` unless `MCP_ALLOWED_HOSTS` is set, which turns on
   FastMCP's own protection. With a token, `/mcp` needs the token, which a rebinding page cannot
