@@ -15,7 +15,9 @@ Implementation:
   (`tests/test_playlist_operations.py`, `tests/test_api_playlists.py`, ADR-0173). The other skips
   were state, not missing UI: `profiles.spec.ts` now seeds the profile it selects through the API
   (and deletes it) and asserts the selector a fresh context always shows; `library-sync.spec.ts`
-  waits out the global setup's sync instead of skipping its trigger test. No `test.skip` remains in
+  cancels any running sync, then requires the button's click to start one (the server answers
+  `started`) and the panel to show Cancel. Waiting the setup's sync out instead was tried first and
+  was flaky: on a cold CI runner it was still running after five minutes. No `test.skip` remains in
   `e2e/`. `packages/web/scripts/check-e2e-skips.mjs` runs after the suite in CI and fails on any
   skipped test unless it names a capability from its `CAPABILITIES` list (empty today), which it
   reports on a line of its own (point 2).

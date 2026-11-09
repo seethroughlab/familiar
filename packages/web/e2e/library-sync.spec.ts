@@ -48,22 +48,32 @@ test.describe('Library Sync', () => {
       hasText: /sync/i,
     }).first();
 
-    // The global setup's sync can still be running (it waits 120 s, and a cold CI library can take
-    // longer). That used to skip this test, so a run could pass without ever pressing the button
-    // (ADR-0174 point 1). Wait it out instead, then require the button.
-    // Up to three minutes for that sync, then 30 s for the one this test starts; the default
-    // 30 s test timeout would end the test while it was still waiting for the first.
-    test.setTimeout(240000);
-    await waitForSyncComplete(page, 180000);
-    await expect(syncButton).toBeEnabled({ timeout: 10000 });
-
-    await syncButton.click();
+    // Start from a known state rather than waiting on one. The global setup's sync can still be
+    // running after five minutes on a cold CI runner (measured: 120 s of setup plus 180 s here was
+    // not enough), and before ADR-0174 this test skipped in that case, so a run could pass without
+    // ever pressing the button. Cancelling clears the sync state; then the button must be enabled.
+    const cancelled = await page.request.post('/api/v1/library/sync/cancel');
+    expect(cancelled.ok()).toBe(true);
     await waitForSyncComplete(page, 30000);
+    await expect(syncButton).toBeEnabled({ timeout: 15000 });
 
-    // Assert the sync actually reached a terminal state, rather than asserting nothing.
-    const status = await page.request.get('/api/v1/library/sync/status');
-    expect(status.ok()).toBe(true);
-    expect(['idle', 'complete', 'completed']).toContain((await status.json()).status);
+    // What this test is about: the button starts a sync. The server's answer to the click says so
+    // directly; "already_running" would mean the click reached nothing new.
+    const [started] = await Promise.all([
+      page.waitForResponse(
+        (r) => r.url().includes('/api/v1/library/sync') && r.request().method() === 'POST',
+      ),
+      syncButton.click(),
+    ]);
+    expect(started.ok()).toBe(true);
+    expect((await started.json()).status).toBe('started');
+
+    // And the page shows it running, before anything finishes.
+    // A running sync replaces nothing silently: the panel offers Cancel and shows the phases.
+    await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible({ timeout: 15000 });
+
+    // Leave the library quiet for the tests after this one.
+    await page.request.post('/api/v1/library/sync/cancel');
   });
 
   test('Library shows content after sync', async ({ page }) => {
