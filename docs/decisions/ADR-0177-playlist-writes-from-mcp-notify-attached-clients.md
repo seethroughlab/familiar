@@ -1,8 +1,19 @@
 # ADR-0177: Playlist Writes From MCP Notify Attached Clients
 
-Status: proposed
+Status: accepted
 
 Date: 2026-11-10
+
+Implementation:
+
+- **2026-11-10: shipped on both ends.** Server: `PlaybackCommandChannel.notify` in
+  `backend/app/services/playback_commands.py` puts the notice on every attached player's queue
+  (sharing `send`'s drop-oldest `_enqueue`), and `backend/app/mcp/server.py` calls it after a
+  `PLAYLIST_WRITING_TOOLS` call whose result has no `error` (#476, in v0.2.0-beta24). Tests:
+  `TestNotify` in `tests/test_command_channel.py`, `TestPlaylistWritesNotifyClients` in
+  `tests/test_mcp_server.py`. Client: `familiar-apple` #269 decodes `playlists_changed`, reloads
+  `PlaylistsStore` (coalescing a notice that arrives mid-load) and reloads an open playlist's
+  detail; in app 1.7 (build 80, submitted to App Review 2026-11-10).
 
 Extends [ADR-0044](ADR-0044-mcp-clients-actuate-playback-through-a-command-channel.md)
 
