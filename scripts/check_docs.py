@@ -11,6 +11,14 @@ of claim and checks each against the tree:
 2. `make <target>` resolves in the root or backend Makefile.
 3. `pnpm <script>` / `pnpm run <script>` resolves in the root or a workspace `package.json`.
 
+And, since ADR-0175, three about the documents themselves:
+
+4. A relative markdown link (`[text](docs/X.md)`, `(#anchors)` aside) points at a file that exists.
+5. A retired name (the browser player, the Capacitor app, the Dexie offline store) appears only in a
+   paragraph that says it is retired, deleted or not to be used. A guide that still names
+   `FullPlayer/` as where the player lives is the drift this exists to catch.
+6. `CLAUDE.md` includes `AGENTS.md` and stays small: the shared guide is written once.
+
 A path that carries a glob, a placeholder or a line number is checked without them. Anything
 inside a fenced code block that is *output* (a `$` prompt line or a log) is skipped by fence; the
 check is on prose and on commands the reader is told to type.
@@ -32,6 +40,7 @@ CURRENT_STATE_DOCS = [
     "README.md",
     "CONTRIBUTING.md",
     "AGENTS.md",
+    "CLAUDE.md",
     "docs/START-HERE.md",
     "docs/ARCHITECTURE.md",
     "docs/HEALTH.md",
@@ -180,6 +189,62 @@ def check(doc: Path, targets: set[str], scripts: set[str]) -> list[str]:
     return problems
 
 
+#: Names of the architecture retired in August 2026 (ADR-0001 point 6, ADR-0057, ADR-0059).
+RETIRED = re.compile(
+    r"FullPlayer|playerStore|WebAudioEngine|useAudioEngine|offlineService|downloadStore|"
+    r"playlistCache|@capacitor|isNativeApp|packages/ios|\bDexie\b|service worker",
+    re.IGNORECASE,
+)
+#: A paragraph naming a retired thing must also say so.
+RETIRED_SAID = re.compile(
+    r"retired|deleted|removed|tombstone|unregister|do not|don't|never|not to |without an ADR|"
+    r"\bno\b|gone|went with|replaced",
+    re.IGNORECASE,
+)
+LINK = re.compile(r"\]\(([^)\s]+)\)")
+#: `CLAUDE.md` holds tool-specific notes and the include; more than this is a copy growing back.
+CLAUDE_MAX_LINES = 40
+
+
+def check_links_and_retired(doc: Path) -> list[str]:
+    rel = doc.relative_to(ROOT)
+    problems: list[str] = []
+    text = doc.read_text()
+    for lineno, line in enumerate(text.split("\n"), 1):
+        # A link written inside `code` is an example of the syntax, not a link.
+        for target in LINK.findall(re.sub(r"`[^`]*`", "", line)):
+            if target.startswith(("http://", "https://", "mailto:", "#")):
+                continue
+            path = target.split("#", 1)[0]
+            if path and not (doc.parent / path).exists():
+                problems.append(f"{rel}:{lineno}: link to `{target}` does not resolve")
+    for paragraph in re.split(r"\n\s*\n", text):
+        if RETIRED.search(paragraph) and not RETIRED_SAID.search(paragraph):
+            first = paragraph.strip().split("\n", 1)[0][:80]
+            problems.append(
+                f"{rel}: names retired architecture ({RETIRED.search(paragraph).group(0)}) "
+                f"without saying it is retired, in: {first!r}"
+            )
+    return problems
+
+
+def check_claude_wrapper() -> list[str]:
+    claude = ROOT / "CLAUDE.md"
+    if not claude.exists():
+        return []
+    text = claude.read_text()
+    problems = []
+    if not re.search(r"^@AGENTS\.md\s*$", text, re.M):
+        problems.append("CLAUDE.md: must include the shared guide with a line `@AGENTS.md` (ADR-0175)")
+    lines = len(text.splitlines())
+    if lines > CLAUDE_MAX_LINES:
+        problems.append(
+            f"CLAUDE.md: {lines} lines; shared guidance belongs in AGENTS.md, and this file only in "
+            f"what is specific to Claude Code (at most {CLAUDE_MAX_LINES} lines, ADR-0175)"
+        )
+    return problems
+
+
 def main() -> int:
     targets, scripts = make_targets(), pnpm_scripts()
     problems: list[str] = []
@@ -189,12 +254,17 @@ def main() -> int:
             problems.append(f"{rel}: listed as a current-state document but missing")
             continue
         problems.extend(check(doc, targets, scripts))
+        problems.extend(check_links_and_retired(doc))
+    problems.extend(check_claude_wrapper())
     if problems:
-        print("Current-state docs name things that do not exist (ADR-0127 point 9):")
+        print("Current-state docs are out of step with the tree (ADR-0127 point 9, ADR-0175):")
         for p in problems:
             print(f"  {p}")
         return 1
-    print(f"Docs check OK: {len(CURRENT_STATE_DOCS)} documents, every path, make target and pnpm script resolves.")
+    print(
+        f"Docs check OK: {len(CURRENT_STATE_DOCS)} documents; every path, link, make target and pnpm "
+        "script resolves, and nothing retired is named as current."
+    )
     return 0
 
 

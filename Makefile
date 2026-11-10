@@ -117,7 +117,7 @@ check:
 	pnpm --filter @familiar/frontend run check:boundaries
 	pnpm --filter @familiar/frontend run check:contracts
 	pnpm --filter @familiar/frontend run check:embed-guardrails
-	pnpm --filter @familiar/frontend test
+	pnpm test
 	pnpm --filter @familiar/api-client run check
 	@echo "── docs, images"
 	python3 scripts/check_docs.py

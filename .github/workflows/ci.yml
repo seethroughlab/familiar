@@ -723,9 +723,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install pnpm
+        # The version comes from `packageManager` in package.json (ADR-0175): one pin, which a
+        # contributor's corepack or pnpm also reads. Naming it here as well makes the action fail.
         uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -783,9 +783,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install pnpm
+        # The version comes from `packageManager` in package.json (ADR-0175): one pin, which a
+        # contributor's corepack or pnpm also reads. Naming it here as well makes the action fail.
         uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -820,9 +820,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install pnpm
+        # The version comes from `packageManager` in package.json (ADR-0175): one pin, which a
+        # contributor's corepack or pnpm also reads. Naming it here as well makes the action fail.
         uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -862,9 +862,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install pnpm
+        # The version comes from `packageManager` in package.json (ADR-0175): one pin, which a
+        # contributor's corepack or pnpm also reads. Naming it here as well makes the action fail.
         uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -1011,9 +1011,9 @@ jobs:
         run: uv run python -c "from app.db.migration_preflight import assert_database_at_head; assert_database_at_head()"
 
       - name: Install pnpm
+        # The version comes from `packageManager` in package.json (ADR-0175): one pin, which a
+        # contributor's corepack or pnpm also reads. Naming it here as well makes the action fail.
         uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
