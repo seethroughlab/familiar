@@ -13,7 +13,7 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "screenshots": "playwright test e2e/screenshots.spec.ts --project=chromium",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.e2e.json"
   },
   "dependencies": {
     "@familiar/frontend": "workspace:*",

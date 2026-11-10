@@ -1,4 +1,4 @@
-import { Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
 /**
  * The navigation labels that mean "the app has finished booting".
@@ -42,7 +42,7 @@ export async function ensureProfile(page: Page, profileName = 'Test User') {
     // Check for profile selector heading
     const headings = document.querySelectorAll('h1, h2, h3');
     const hasProfileSelector = Array.from(headings).some(
-      el => el.textContent?.includes("Who's listening?") && el.offsetParent !== null
+      el => el.textContent?.includes("Who's listening?") && (el as HTMLElement).offsetParent !== null
     );
     if (hasProfileSelector) return 'profile-selector';
 
