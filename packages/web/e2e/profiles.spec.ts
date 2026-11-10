@@ -15,12 +15,9 @@ test.describe('Profiles', () => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
-    // Should see the profile selector
-    const profileSelector = page.getByRole('heading', { name: "Who's listening?" });
-    if (!(await profileSelector.isVisible({ timeout: 3000 }).catch(() => false))) {
-      test.skip(true, 'Already logged in - profile selector not shown');
-      return;
-    }
+    // A fresh browser context has no profile chosen, so the selector is always shown; the test
+    // above asserts it. Not finding it is a failure, not a reason to skip (ADR-0174 point 1).
+    await expect(page.getByRole('heading', { name: "Who's listening?" })).toBeVisible({ timeout: 5000 });
 
     // Click Add Profile
     await page.getByRole('button', { name: /Add Profile/ }).click();
@@ -54,23 +51,21 @@ test.describe('Profiles', () => {
     await expect(switchBtn).toBeVisible({ timeout: 3000 });
   });
 
-  test('can select existing profile', async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
-
-    // Check for profile buttons (letter + name pattern)
-    const profileButtons = page.getByRole('button', { name: /^[A-Z] .+/ });
-    const count = await profileButtons.count();
-
-    if (count > 0) {
-      // Click a profile
-      await profileButtons.first().click();
-      // Should navigate to main app
-      // The destinations of ADR-0058 point 2 — this used to wait on "Tracks"/"Artists", which the
-    // sidebar stopped listing when it stopped listing browsers.
-    await page.waitForSelector('a:has-text("Library"), a:has-text("Tools")', { timeout: 5000 });
-    } else {
-      test.skip(true, 'No existing profiles to select');
+  test('can select existing profile', async ({ page, request }) => {
+    // Seed the profile this test selects, rather than skipping when the server has none
+    // (ADR-0174 point 1). Removed afterwards so a run leaves the server as it found it.
+    const name = `E2E ${Date.now()}`;
+    const created = await request.post('/api/v1/profiles', { data: { name } });
+    expect(created.ok()).toBe(true);
+    const { id } = await created.json();
+    try {
+      await page.goto('/');
+      await page.waitForLoadState('networkidle');
+      await page.getByRole('button', { name: new RegExp(name) }).click();
+      // The destinations of ADR-0058 point 2.
+      await page.waitForSelector('a:has-text("Library")', { timeout: 5000 });
+    } finally {
+      await request.delete(`/api/v1/profiles/${id}`);
     }
   });
 });
