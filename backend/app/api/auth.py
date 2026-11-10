@@ -92,9 +92,12 @@ def token_matches(presented: str | None, configured: str | None) -> bool:
 #:
 #: `GET`/`HEAD` only, and only these shapes: uploading or deleting artwork stays gated. Stream and
 #: video URLs are keyed by a v4 UUID, so with the rest of the API closed they cannot be enumerated.
-#: Album-hash artwork can: `sha256(artist|album)` is derivable, so it is an oracle over the
-#: collection. ADR-0045 records that as the exemption's one real leak, and ADR-0134 point 3 as a
-#: follow-up now that servers sit on shared Wi-Fi.
+#: Album artwork is keyed by an `Album.id` UUID, or, for a track the resolver could not place, by
+#: `compute_album_hash(artist, album)`, which anyone can compute. That was the exemption's one real
+#: leak (ADR-0045, ADR-0134 point 3): an oracle over the collection. Since ADR-0176 Phase 1 a hash
+#: key is served only with this server's MAC (`app/services/artwork_keys.py`), on the image route and
+#: on `/artwork/status/{key}` (which the second pattern below also matches); a bare hash is a 404.
+#: Requiring a credential for media at all is ADR-0176's later phases.
 MEDIA_ROUTES = tuple(
     re.compile(pattern)
     for pattern in (

@@ -71,11 +71,11 @@ export async function setApiOrigin(url: string): Promise<void> {
 // reinstall. It is a server-wide credential, not a per-profile one — switching profiles must not
 // clear it, which is why it lives here rather than in profileService.
 //
-// **This covers axios requests only.** Artwork and audio are `<img src>` and `el.src` on an
-// `<audio>` element (see `AlbumArtwork.tsx` and `WebAudioEngine.ts:227`), and a media element
-// cannot send a custom header. Those routes are unauthenticated today, so nothing is broken by
-// this — but they are the reason ADR-0045 point 5 cannot simply be switched on, and that is
-// recorded in the ADR rather than discovered when playback stops.
+// **This covers axios requests only.** Artwork is an `<img src>` (`AlbumArtwork.tsx`), and an image
+// element cannot send a custom header, so the media routes are exempt from the token (ADR-0045).
+// ADR-0176 decides how media gets a credential of its own: a cookie for this app's images, signed
+// URLs for speakers, the header for the Apple apps. (The browser player this comment once also
+// cited was retired with the web player.)
 // ============================================================================
 
 const SERVER_TOKEN_KEY = 'familiar_server_token';

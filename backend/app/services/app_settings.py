@@ -140,6 +140,9 @@ class AppSettings(BaseModel):
     # is configured and the gate is off, which is the pre-ADR-0045 posture and is what lets this ship
     # before the clients can present one. See `app/api/auth.py` for why it is stored in the clear.
     access_token: str | None = None
+    # Keys artwork hash URLs (ADR-0176 Phase 1, `app/services/artwork_keys.py`). Minted on first use;
+    # never sent to a client, not even masked.
+    artwork_key_secret: str | None = None
     # Whether this server has ever had a token (ADR-0171 point 4). Only a library that never had one
     # is grandfathered as open; one whose token was removed answers only its own machine, or an
     # upgrade drill's "remove the token, restart" would have made it public again. Set by any write
@@ -267,6 +270,9 @@ class AppSettingsService:
         # — a path that requires already holding it.
         if data.get("access_token"):
             data["access_token"] = "•" * 8
+
+        # Not masked but absent: nothing a client does needs it, and a prefix would be a start on it.
+        data.pop("artwork_key_secret", None)
 
         return data
 
