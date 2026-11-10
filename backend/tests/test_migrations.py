@@ -11,6 +11,7 @@ import os
 import re
 import subprocess
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -317,18 +318,57 @@ def test_image_starts_one_server_process(monkeypatch: pytest.MonkeyPatch) -> Non
 # ---------------------------------------------------------------------------
 
 
-def _alembic_run(*args: str) -> subprocess.CompletedProcess[str]:
-    """Run an alembic command and return the result."""
+def _alembic_run(*args: str, database_url: str | None = None) -> subprocess.CompletedProcess[str]:
+    """Run an alembic command and return the result, against `database_url` when given."""
     backend_dir = Path(__file__).parent.parent
+    env = {**os.environ, "DATABASE_URL": database_url} if database_url else None
     return subprocess.run(
         [sys.executable, "-m", "alembic", *args],
         cwd=backend_dir,
         capture_output=True,
         text=True,
+        env=env,
     )
 
 
-def test_migration_downgrade_upgrade_cycle(client: TestClient) -> None:
+@pytest.fixture(scope="module")
+def round_trip_database() -> Iterator[str]:
+    """A fresh database for the downgrade → upgrade tests, dropped afterwards.
+
+    **Not the shared test database.** Postgres never reuses the slot of a dropped column, so every
+    downgrade that drops a column and upgrade that re-adds it spends one of a table's 1,600 for good.
+    These tests walk the whole chain from head down to each reversible revision and back, every run,
+    and on the shared database that eventually failed every migration with "tables can have at most
+    1600 columns" (found 2026-11-10). A run that died mid-walk also left the shared database at an old
+    revision, so the rest of the suite failed setup. Here each run starts from nothing.
+    """
+    sa = pytest.importorskip("sqlalchemy")
+    from app.config import settings
+
+    sync_url = settings.sync_database_url
+    base = sync_url.rsplit("/", 1)[1].split("?")[0]
+    scratch = f"{base.removesuffix('_test')}_roundtrip_test"  # the guard's `_test` suffix
+    admin = sa.create_engine(sync_url.rsplit("/", 1)[0] + "/postgres", isolation_level="AUTOCOMMIT")
+    try:
+        with admin.connect() as conn:
+            conn.execute(sa.text(f'DROP DATABASE IF EXISTS "{scratch}" WITH (FORCE)'))
+            conn.execute(sa.text(f'CREATE DATABASE "{scratch}"'))
+    except Exception as exc:  # pragma: no cover - permissions vary by deployment
+        admin.dispose()
+        pytest.skip(f"cannot create a scratch database: {exc}")
+
+    url = sync_url.rsplit("/", 1)[0].replace("postgresql://", "postgresql+asyncpg://") + f"/{scratch}"
+    try:
+        result = _alembic_run("upgrade", "head", database_url=url)
+        assert result.returncode == 0, f"upgrade head on the scratch database failed: {result.stderr}"
+        yield url
+    finally:
+        with admin.connect() as conn:
+            conn.execute(sa.text(f'DROP DATABASE IF EXISTS "{scratch}" WITH (FORCE)'))
+        admin.dispose()
+
+
+def test_migration_downgrade_upgrade_cycle(round_trip_database: str) -> None:
     """Verify the latest migration survives a downgrade → upgrade round-trip.
 
     This ensures:
@@ -337,19 +377,19 @@ def test_migration_downgrade_upgrade_cycle(client: TestClient) -> None:
     - The schema is consistent after the round-trip
     """
     # Ensure we're at head first
-    result = _alembic_run("upgrade", "head")
+    result = _alembic_run("upgrade", "head", database_url=round_trip_database)
     assert result.returncode == 0, f"upgrade head failed: {result.stderr}"
 
     # Downgrade one step
-    result = _alembic_run("downgrade", "-1")
+    result = _alembic_run("downgrade", "-1", database_url=round_trip_database)
     assert result.returncode == 0, f"downgrade -1 failed: {result.stderr}"
 
     # Upgrade back to head
-    result = _alembic_run("upgrade", "head")
+    result = _alembic_run("upgrade", "head", database_url=round_trip_database)
     assert result.returncode == 0, f"upgrade head after downgrade failed: {result.stderr}"
 
     # Verify we're at head
-    result = _alembic_run("current")
+    result = _alembic_run("current", database_url=round_trip_database)
     assert result.returncode == 0, f"alembic current failed: {result.stderr}"
     assert "(head)" in result.stdout, f"Not at head after round-trip: {result.stdout}"
 
@@ -413,26 +453,26 @@ _BROKEN_DOWNGRADE_CHAIN = {
 
 
 @pytest.mark.parametrize("revision", REVERSIBLE_MIGRATIONS)
-def test_reversible_migration_round_trip(client: TestClient, revision: str) -> None:
+def test_reversible_migration_round_trip(round_trip_database: str, revision: str) -> None:
     """Each reversible migration survives a downgrade → upgrade cycle."""
     if revision in _BROKEN_DOWNGRADE_CHAIN:
         pytest.skip(f"downgrade chain through drop_spt_ext is known-broken for {revision}")
     # Ensure at head
-    result = _alembic_run("upgrade", "head")
+    result = _alembic_run("upgrade", "head", database_url=round_trip_database)
     assert result.returncode == 0, f"upgrade head failed: {result.stderr}"
 
     # Upgrade to this specific revision (in case we're testing older ones)
-    result = _alembic_run("upgrade", revision)
+    result = _alembic_run("upgrade", revision, database_url=round_trip_database)
     assert result.returncode == 0, f"upgrade to {revision} failed: {result.stderr}"
 
     # Downgrade one step from this revision
-    result = _alembic_run("downgrade", f"{revision}-1")
+    result = _alembic_run("downgrade", f"{revision}-1", database_url=round_trip_database)
     assert result.returncode == 0, f"downgrade from {revision} failed: {result.stderr}"
 
     # Upgrade back
-    result = _alembic_run("upgrade", revision)
+    result = _alembic_run("upgrade", revision, database_url=round_trip_database)
     assert result.returncode == 0, f"upgrade back to {revision} failed: {result.stderr}"
 
     # Restore to head for the next test
-    result = _alembic_run("upgrade", "head")
+    result = _alembic_run("upgrade", "head", database_url=round_trip_database)
     assert result.returncode == 0, f"restore to head failed: {result.stderr}"
