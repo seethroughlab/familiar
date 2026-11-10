@@ -6,7 +6,7 @@ Date: 2026-11-10
 
 Implementation:
 
-- **2026-11-10: shipped on both ends.** Server: `PlaybackCommandChannel.notify` in
+- **2026-11-10: built on both ends.** Server: `PlaybackCommandChannel.notify` in
   `backend/app/services/playback_commands.py` puts the notice on every attached player's queue
   (sharing `send`'s drop-oldest `_enqueue`), and `backend/app/mcp/server.py` calls it after a
   `PLAYLIST_WRITING_TOOLS` call whose result has no `error` (#476, in v0.2.0-beta24). Tests:
