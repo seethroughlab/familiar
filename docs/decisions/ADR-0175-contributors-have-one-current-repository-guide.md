@@ -4,6 +4,22 @@ Status: accepted
 
 Date: 2026-11-08
 
+Implementation:
+
+- **Phases 1 and 2, 2026-11-09.** Measured first: `CLAUDE.md` was 653 lines (last changed
+  2026-11-07) and `AGENTS.md` 184 (2026-09-04), with no substantial paragraph in common; both had
+  drifted. `CLAUDE.md`'s Key Files still named `FullPlayer/`, `playerStore.ts`, `WebAudioEngine.ts`
+  and `useAudioEngine.ts`, all deleted with the web player, and said `main.tsx` registers a Web
+  Audio engine; `AGENTS.md`'s test command (`uv run pytest tests/`) refuses to run without
+  `TEST_DATABASE_URL` (ADR-0128). `AGENTS.md` is now the one current guide, rebuilt from both
+  against the tree, with both quality tiers (point 5) and a "before you change these, read the ADR"
+  table for the traps that cost time. `CLAUDE.md` is `@AGENTS.md` plus three Claude Code notes
+  (point 2). Its 289 lines of ADR sequencing and history moved **verbatim** to
+  `docs/ADR-HISTORY.md`. `scripts/check_docs.py` now also checks relative links, flags a retired
+  name in a paragraph that does not say it is retired, and fails if `CLAUDE.md` stops including
+  `AGENTS.md` or grows past 40 lines (point 6); each was shown to fail on a planted case.
+- **Not done:** Phase 3, the clean-machine onboarding pass.
+
 Extends [ADR-0127](ADR-0127-current-documentation-precedes-project-history.md)
 
 ## Context
