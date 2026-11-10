@@ -23,6 +23,13 @@ machine. `python -m app.token --create` makes a token from a shell on the server
 
 ### Fixed
 
+- **A browser without the server's token is asked to sign in.** It used to see "Failed to load
+  profiles" beside "Add Profile", which read as a server with no profiles. The profile picker now
+  explains that the server needs its token and takes it there, then shows your profiles.
+- **The web admin's forms are announced by name** (found by the release checklist's keyboard and
+  screen-reader pass). Server → Access's token field had only a placeholder, gone once filled; the
+  Create Profile colours were eight unnamed buttons with no selected state, and its name field's
+  label was tied to nothing; Library → Sync's "Sync Now" was announced as "Sync library".
 - **Stopping the server no longer leaves a library-scan process behind** holding a database
   connection. The scan pool's worker outlives each sync, and an idle pool worker never notices its
   parent has gone; nothing stopped that pool at shutdown, so a SIGTERM (how Familiar Server stops
