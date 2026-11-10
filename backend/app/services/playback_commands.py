@@ -211,14 +211,7 @@ class PlaybackCommandChannel:
             candidates = able
 
         player = candidates[0]
-        if player.queue.full():
-            # Dropping the oldest keeps the newest instruction, which is the one the listener
-            # actually meant. A backlog of stale transport commands helps nobody.
-            try:
-                player.queue.get_nowait()
-            except asyncio.QueueEmpty:  # pragma: no cover - racing the consumer
-                pass
-        player.queue.put_nowait(command)
+        _enqueue(player, command)
         logger.info(
             "playback_command_sent",
             extra={
@@ -228,6 +221,43 @@ class PlaybackCommandChannel:
             },
         )
         return player
+
+    def notify(self, profile_id: UUID, notice: dict[str, Any]) -> int:
+        """Tell *every* attached client of this profile that something it shows has changed.
+
+        **Not a command, and it neither targets nor raises** (ADR-0177). `send` picks one player
+        because "play this" must happen once; a notice that the playlists changed is true for every
+        screen showing them, so it goes to all of them. Nobody attached is the normal case — the
+        next launch fetches fresh — so it answers with how many were told rather than an error.
+
+        No capability is required. A build that does not know the notice's type ignores it
+        (`PlaybackCommand.decode` returns nil for unknown types), and naming a new capability would
+        make a newer client's subscribe fail against an older server, which rejects unknown names.
+        """
+        players = self.players(profile_id)
+        for player in players:
+            _enqueue(player, notice)
+        if players:
+            logger.info(
+                "playback_notice_sent",
+                extra={
+                    "profile_id": str(profile_id),
+                    "notice": notice.get("type"),
+                    "players": [p.id for p in players],
+                },
+            )
+        return len(players)
+
+
+def _enqueue(player: AttachedPlayer, message: dict[str, Any]) -> None:
+    if player.queue.full():
+        # Dropping the oldest keeps the newest instruction, which is the one the listener
+        # actually meant. A backlog of stale transport commands helps nobody.
+        try:
+            player.queue.get_nowait()
+        except asyncio.QueueEmpty:  # pragma: no cover - racing the consumer
+            pass
+    player.queue.put_nowait(message)
 
 
 #: One channel per process, matching point 6's in-process, ephemeral scope.

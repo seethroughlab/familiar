@@ -374,3 +374,70 @@ class TestOAuthDiscovery:
     async def test_discovery_probes_are_not_answered_with_html(self, path):
         with pytest.raises(NotFoundError):
             await spa_fallback(path)
+
+
+class TestPlaylistWritesNotifyClients:
+    """ADR-0177. A playlist made in a conversation must appear in a running app without a relaunch."""
+
+    PROFILE = UUID("00000000-0000-0000-0000-0000000000aa")
+
+    @pytest.fixture
+    def harness(self, monkeypatch):
+        from contextlib import asynccontextmanager
+
+        from app.services.playback_commands import PlaybackCommandChannel
+
+        channel = PlaybackCommandChannel()
+        player = channel.attach(
+            self.PROFILE, name="Mac", platform="macos", capabilities=frozenset(), now=0.0
+        )
+        outcome: dict[str, Any] = {"result": {"created": True}}
+
+        async def resolve(_ctx):
+            return self.PROFILE
+
+        @asynccontextmanager
+        async def no_session():
+            yield None
+
+        async def execute(self, name, arguments):
+            return outcome["result"]
+
+        monkeypatch.setattr("app.mcp.server.resolve_profile", resolve)
+        monkeypatch.setattr("app.mcp.server.async_session_maker", no_session)
+        monkeypatch.setattr("app.mcp.server.get_channel", lambda: channel)
+        monkeypatch.setattr("app.services.llm.executor.ToolExecutor.execute", execute)
+        return player, outcome
+
+    async def _call(self, name):
+        import mcp.types as types
+
+        from app.mcp.server import on_call_tool
+
+        return await on_call_tool(
+            _ctx({}, SERVICES), types.CallToolRequestParams(name=name, arguments={})
+        )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "tool",
+        ["create_playlist_from_items", "add_tracks_to_playlist", "generate_playlist",
+         "select_diverse_tracks"],
+    )
+    async def test_a_playlist_write_tells_attached_clients(self, harness, tool):
+        player, _ = harness
+        await self._call(tool)
+        assert player.queue.get_nowait() == {"type": "playlists_changed"}
+
+    @pytest.mark.asyncio
+    async def test_a_failed_write_tells_nobody(self, harness):
+        player, outcome = harness
+        outcome["result"] = {"error": "Playlist not found"}
+        await self._call("add_tracks_to_playlist")
+        assert player.queue.qsize() == 0
+
+    @pytest.mark.asyncio
+    async def test_a_read_tells_nobody(self, harness):
+        player, _ = harness
+        await self._call("list_playlists")
+        assert player.queue.qsize() == 0
