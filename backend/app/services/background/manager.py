@@ -395,6 +395,11 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
             self._executor.shutdown(wait=False)
         if self._ondemand_executor:
             self._ondemand_executor.shutdown(wait=False)
+        # The scan pool is a module singleton, not one of this manager's, and was never stopped
+        # here: its idle worker outlived every server that started it (2026-11-10).
+        from app.services.tasks.library_sync import shutdown_scan_executor
+
+        shutdown_scan_executor()
 
         logger.info("BackgroundManager shutdown complete")
 
