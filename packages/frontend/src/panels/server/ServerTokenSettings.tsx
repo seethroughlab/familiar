@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { KeyRound, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { getApiUrl, getServerToken, setServerToken } from '../../api/base';
 
@@ -16,7 +16,9 @@ type TestStatus = 'idle' | 'testing' | 'success' | 'error';
  * screen into an unexplained 401. `/api/v1/settings` is the probe because it is behind the gate and
  * needs no profile — `/api/v1/health` is deliberately public and would pass with any token at all.
  */
-export function ServerTokenSettings() {
+export function ServerTokenSettings({ onAccepted }: { onAccepted?: () => void } = {}) {
+  const inputId = useId();
+  const hintId = useId();
   const [token, setToken] = useState(() => getServerToken());
   const [status, setStatus] = useState<TestStatus>('idle');
   const [errorMsg, setErrorMsg] = useState('');
@@ -41,6 +43,7 @@ export function ServerTokenSettings() {
       });
       if (res.ok) {
         setStatus('success');
+        onAccepted?.();
       } else if (res.status === 401) {
         setStatus('error');
         setErrorMsg(
@@ -63,15 +66,20 @@ export function ServerTokenSettings() {
       <div className="flex items-center gap-3 mb-4">
         <KeyRound className="w-5 h-5 text-warning" />
         <div>
-          <h4 className="font-medium text-white">Server Token</h4>
-          <p className="text-sm text-zinc-400">
-            Only needed if your server has authentication turned on. Leave empty otherwise.
+          <h4 className="font-medium text-white">
+            <label htmlFor={inputId}>Server Token</label>
+          </h4>
+          <p id={hintId} className="text-sm text-zinc-400">
+            A server other devices can reach needs its token. Opening the server's sign-in link
+            fills this in; <code>python -m app.token</code> on the server prints it again.
           </p>
         </div>
       </div>
 
       <div className="flex gap-2">
         <input
+          id={inputId}
+          aria-describedby={hintId}
           type="password"
           value={token}
           onChange={(e) => {

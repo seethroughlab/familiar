@@ -197,7 +197,6 @@ export function LibrarySync() {
           <button
             onClick={() => startSync(false)}
             disabled={isRunning || isStarting}
-            aria-label="Sync library"
             className="px-3 py-1.5 text-sm bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-md flex items-center gap-2"
           >
             {isStarting ? (
