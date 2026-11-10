@@ -15,9 +15,10 @@ every profile. Once a token exists, changing or clearing it requires presenting 
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel
 
+from app.api import media_credentials
 from app.api.auth import TOKEN_HEADER, extract_token, generate_token, token_matches
 from app.services.app_settings import get_app_settings_service
 
@@ -170,3 +171,42 @@ async def get_pairing(request: Request) -> PairingInfo:
         port=env_settings.advertise_port,
         addresses=lan_addresses(),
     )
+
+
+class MediaCookieStatus(BaseModel):
+    """Whether this browser now holds a media cookie (ADR-0176 point 3)."""
+
+    #: False on a server with no token: there is nothing to derive one from, and none is needed.
+    issued: bool
+
+
+@router.post("/media-cookie", response_model=MediaCookieStatus)
+async def issue_media_cookie(request: Request, response: Response) -> MediaCookieStatus:
+    """Give the web admin a cookie its `<img>` artwork requests carry (ADR-0176 point 3).
+
+    Behind the token gate like the rest of the API, so only a caller holding the token gets one. The
+    cookie is `HttpOnly`, `SameSite=Strict` and scoped to `/api/v1`, and the gate honours it only for
+    `GET`/`HEAD` on media routes: it can show a picture and never perform an action. It is derived
+    from the token, so rotating the token invalidates it.
+    """
+    token = get_app_settings_service().get().access_token
+    if not token:
+        response.delete_cookie(media_credentials.COOKIE_NAME, path=media_credentials.COOKIE_PATH)
+        return MediaCookieStatus(issued=False)
+    response.set_cookie(
+        media_credentials.COOKIE_NAME,
+        media_credentials.cookie_value(token),
+        max_age=media_credentials.COOKIE_MAX_AGE_S,
+        path=media_credentials.COOKIE_PATH,
+        httponly=True,
+        samesite="strict",
+        secure=request.url.scheme == "https",
+    )
+    return MediaCookieStatus(issued=True)
+
+
+@router.delete("/media-cookie", response_model=MediaCookieStatus)
+async def clear_media_cookie(response: Response) -> MediaCookieStatus:
+    """Remove this browser's media cookie, as the web admin does when it forgets the token."""
+    response.delete_cookie(media_credentials.COOKIE_NAME, path=media_credentials.COOKIE_PATH)
+    return MediaCookieStatus(issued=False)

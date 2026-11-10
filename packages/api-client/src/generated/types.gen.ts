@@ -4148,6 +4148,18 @@ export type MapNode3dResponse = {
 };
 
 /**
+ * MediaCookieStatus
+ *
+ * Whether this browser now holds a media cookie (ADR-0176 point 3).
+ */
+export type MediaCookieStatus = {
+    /**
+     * Issued
+     */
+    issued: boolean;
+};
+
+/**
  * MergeArtistsRequest
  */
 export type MergeArtistsRequest = {
@@ -9440,6 +9452,88 @@ export type ArtworkGetArtworkByHashResponses = {
      */
     200: unknown;
 };
+
+export type AuthClearMediaCookieData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/auth/media-cookie';
+};
+
+export type AuthClearMediaCookieErrors = {
+    /**
+     * Bad Request
+     */
+    400: ErrorEnvelope;
+    /**
+     * Unauthorized
+     */
+    401: ErrorEnvelope;
+    /**
+     * Not Found
+     */
+    404: ErrorEnvelope;
+    /**
+     * Unprocessable Entity
+     */
+    422: ErrorEnvelope;
+    /**
+     * Internal Server Error
+     */
+    500: ErrorEnvelope;
+};
+
+export type AuthClearMediaCookieError = AuthClearMediaCookieErrors[keyof AuthClearMediaCookieErrors];
+
+export type AuthClearMediaCookieResponses = {
+    /**
+     * Successful Response
+     */
+    200: MediaCookieStatus;
+};
+
+export type AuthClearMediaCookieResponse = AuthClearMediaCookieResponses[keyof AuthClearMediaCookieResponses];
+
+export type AuthIssueMediaCookieData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/auth/media-cookie';
+};
+
+export type AuthIssueMediaCookieErrors = {
+    /**
+     * Bad Request
+     */
+    400: ErrorEnvelope;
+    /**
+     * Unauthorized
+     */
+    401: ErrorEnvelope;
+    /**
+     * Not Found
+     */
+    404: ErrorEnvelope;
+    /**
+     * Unprocessable Entity
+     */
+    422: ErrorEnvelope;
+    /**
+     * Internal Server Error
+     */
+    500: ErrorEnvelope;
+};
+
+export type AuthIssueMediaCookieError = AuthIssueMediaCookieErrors[keyof AuthIssueMediaCookieErrors];
+
+export type AuthIssueMediaCookieResponses = {
+    /**
+     * Successful Response
+     */
+    200: MediaCookieStatus;
+};
+
+export type AuthIssueMediaCookieResponse = AuthIssueMediaCookieResponses[keyof AuthIssueMediaCookieResponses];
 
 export type AuthGetPairingData = {
     body?: never;

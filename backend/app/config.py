@@ -273,10 +273,14 @@ MIN_CLIENT_CONTRACT = 1
 #     lyrics.status          GET /tracks/{id}/lyrics reports `status` (ADR-0163)
 #     visualizer.paired_page the app's visualizer page is an allowed, token-carrying client (ADR-0164)
 #     albums.move_to_album   Proposed Changes can merge or split an album (ADR-0166)
+#   ADR-0176 Phase 2:
+#     media.credentials      media reads accept the token header, the web admin's media cookie and
+#                            server-signed URLs (none required until Phase 4)
 SERVER_CAPABILITIES: tuple[str, ...] = (
     "lyrics.status",
     "visualizer.paired_page",
     "albums.move_to_album",
+    "media.credentials",
 )
 
 # Per-phase analysis version constants

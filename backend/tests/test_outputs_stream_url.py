@@ -31,6 +31,10 @@ def test_rewrites_using_app_settings_source(monkeypatch):
         def get_effective(self, key):
             return "http://10.0.0.130:4400" if key == "device_stream_base_url" else None
 
+        def get(self):
+            # No token: the URL is rewritten but not signed (signing: test_media_credentials.py).
+            return type("A", (), {"access_token": None})()
+
     monkeypatch.setattr(outputs_mod, "get_app_settings_service", lambda: _StubService())
     assert (
         _device_stream_url(FRONTEND_URL, TRACK_ID)
