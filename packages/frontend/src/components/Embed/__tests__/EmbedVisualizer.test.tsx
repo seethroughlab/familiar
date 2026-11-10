@@ -17,6 +17,7 @@ vi.mock('../../../api/tracks', () => ({
     get: vi.fn(),
     getLyrics: vi.fn(() => Promise.resolve({ synced: false, lines: [], plain_text: '', source: 'none' })),
     getArtworkUrl: (id: string) => `/artwork/${id}`,
+    getArtworkDataUrl: vi.fn((id: string) => Promise.resolve(`data:image/jpeg;base64,${id}`)),
   },
 }));
 
@@ -124,6 +125,19 @@ describe('EmbedVisualizer', () => {
     await waitFor(() => expect(get).toHaveBeenCalled());
     expect(lastProps?.track?.title).toBe('From Frame');
     expect(lastProps?.features).toBeNull();
+  });
+
+  it('hands the plugin the artwork as bytes, never the server URL (ADR-0176)', async () => {
+    // A sandboxed plugin can carry no credential, so a URL would fail once media is enforced.
+    get.mockResolvedValue({ id: 't1', title: 'Real Title', artist: 'A', album: 'B', features: null });
+    render(<EmbedVisualizer />);
+    act(() => send(frame({ id: 't1', title: 'T', artist: 'A', album: 'B' })));
+    await waitFor(() => expect(lastProps?.artworkUrl).toBe('data:image/jpeg;base64,t1'));
+
+    act(() => send(frame({ id: 't2', title: 'U', artist: 'A', album: 'B' })));
+    // Never the previous track's picture against the next track.
+    expect(lastProps?.artworkUrl).not.toBe('data:image/jpeg;base64,t1');
+    await waitFor(() => expect(lastProps?.artworkUrl).toBe('data:image/jpeg;base64,t2'));
   });
 
   it('renders with no track before any frame arrives', () => {

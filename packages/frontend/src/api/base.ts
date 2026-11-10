@@ -1,5 +1,9 @@
 import axios, { type AxiosInstance } from 'axios';
-import { client as generatedClient } from '@familiar/api-client';
+import {
+  authClearMediaCookie,
+  authIssueMediaCookie,
+  client as generatedClient,
+} from '@familiar/api-client';
 import { apiErrorTracker, extractAxiosError } from '../utils/apiErrorTracker';
 import { createLogger } from '../utils/logger';
 
@@ -71,11 +75,10 @@ export async function setApiOrigin(url: string): Promise<void> {
 // reinstall. It is a server-wide credential, not a per-profile one — switching profiles must not
 // clear it, which is why it lives here rather than in profileService.
 //
-// **This covers axios requests only.** Artwork is an `<img src>` (`AlbumArtwork.tsx`), and an image
-// element cannot send a custom header, so the media routes are exempt from the token (ADR-0045).
-// ADR-0176 decides how media gets a credential of its own: a cookie for this app's images, signed
-// URLs for speakers, the header for the Apple apps. (The browser player this comment once also
-// cited was retired with the web player.)
+// **The header covers axios requests only.** Artwork is an `<img src>` (`AlbumArtwork.tsx`), and an
+// image element cannot send a custom header. Since ADR-0176 the server gives this app a media cookie
+// for those (`syncMediaCookie`, below): `HttpOnly`, so this code never sees it, honoured only for
+// reading media. Media is not yet *required* to carry one (ADR-0176 Phase 4).
 // ============================================================================
 
 const SERVER_TOKEN_KEY = 'familiar_server_token';
@@ -115,13 +118,41 @@ export function takeTokenFromFragment(): string | null {
   return token;
 }
 
-/** Persist a server token. Empty string clears it. */
+/** Persist a server token, and keep the media cookie in step with it. Empty string clears both. */
 export async function setServerToken(token: string): Promise<void> {
-  _serverToken = token.trim();
+  const next = token.trim();
+  if (!next && _serverToken) await clearMediaCookie(); // needs the old token to be let through
+  _serverToken = next;
   if (_serverToken) {
     localStorage.setItem(SERVER_TOKEN_KEY, _serverToken);
+    await syncMediaCookie();
   } else {
     localStorage.removeItem(SERVER_TOKEN_KEY);
+  }
+}
+
+/**
+ * Ask the server for the media cookie this page's `<img>` artwork carries (ADR-0176 point 3).
+ *
+ * Call once the token is loaded, on a page served by the server itself: the admin and `/embed`.
+ * Not the visualizer page, whose origin is the app's own scheme, so no cookie of the server's
+ * reaches it; it fetches artwork with the header instead (`useAuthorizedImage`). Never throws: a
+ * failure leaves media as it was before ADR-0176, served without a credential until Phase 4.
+ */
+export async function syncMediaCookie(): Promise<void> {
+  if (!_serverToken) return;
+  try {
+    await authIssueMediaCookie();
+  } catch (error) {
+    log.warn('Media cookie not issued:', error);
+  }
+}
+
+async function clearMediaCookie(): Promise<void> {
+  try {
+    await authClearMediaCookie();
+  } catch {
+    // The token may already be rotated, in which case the cookie is already worthless.
   }
 }
 

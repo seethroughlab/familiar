@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { AudioVisualizer } from '../Visualizer/AudioVisualizer';
 import { getVisualizerState, subscribeToVisualizerState } from '../../services/visualizerSink';
 import { useTrackDetail } from '../../hooks/useTrackDetail';
@@ -43,12 +43,13 @@ export function EmbedVisualizer() {
     : null;
 
   const track = detail ?? fallback;
+  const artworkUrl = useAuthorizedArtwork(state.track?.id ?? null);
 
   return (
     <AudioVisualizer
       track={track}
       features={detail?.features ?? null}
-      artworkUrl={state.track ? tracksApi.getArtworkUrl(state.track.id) : null}
+      artworkUrl={artworkUrl}
       lyrics={lyrics}
       duration={detail?.duration_seconds ?? 0}
       isPlaying={state.playing}
@@ -56,4 +57,26 @@ export function EmbedVisualizer() {
       className="absolute inset-0"
     />
   );
+}
+
+/**
+ * The playing track's artwork as bytes the sandboxed plugin can draw (ADR-0176 point 4).
+ *
+ * A plugin given the server URL would fetch it with no credential, which works only while media is
+ * exempt. A `data:` URL needs none, and a palette read from it no longer taints a canvas either.
+ */
+function useAuthorizedArtwork(trackId: string | null): string | null {
+  const [artwork, setArtwork] = useState<{ trackId: string; url: string | null } | null>(null);
+  useEffect(() => {
+    if (!trackId) return;
+    let current = true;
+    tracksApi.getArtworkDataUrl(trackId).then((url) => {
+      if (current) setArtwork({ trackId, url });
+    });
+    return () => {
+      current = false;
+    };
+  }, [trackId]);
+  // A previous track's picture is never shown against the next track's frames.
+  return artwork && artwork.trackId === trackId ? artwork.url : null;
 }

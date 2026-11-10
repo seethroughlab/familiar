@@ -52,6 +52,11 @@ them from stored failures.
 
 ### Security
 
+- **Media can now carry a credential** (ADR-0176 Phases 2–3). Streams and artwork accept the server
+  token in the header, a media cookie the web admin gets at sign-in, or a URL this server signed for
+  a speaker; rotating the token revokes all three. Nothing is required yet, so every app build keeps
+  playing. A signed URL's signature never reaches the logs. The visualizer page now hands plugins
+  artwork as a `data:` URL.
 - **Album artwork can no longer be found by a key anyone can compute** (ADR-0176 Phase 1). A track
   whose album the resolver could not place filed its artwork under a hash of artist and album, and
   the artwork and artwork-status routes, which need no token, answered for it: a way to ask whether
