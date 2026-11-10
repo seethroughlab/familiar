@@ -34,20 +34,25 @@ def test_every_kind_has_a_summary_and_a_next_action():
         assert summary and next_action, kind
 
 
+# The secrets are generated per run, never written down: a literal that looks like a credential is
+# one a secret scanner rightly flags, and these tests need only the shape around it.
 @pytest.mark.parametrize(
-    "secret,leaks",
+    "template",
     [
-        ("postgresql+asyncpg://familiar:hunter2@db:5432/familiar", "hunter2"),
-        ("headers={'X-Familiar-Token': 'abc123def456'}", "abc123def456"),
-        ("Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig", "eyJhbGciOiJIUzI1NiJ9"),
-        ("GET /api?api_key=0123456789abcdef&format=json", "0123456789abcdef"),
-        ("anthropic: invalid key sk-ant-api03-ABCDEFGHIJKLMNOP", "ABCDEFGHIJKLMNOP"),
-        ("password='p@ss' rejected", "p@ss"),
+        "postgresql+asyncpg://familiar:{s}@db:5432/familiar",
+        "headers={{'X-Familiar-Token': '{s}'}}",
+        "Authorization: Bearer {s}",
+        "GET /api?api_key={s}&format=json",
+        "anthropic: invalid key sk-ant-{s}",
+        "password='{s}' rejected",
     ],
 )
-def test_credentials_never_reach_the_browser(secret, leaks):
-    out = redact(f"failed: {secret}")
-    assert leaks not in out
+def test_credentials_never_reach_the_browser(template):
+    import secrets
+
+    value = secrets.token_hex(12)
+    out = redact(f"failed: {template.format(s=value)}")
+    assert value not in out
     assert "***" in out
 
 
@@ -73,30 +78,36 @@ def test_failures_are_grouped_by_kind_and_task_with_impact():
 
 
 def test_examples_are_capped_and_redacted():
+    import secrets
+
+    value = secrets.token_hex(8)
     records = [
-        {"task": "t", "error": f"OperationalError postgresql://u:secret{i}@db/x", "timestamp": f"2026-11-09T10:00:{i:02d}"}
+        {"task": "t", "error": f"OperationalError postgresql://u:{value}{i}@db/x", "timestamp": f"2026-11-09T10:00:{i:02d}"}
         for i in range(8)
     ]
     (group,) = group_failures(records)
     assert group.count == 8 and len(group.examples) == 5
-    assert not any("secret" in e["error"] for e in group.examples)
+    assert not any(value in e["error"] for e in group.examples)
 
 
 @pytest.mark.asyncio
 async def test_workers_endpoint_groups_and_redacts(async_db, monkeypatch):
+    import secrets
+
     from app.api.routes.health import get_worker_status
 
+    value = secrets.token_hex(8)
     stored = [
         # Written before ADR-0174: no kind, unredacted.
-        {"task": "extract_features", "error": "asyncpg: password=hunter2 rejected", "track": "A", "timestamp": "2026-11-09T10:00:00"},
+        {"task": "extract_features", "error": f"asyncpg: password={value} rejected", "track": "A", "timestamp": "2026-11-09T10:00:00"},
     ]
     monkeypatch.setattr("app.services.tasks.get_recent_failures", lambda limit=10: stored[:limit])
     status = await get_worker_status(async_db)
     assert status.recent_failures[0].kind == "database"
-    assert "hunter2" not in status.recent_failures[0].error
+    assert value not in status.recent_failures[0].error
     (group,) = status.failure_groups
     assert (group.kind, group.count, group.affected) == ("database", 1, 1)
-    assert "hunter2" not in group.examples[0].error
+    assert value not in group.examples[0].error
 
 
 def test_recording_stores_the_kind_and_a_redacted_message(monkeypatch):
@@ -117,7 +128,10 @@ def test_recording_stores_the_kind_and_a_redacted_message(monkeypatch):
             pass
 
     monkeypatch.setattr(common, "get_redis", lambda: FakeRedis())
-    common._record_task_failure("extract_features", "Bearer abc.def.ghi rejected", "A")
+    import secrets
+
+    value = secrets.token_hex(8)
+    common._record_task_failure("extract_features", f"Bearer {value} rejected", "A")
     record = json.loads(pushed[0])
     assert record["kind"] == "error"
-    assert "abc.def.ghi" not in record["error"]
+    assert value not in record["error"]
