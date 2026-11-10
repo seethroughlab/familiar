@@ -300,3 +300,35 @@ class TestCapabilityVocabulary:
         with pytest.raises(UnknownCapability):
             attach(channel, profile, caps=("play", "teleport"))
         assert channel.players(profile) == [], "a rejected subscribe must leave nothing behind"
+
+
+class TestNotify:
+    """ADR-0177. A notice goes to every attached client and never raises."""
+
+    NOTICE = {"type": "playlists_changed"}
+
+    def test_every_attached_client_is_told(self, channel):
+        profile = uuid4()
+        mac = attach(channel, profile, name="Mac", now=1.0)
+        phone = attach(channel, profile, name="iPhone", platform="ios", now=2.0)
+
+        assert channel.notify(profile, self.NOTICE) == 2
+        assert mac.queue.get_nowait() == self.NOTICE
+        assert phone.queue.get_nowait() == self.NOTICE
+
+    def test_no_capability_is_required(self, channel):
+        """A newer client must not need to declare a name an older server would reject."""
+        profile = uuid4()
+        bare = attach(channel, profile, caps=())
+        channel.notify(profile, self.NOTICE)
+        assert bare.queue.get_nowait() == self.NOTICE
+
+    def test_nobody_attached_is_not_an_error(self, channel):
+        assert channel.notify(uuid4(), self.NOTICE) == 0
+
+    def test_other_profiles_are_not_told(self, channel):
+        mine, theirs = uuid4(), uuid4()
+        other = attach(channel, theirs)
+        attach(channel, mine)
+        channel.notify(mine, self.NOTICE)
+        assert other.queue.qsize() == 0
