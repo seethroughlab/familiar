@@ -81,7 +81,7 @@ export function OrganizePage() {
               <button
                 onClick={runPreview}
                 disabled={isFetching || !selected}
-                className="px-4 py-2 rounded-lg bg-accent hover:bg-accent disabled:opacity-50 text-white text-sm font-medium flex items-center gap-2"
+                className="px-4 py-2 rounded-lg bg-accent hover:bg-accent disabled:opacity-50 text-zinc-950 text-sm font-medium flex items-center gap-2"
               >
                 {isFetching ? (
                   <Loader2 className="w-4 h-4 animate-spin" />

@@ -60,7 +60,7 @@ export function DuplicatesPage() {
             <button
               onClick={runScan}
               disabled={isFetching}
-              className="px-4 py-2 rounded-lg bg-accent hover:bg-accent disabled:opacity-50 text-white text-sm font-medium flex items-center gap-2 flex-shrink-0"
+              className="px-4 py-2 rounded-lg bg-accent hover:bg-accent disabled:opacity-50 text-zinc-950 text-sm font-medium flex items-center gap-2 flex-shrink-0"
             >
               {isFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Copy className="w-4 h-4" />}
               {isFetching ? 'Scanning…' : 'Scan'}

@@ -34,6 +34,20 @@ Implementation:
   read. Analysis → Status shows the groups (`screens/analysis/FailureGroups.tsx`) with the raw
   messages behind a closed `<details>` and a copy button; the Overview's attention item names the
   top group and its next action instead of a raw count (point 4). Contract stays v1 (additive).
+- **Phase 4, 2026-11-09.** `packages/web/e2e/accessibility.spec.ts` runs axe-core (WCAG 2.1 A and
+  AA, and best-practice) on Overview, Library, Analysis and Server at 1280 and 390 wide, and on
+  Analysis in a seeded error state (grouped failures and failed tracks); a violation fails CI, and
+  its `EXCEPTIONS` list (owner and removal condition, point 7) is empty. The WCAG-only scan was
+  clean at first; adding best-practice found the two real problems, both fixed: **no page had an
+  `<h1>`** (the TopBar's "Familiar" is the `<h1>` now, shown from `sm` and screen-reader-only
+  below, so destinations stay `<h2>` and sections `<h3>`), and **white text on the cyan-400 accent
+  measured 1.82:1** in five places (Overview, Artwork, Organiser, Duplicates, the alphabet popup);
+  dark text is about 11:1. The scan was checked against deliberately injected violations
+  (`button-name`, `image-alt`) before its clean result was trusted. Manual keyboard and VoiceOver
+  checks are in `docs/RELEASE-CHECKLIST.md` (point 8).
+- **Exit condition met:** playlist and profile tests fail rather than skip when their workflow is
+  unavailable; analysis failures have grouped, actionable summaries with redacted detail behind a
+  disclosure; and the four destinations pass the accessibility gate.
 
 Extends [ADR-0126](ADR-0126-the-admin-ui-is-organized-around-operator-workflows.md)
 
