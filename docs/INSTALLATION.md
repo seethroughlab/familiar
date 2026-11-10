@@ -438,34 +438,6 @@ Check logs in Container Manager → Container → familiar-api → Log
 
 ## Development Setup
 
-For local development without Docker:
-
-1. **Start infrastructure:**
-   ```bash
-   cd docker
-   docker compose up -d  # Starts postgres and redis only
-   ```
-
-2. **Install backend:**
-   ```bash
-   cd backend
-   uv sync --all-extras
-   uv run python -m app.db.init_db
-   ```
-
-3. **Run API server:**
-   ```bash
-   make run
-   ```
-
-4. **Run worker (separate terminal):**
-   ```bash
-   make worker
-   ```
-
-5. **Run frontend (separate terminal):**
-   ```bash
-   cd frontend
-   npm install
-   npm run dev
-   ```
+Developing Familiar is in [`CONTRIBUTING.md`](../CONTRIBUTING.md): the prerequisites with their
+versions, the commands from a clone to a passing `make check`, and running the server and web app
+locally. This guide is for running Familiar, not changing it.

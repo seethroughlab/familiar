@@ -15,6 +15,31 @@ New here? `docs/START-HERE.md` is the first document: what Familiar is now, how 
 connect, one request traced through every layer, and the whole of five common changes. `make doctor`
 tells you what this machine can do with the checkout.
 
+## Prerequisites
+
+Checked by `make doctor`, which says how to install whatever is missing:
+
+| Tool | Version | Why |
+|---|---|---|
+| git, make, a C compiler | any | the Makefiles; a few Python packages build from source |
+| Python | 3.11 or newer, **with headers** (`python3-dev` on Debian/Ubuntu) | the backend (CI uses 3.11), and the repo's `scripts/` |
+| [uv](https://docs.astral.sh/uv/) | current | backend dependencies |
+| Node | 22 or newer (`.nvmrc`) | the web packages; Node 18 fails `check:boundaries` |
+| pnpm | 10 (`packageManager` in `package.json`; `corepack enable` picks it) | pnpm 12 refuses `pnpm install` here |
+| Docker | optional | Postgres and Redis for the backend suite and running the server |
+
+## From a Clone to Green
+
+```bash
+make doctor                         # what is missing, and how to get it
+pnpm install                        # web workspace
+(cd backend && uv sync --extra dev) # backend and its dev tools
+make check                          # the database-free checks; about half a minute
+```
+
+A clean Ubuntu container reaches a passing `make check` this way (ADR-0175's onboarding pass). The
+backend suite needs a database; see below.
+
 ## Local Setup
 
 ```bash
@@ -36,8 +61,9 @@ same thing against a throwaway Postgres and Redis on 5434/6380; `make test-servi
 
 ## Before Opening a PR
 
-`make check` runs every required check that needs no database — lints, types, frontend unit tests,
-contract and boundary checks, the docs check. The backend suite is `cd backend && make test`. Or run
+`make check` runs every required check that needs no database — lints, types, frontend and SDK unit
+tests, contract and boundary checks, the docs check. The backend suite is `cd backend && make test`.
+CI also builds the web app and runs the browser suite; run those when you change the web app. Or run
 the focused checks for the area you touched:
 
 ```bash

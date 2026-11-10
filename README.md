@@ -197,13 +197,13 @@ constraint is memory rather than architecture, and 4 GB is what the model alone 
 
 ## Documentation
 
-- **[Installation Guide](docs/INSTALLATION.md)** - Docker, OpenMediaVault, Synology NAS, and development setup
+- **[Installation Guide](docs/INSTALLATION.md)** - Docker, OpenMediaVault and Synology NAS
 - **[Architecture](docs/ARCHITECTURE.md)** - Current server/web/native-client boundaries
 - **[macOS Guide](docs/MACOS.md)** - Docker Desktop setup, Apple Silicon, music library paths
 - **[Configuration](docs/CONFIGURATION.md)** - Environment variables, API keys, Tailscale HTTPS, cloud backup
 - **[Library Browser API](docs/LIBRARY_BROWSERS.md)** - Create custom 2D/3D library visualizations
 - **[REST API Reference](docs/REST-API.md)** - Backend REST API documentation
-- **[Contributing](CONTRIBUTING.md)** - Local workflow, guardrails and PR checks
+- **[Contributing](CONTRIBUTING.md)** - Prerequisites, clone to a passing `make check`, local workflow and PR checks
 
 ## Bring your own assistant
 

@@ -4,6 +4,45 @@ Status: accepted
 
 Date: 2026-11-08
 
+Implementation:
+
+- **Phases 1 and 2, 2026-11-09.** Measured first: `CLAUDE.md` was 653 lines (last changed
+  2026-11-07) and `AGENTS.md` 184 (2026-09-04), with no substantial paragraph in common; both had
+  drifted. `CLAUDE.md`'s Key Files still named `FullPlayer/`, `playerStore.ts`, `WebAudioEngine.ts`
+  and `useAudioEngine.ts`, all deleted with the web player, and said `main.tsx` registers a Web
+  Audio engine; `AGENTS.md`'s test command (`uv run pytest tests/`) refuses to run without
+  `TEST_DATABASE_URL` (ADR-0128). `AGENTS.md` is now the one current guide, rebuilt from both
+  against the tree, with both quality tiers (point 5) and a "before you change these, read the ADR"
+  table for the traps that cost time. `CLAUDE.md` is `@AGENTS.md` plus three Claude Code notes
+  (point 2). Its 289 lines of ADR sequencing and history moved **verbatim** to
+  `docs/ADR-HISTORY.md`. `scripts/check_docs.py` now also checks relative links, flags a retired
+  name in a paragraph that does not say it is retired, and fails if `CLAUDE.md` stops including
+  `AGENTS.md` or grows past 40 lines (point 6); each was shown to fail on a planted case.
+- **Phase 3, a container pass, 2026-11-09.** A fresh Ubuntu 24.04 container with only git, and an
+  agent given none of the project's history, followed only the repository's documents from a clone.
+  It reached a passing `make check` in about 3.5 minutes, but only by reading `ci.yml`, which no
+  document points to. What it found, and what changed:
+  - **No document listed the toolchain or its versions.** `make` itself was unmentioned, and the
+    versions lived only in `ci.yml`. Two of them broke silently: Node 18 (Ubuntu's) passes `make
+    doctor` and then fails `check:boundaries` (`node:util` has no `styleText`), and the newest pnpm
+    (12) refuses `pnpm install` with `ERR_PNPM_IGNORED_BUILDS`. `miniaudio` builds from source and
+    needs Python headers. CONTRIBUTING now opens with a prerequisites table and a four-command path
+    from a clone to green; the root `package.json` pins `packageManager: pnpm@10.30.3` (which also
+    switches a newer global pnpm, checked) and `engines.node >=22`, with `.nvmrc`; CI's
+    `pnpm/action-setup` steps take the version from there. `make doctor` checks versions, not just
+    presence, and says how to install each missing tool. Python is left at "3.11 or newer" with no
+    `.python-version`, which would move existing 3.12 environments for no gain.
+  - **`docs/INSTALLATION.md`'s development setup was stale throughout** (`cd frontend && npm`,
+    `make worker`, `init_db`), and the README linked it as the development guide. It now points to
+    CONTRIBUTING, and so does the README.
+  - **`make check` did not run the SDK tests START-HERE says it runs.** It runs `pnpm test` now
+    (frontend and SDK).
+  - Doctor's worktree warning read as advice to the maintainer; it is a neutral note now.
+  - **Verified:** a second fresh container following only CONTRIBUTING reached a passing
+    `make check` in 53 seconds with no other step and a clean `git status`.
+- **Not done: the human pass.** Point 7 asks for a developer unfamiliar with the project; the
+  container pass is an agent's. `docs/HEALTH.md` keeps the row until a person has done it.
+
 Extends [ADR-0127](ADR-0127-current-documentation-precedes-project-history.md)
 
 ## Context
