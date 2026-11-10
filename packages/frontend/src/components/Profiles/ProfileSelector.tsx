@@ -7,6 +7,7 @@
  * - User clicks "Switch Profile" in settings
  */
 import { useState, useEffect, useRef } from 'react';
+import { isServerTokenRequired } from '../../api/base';
 import {
   listProfiles,
   createProfile,
@@ -15,22 +16,24 @@ import {
 } from '../../services/profileService';
 import { useConnectivityStore } from '../../stores/connectivityStore';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
+import { ServerTokenSettings } from '../../panels/server/ServerTokenSettings';
 
 import { createLogger } from '../../utils/logger';
 
 const log = createLogger('ProfileSelector');
 
-// Default profile colors
-const PROFILE_COLORS = [
-  '#3B82F6', // Blue
-  '#10B981', // Green
-  '#8B5CF6', // Purple
-  '#F59E0B', // Amber
-  '#EF4444', // Red
-  '#EC4899', // Pink
-  '#06B6D4', // Cyan
-  '#F97316', // Orange
-];
+// Default profile colors, named so each swatch is announced as a colour rather than "button".
+const PROFILE_COLOR_NAMES: Record<string, string> = {
+  '#3B82F6': 'Blue',
+  '#10B981': 'Green',
+  '#8B5CF6': 'Purple',
+  '#F59E0B': 'Amber',
+  '#EF4444': 'Red',
+  '#EC4899': 'Pink',
+  '#06B6D4': 'Cyan',
+  '#F97316': 'Orange',
+};
+const PROFILE_COLORS = Object.keys(PROFILE_COLOR_NAMES);
 
 interface ProfileSelectorProps {
   onProfileSelected: (profile: Profile) => void;
@@ -43,6 +46,9 @@ export function ProfileSelector({ onProfileSelected }: ProfileSelectorProps) {
   const [newProfileName, setNewProfileName] = useState('');
   const [selectedColor, setSelectedColor] = useState(PROFILE_COLORS[0]);
   const [error, setError] = useState<string | null>(null);
+  // A browser without the server's token used to see "Failed to load profiles" beside "Add
+  // Profile", which reads as an empty server (found by the beta24 release-checklist pass).
+  const [needsToken, setNeedsToken] = useState(false);
   const [usingCache, setUsingCache] = useState(false);
   const { isOffline } = useOfflineStatus();
   const autoSelectedRef = useRef(false);
@@ -72,6 +78,8 @@ export function ProfileSelector({ onProfileSelected }: ProfileSelectorProps) {
     try {
       setLoading(true);
       setUsingCache(false);
+      setError(null);
+      setNeedsToken(false);
       const profileList = await listProfiles();
       setProfiles(profileList);
 
@@ -81,8 +89,9 @@ export function ProfileSelector({ onProfileSelected }: ProfileSelectorProps) {
         setUsingCache(true);
       }
     } catch (err) {
-      // Check if we have any cached profiles to show
-      if (!useConnectivityStore.getState().browserOnline) {
+      if (isServerTokenRequired(err)) {
+        setNeedsToken(true);
+      } else if (!useConnectivityStore.getState().browserOnline) {
         setError('Connect to the network to create your first profile');
       } else {
         setError('Failed to load profiles');
@@ -126,6 +135,23 @@ export function ProfileSelector({ onProfileSelected }: ProfileSelectorProps) {
     return (
       <div role="status" aria-label="Loading profiles" className="min-h-screen bg-zinc-950 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
+  if (needsToken) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-8">
+        <h1 className="text-4xl font-bold text-white mb-2">Sign in to this server</h1>
+        <p className="text-zinc-400 mb-8 max-w-md text-center">
+          This server needs its token. Open the sign-in link it printed (run{' '}
+          <code className="text-zinc-300">python -m app.token</code> on the server to see it again),
+          or paste the token below. Your profiles are on the server and appear once you are signed
+          in.
+        </p>
+        <div className="w-full max-w-md">
+          <ServerTokenSettings onAccepted={loadProfiles} />
+        </div>
       </div>
     );
   }
@@ -218,17 +244,19 @@ export function ProfileSelector({ onProfileSelected }: ProfileSelectorProps) {
       {/* Create Profile Modal */}
       <dialog
         id="create-profile-modal"
+        aria-labelledby="create-profile-title"
         className="bg-zinc-900 rounded-xl p-6 backdrop:bg-black/70 max-w-md w-full"
       >
-        <h2 className="text-2xl font-bold text-white mb-6">Create Profile</h2>
+        <h2 id="create-profile-title" className="text-2xl font-bold text-white mb-6">Create Profile</h2>
 
         <div className="space-y-6">
           {/* Name Input */}
           <div>
-            <label className="block text-sm font-medium text-zinc-400 mb-2">
+            <label htmlFor="create-profile-name" className="block text-sm font-medium text-zinc-400 mb-2">
               Profile Name
             </label>
             <input
+              id="create-profile-name"
               type="text"
               value={newProfileName}
               onChange={(e) => setNewProfileName(e.target.value)}
@@ -245,13 +273,16 @@ export function ProfileSelector({ onProfileSelected }: ProfileSelectorProps) {
 
           {/* Color Picker */}
           <div>
-            <label className="block text-sm font-medium text-zinc-400 mb-2">
+            <p id="create-profile-color" className="block text-sm font-medium text-zinc-400 mb-2">
               Profile Color
-            </label>
-            <div className="flex flex-wrap gap-3">
+            </p>
+            <div role="group" aria-labelledby="create-profile-color" className="flex flex-wrap gap-3">
               {PROFILE_COLORS.map((color) => (
                 <button
                   key={color}
+                  type="button"
+                  aria-label={PROFILE_COLOR_NAMES[color]}
+                  aria-pressed={selectedColor === color}
                   onClick={() => setSelectedColor(color)}
                   className={`w-10 h-10 rounded-lg transition-all ${
                     selectedColor === color

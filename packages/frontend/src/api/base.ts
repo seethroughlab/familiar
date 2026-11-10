@@ -275,6 +275,18 @@ generatedClient.setConfig({ axios: transport });
  * Double-encodes slashes so they survive the server's automatic URL decode
  * (e.g. "ATB/York" → "ATB%252FYork" → server decodes to "ATB%2FYork" → handler unquote gives "ATB/York")
  */
+/**
+ * Whether a request failed for want of the server token (ADR-0045), as opposed to anything else.
+ * Told apart by the envelope's `code`, like the interceptor above (ADR-0129 point 6).
+ */
+export function isServerTokenRequired(err: unknown): boolean {
+  return (
+    axios.isAxiosError(err) &&
+    err.response?.status === 401 &&
+    (err.response.data as { code?: string } | undefined)?.code === 'SERVER_TOKEN_REQUIRED'
+  );
+}
+
 export function encodePathSegment(value: string): string {
   return encodeURIComponent(value).replace(/%2F/gi, '%252F');
 }

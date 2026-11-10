@@ -7,11 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-One migration: `20261109_embed_failure_reason` adds two columns to `track_analysis` and backfills
-them from stored failures.
+## [0.2.0-beta24] - 2026-11-10
+
+One migration (`20261109_embed_failure_reason` adds two columns to `track_analysis` and backfills
+them from stored failures); the API contract stays at v1. Safer defaults, honest analysis status,
+and a fix for Familiar Server leaving a process behind. Every app build keeps working.
+
+**Before you upgrade, if your server has no token.** An existing library that has never had one
+keeps serving everyone, as before, but warns at every start, and its MCP endpoint is now off unless
+`MCP_ALLOWED_HOSTS` is set. A new server that other machines can reach makes itself a token at first
+start and prints a sign-in link. A server whose token was removed, or one started with plain
+`uvicorn`, now answers only its own machine. A reverse proxy on the same host does not count as that
+machine. `python -m app.token --create` makes a token from a shell on the server. The table is in
+`docs/INSTALLATION.md`, under "The server token".
 
 ### Fixed
 
+- **A browser without the server's token is asked to sign in.** It used to see "Failed to load
+  profiles" beside "Add Profile", which read as a server with no profiles. The profile picker now
+  explains that the server needs its token and takes it there, then shows your profiles.
+- **The web admin's forms are announced by name** (found by the release checklist's keyboard and
+  screen-reader pass). Server → Access's token field had only a placeholder, gone once filled; the
+  Create Profile colours were eight unnamed buttons with no selected state, and its name field's
+  label was tied to nothing; Library → Sync's "Sync Now" was announced as "Sync library".
 - **Stopping the server no longer leaves a library-scan process behind** holding a database
   connection. The scan pool's worker outlives each sync, and an idle pool worker never notices its
   parent has gone; nothing stopped that pool at shutdown, so a SIGTERM (how Familiar Server stops
@@ -89,9 +107,13 @@ them from stored failures.
   phase into the five states.
 
 - **The server names what it can do** (ADR-0168). `GET /api/v1/contract` gains `capabilities`, a
-  list of feature names (`lyrics.status`, `visualizer.paired_page`, `albums.move_to_album`), so a
-  newer app can say "this needs a newer server" by name instead of quietly doing less. Additive:
-  the contract stays at v1.
+  list of feature names (`lyrics.status`, `visualizer.paired_page`, `albums.move_to_album`,
+  `media.credentials`), so a newer app can say "this needs a newer server" by name instead of
+  quietly doing less. Additive: the contract stays at v1.
+- **A playlist made through MCP appears in a running app straight away** (ADR-0177). After a
+  playlist-writing tool succeeds, the server tells every app attached to that profile
+  (`{"type": "playlists_changed"}` on the ADR-0044 channel), so the app no longer needs relaunching
+  to show it. Apps that don't listen for it are unaffected.
 
 ## [0.2.0-beta23] - 2026-11-08
 
