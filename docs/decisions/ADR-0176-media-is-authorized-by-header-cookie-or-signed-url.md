@@ -4,6 +4,25 @@ Status: accepted
 
 Date: 2026-11-09
 
+Implementation:
+
+- **Phase 1, 2026-11-09: the oracle is closed.** `backend/app/services/artwork_keys.py` issues a
+  derivable hash key as `<hash>.<mac>` (HMAC-SHA256 truncated to 64 bits, keyed by
+  `artwork_key_secret`, minted on first use into `settings.json` and left out of the settings view
+  entirely) and accepts only that form or an album UUID. `GET /artwork/{key}/{size}` and
+  `GET /artwork/status/{key}` answer a bare or wrongly-MAC'd hash with the same 404 as missing art;
+  `/artwork/queue`, `/artwork/queue/batch` and `/artwork/regenerate` hand out the issued form, and
+  `/artwork/status/batch` reports an unissued key as failed so a client stops polling it. Files on
+  disk keep their names. **Found while building:** `MEDIA_ROUTES`' pattern
+  `^/api/v1/artwork/[^/]+/[^/]+$` also matches `/artwork/status/{hash}`, a second unauthenticated way
+  to ask whether a guessed album exists; it takes only issued keys now too. No client change: the
+  web app takes keys from the queue responses and keeps them in memory only, and the Apple app does
+  not use these routes. `tests/test_artwork_keys.py`: a derived hash is refused by both routes while
+  the file exists, the issued key and a UUID are served, tampered and path-shaped keys are refused,
+  the secret is minted once and never shown; the route tests fail against the previous routes. The
+  two stale comments named under Follow-up (`MEDIA_ROUTES`, `api/base.ts`) are corrected.
+- **Not done:** Phases 2–4 (accept header, cookie and signed URL; clients send them; enforce).
+
 Extends [ADR-0171](ADR-0171-a-remotely-reachable-server-is-protected-by-default.md) and
 [ADR-0045](ADR-0045-familiar-authenticates-inbound-requests.md)
 

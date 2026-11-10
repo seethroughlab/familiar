@@ -25,9 +25,9 @@ class TestArtworkAPI:
 
     def test_get_artwork_status(self, client: TestClient, test_profile: dict):
         headers = make_profile_headers(test_profile)
-        # Status endpoint takes an album_hash path param
+        # Status takes a key the server issued: an album UUID, or a hash with its MAC (ADR-0176).
         response = client.get(
-            "/api/v1/artwork/status/abc123",
+            "/api/v1/artwork/status/00000000-0000-4000-8000-000000000001",
             headers=headers,
         )
         assert response.status_code == 200

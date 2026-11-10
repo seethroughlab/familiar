@@ -16,6 +16,8 @@ from app.api.exceptions import (
 )
 from app.services.album_resolver import album_key_for_tags
 from app.services.artwork import get_artwork_path, should_refetch_online
+from app.services.artwork_keys import accept as accept_key
+from app.services.artwork_keys import issue as issue_key
 from app.services.background import get_background_manager
 
 logger = logging.getLogger(__name__)
@@ -225,7 +227,7 @@ async def queue_artwork_download(
     if full_path.exists() and not should_refetch_online(album_hash):
         return {
             "status": "exists",
-            "album_hash": album_hash,
+            "album_hash": issue_key(album_hash),
             "message": "Artwork already exists",
         }
 
@@ -240,7 +242,7 @@ async def queue_artwork_download(
 
     return {
         "status": "queued",
-        "album_hash": album_hash,
+        "album_hash": issue_key(album_hash),
         "message": "Artwork queued for download",
     }
 
@@ -280,7 +282,7 @@ async def queue_artwork_batch(
                 {
                     "artist": item.artist,
                     "album": item.album,
-                    "album_key": album_key,
+                    "album_key": issue_key(album_key),
                     "status": status,
                 }
             )
@@ -324,9 +326,10 @@ async def queue_artwork_batch(
         "status": "accepted",
         "queued_count": len(queued),
         "existing_count": len(exists),
-        "queued_hashes": queued,
-        "existing_hashes": exists,
-        "pending_hashes": pending,  # Already being fetched
+        # Issued keys (ADR-0176): a bare hash is derivable, and these are what the client polls with.
+        "queued_hashes": [issue_key(k) for k in queued],
+        "existing_hashes": [issue_key(k) for k in exists],
+        "pending_hashes": [issue_key(k) for k in pending],  # Already being fetched
         "results": results,
     }
 
@@ -340,6 +343,12 @@ async def get_artwork_status(album_hash: str) -> ArtworkStatusResponse:
     """
     from app.services.artwork import _generated_marker_path, is_generated_artwork
 
+    # Readable without the token (MEDIA_ROUTES matches this path), so it takes only a key this server
+    # issued: answering for a derived hash would say whether the library has a guessed album.
+    issued = album_hash
+    album_hash = accept_key(issued)
+    if album_hash is None:
+        raise NotFoundError("Artwork not found")
     full_path = get_artwork_path(album_hash, "full")
     thumb_path = get_artwork_path(album_hash, "thumb")
     generated = is_generated_artwork(album_hash)
@@ -356,7 +365,7 @@ async def get_artwork_status(album_hash: str) -> ArtworkStatusResponse:
             generated = False
 
     return ArtworkStatusResponse(
-        album_hash=album_hash,
+        album_hash=issued,
         exists=full_path.exists() and thumb_path.exists(),
         generated=generated,
         generated_at=generated_at,
@@ -375,7 +384,12 @@ async def get_artwork_by_hash(album_hash: str, size: str) -> Any:
     if size not in ("full", "thumb"):
         raise ValidationError("Size must be 'full' or 'thumb'")
 
-    artwork_path = get_artwork_path(album_hash, size)
+    # An album UUID, or a hash with this server's MAC (ADR-0176). A bare hash anyone can compute from
+    # artist and album gets the same 404 as missing art, so it says nothing about the library.
+    key = accept_key(album_hash)
+    if key is None:
+        raise NotFoundError("Artwork not found")
+    artwork_path = get_artwork_path(key, size)
 
     if not artwork_path.exists():
         raise NotFoundError("Artwork not found")
@@ -417,12 +431,18 @@ async def check_artwork_batch(request: ArtworkStatusBatchRequest) -> ArtworkStat
     generated = []
 
     for h in request.hashes:
-        thumb_path = get_artwork_path(h, "thumb")
+        key = accept_key(h)
+        if key is None:
+            # Not a key this server issued: reported as failed, so a client stops polling it.
+            result[h] = False
+            failed.append(h)
+            continue
+        thumb_path = get_artwork_path(key, "thumb")
         if thumb_path.exists():
             result[h] = True
-            if is_generated_artwork(h):
+            if is_generated_artwork(key):
                 generated.append(h)
-        elif fetcher.is_failed(h):
+        elif fetcher.is_failed(key):
             result[h] = False
             failed.append(h)
         else:
@@ -461,7 +481,7 @@ async def regenerate_artwork(
     success = await generate_album_art(album_hash, request.artist, request.album)
 
     if success:
-        return {"status": "regenerated", "album_hash": album_hash}
+        return {"status": "regenerated", "album_hash": issue_key(album_hash)}
     else:
         raise UnprocessableEntityError("No analyzed tracks available for generation")
 

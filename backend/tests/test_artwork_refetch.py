@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import time
+import uuid
 
 import pytest
 
@@ -34,6 +35,19 @@ def art_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "art_path", tmp_path)
     return tmp_path
 
+
+
+# Album keys as the server has them: `Album.id` UUIDs. Artwork routes accept only a UUID or a hash
+# with this server's MAC (ADR-0176), so a made-up string is not a key they answer for.
+def _key(name: str) -> str:
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"familiar-test:{name}"))
+
+
+OLD_PLACEHOLDER = _key("old-placeholder")
+REAL_ART = _key("real-art")
+BATCH_PLACEHOLDER = _key("batch-placeholder")
+DRAWN = _key("drawn")
+FETCHED = _key("fetched")
 
 def _write_art(album_key: str, *, generated: bool, age_days: float = 0) -> None:
     """Put artwork on disk, optionally marked generated and aged."""
@@ -82,10 +96,10 @@ class TestTheRoutes:
     """Where the defect actually was."""
 
     def test_queue_offers_to_replace_an_old_placeholder(self, client, art_dir, monkeypatch):
-        _write_art("old-placeholder", generated=True, age_days=ARTWORK_REFETCH_INTERVAL.days + 1)
+        _write_art(OLD_PLACEHOLDER, generated=True, age_days=ARTWORK_REFETCH_INTERVAL.days + 1)
         monkeypatch.setattr(
             "app.api.routes.artwork.album_key_for_tags",
-            _fixed_key("old-placeholder"),
+            _fixed_key(OLD_PLACEHOLDER),
         )
 
         response = client.post("/api/v1/artwork/queue", json={"artist": "A", "album": "B"})
@@ -96,9 +110,9 @@ class TestTheRoutes:
         )
 
     def test_queue_still_reports_exists_for_real_art(self, client, art_dir, monkeypatch):
-        _write_art("real-art", generated=False)
+        _write_art(REAL_ART, generated=False)
         monkeypatch.setattr(
-            "app.api.routes.artwork.album_key_for_tags", _fixed_key("real-art")
+            "app.api.routes.artwork.album_key_for_tags", _fixed_key(REAL_ART)
         )
 
         response = client.post("/api/v1/artwork/queue", json={"artist": "A", "album": "B"})
@@ -107,18 +121,18 @@ class TestTheRoutes:
 
     def test_batch_agrees_with_the_single_route(self, client, art_dir, monkeypatch):
         """These two are separate code paths that have drifted before."""
-        _write_art("batch-placeholder", generated=True, age_days=ARTWORK_REFETCH_INTERVAL.days + 1)
+        _write_art(BATCH_PLACEHOLDER, generated=True, age_days=ARTWORK_REFETCH_INTERVAL.days + 1)
         monkeypatch.setattr(
-            "app.api.routes.artwork.album_key_for_tags", _fixed_key("batch-placeholder")
+            "app.api.routes.artwork.album_key_for_tags", _fixed_key(BATCH_PLACEHOLDER)
         )
 
         response = client.post(
-            "/api/v1/artwork/status/batch", json={"hashes": ["batch-placeholder"]}
+            "/api/v1/artwork/status/batch", json={"hashes": [BATCH_PLACEHOLDER]}
         )
 
         assert response.status_code == 200
         body = response.json()
-        assert "batch-placeholder" in body.get("generated", []), (
+        assert BATCH_PLACEHOLDER in body.get("generated", []), (
             "the status endpoint already distinguishes generated art; only the queue routes did not"
         )
 
@@ -134,18 +148,18 @@ class TestProvenanceIsReportable:
     """`exists` alone cannot answer "does this album have artwork"."""
 
     def test_status_reports_a_placeholder_as_generated(self, client, art_dir):
-        _write_art("drawn", generated=True, age_days=3)
+        _write_art(DRAWN, generated=True, age_days=3)
 
-        body = client.get("/api/v1/artwork/status/drawn").json()
+        body = client.get(f"/api/v1/artwork/status/{DRAWN}").json()
 
         assert body["exists"] is True, "a placeholder is a real file, which is the whole problem"
         assert body["generated"] is True
         assert body["generated_at"] is not None
 
     def test_status_reports_real_art_as_not_generated(self, client, art_dir):
-        _write_art("fetched", generated=False)
+        _write_art(FETCHED, generated=False)
 
-        body = client.get("/api/v1/artwork/status/fetched").json()
+        body = client.get(f"/api/v1/artwork/status/{FETCHED}").json()
 
         assert body["exists"] is True
         assert body["generated"] is False
@@ -157,17 +171,17 @@ class TestProvenanceIsReportable:
         The batch endpoint has always separated `generated`; the single one reported only
         `exists`. Which answer a caller got depended on which endpoint it happened to ask.
         """
-        _write_art("drawn", generated=True, age_days=3)
-        _write_art("fetched", generated=False)
+        _write_art(DRAWN, generated=True, age_days=3)
+        _write_art(FETCHED, generated=False)
 
         single = {
             key: client.get(f"/api/v1/artwork/status/{key}").json()["generated"]
-            for key in ("drawn", "fetched")
+            for key in (DRAWN, FETCHED)
         }
         batch = client.post(
-            "/api/v1/artwork/status/batch", json={"hashes": ["drawn", "fetched"]}
+            "/api/v1/artwork/status/batch", json={"hashes": [DRAWN, FETCHED]}
         ).json()
 
-        assert single == {"drawn": True, "fetched": False}
-        assert set(batch["generated"]) == {"drawn"}
+        assert single == {DRAWN: True, FETCHED: False}
+        assert set(batch["generated"]) == {DRAWN}
 

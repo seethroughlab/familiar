@@ -52,6 +52,11 @@ them from stored failures.
 
 ### Security
 
+- **Album artwork can no longer be found by a key anyone can compute** (ADR-0176 Phase 1). A track
+  whose album the resolver could not place filed its artwork under a hash of artist and album, and
+  the artwork and artwork-status routes, which need no token, answered for it: a way to ask whether
+  a library has a guessed album. Such keys now carry this server's MAC and a bare hash is a 404. The
+  web app is unaffected; it uses the keys the server gives it.
 - **A server with no token no longer serves everyone by default** (ADR-0171). One policy,
   `app/exposure.py`, is read by every launcher and by the token gate. A tokenless server answers only
   its own machine (loopback peer and `Host`, nothing forwarded), unless it was opened on purpose
