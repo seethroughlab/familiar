@@ -127,6 +127,17 @@ def _cleanup_scan_executor() -> None:
             pass
 
 
+def shutdown_scan_executor() -> None:
+    """Stop the scan pool with the server. Its worker would otherwise wait for work for ever."""
+    global _scan_executor
+    if _scan_executor is not None:
+        try:
+            _scan_executor.shutdown(wait=False, cancel_futures=True)
+        except Exception:
+            pass
+        _scan_executor = None
+
+
 def _get_scan_executor() -> ProcessPoolExecutor:
     """Lazy singleton ProcessPoolExecutor for library scanning.
 
@@ -137,13 +148,14 @@ def _get_scan_executor() -> ProcessPoolExecutor:
         import atexit
         import multiprocessing as mp
 
-        from app.process_setup import apply_semaphore_prefix
+        from app.process_setup import scan_worker_init
 
         _scan_executor = ProcessPoolExecutor(
             max_workers=1,
             mp_context=mp.get_context("spawn"),
-            # Sandbox-safe semaphore names in the worker too (ADR-0136 point 3).
-            initializer=apply_semaphore_prefix,
+            # Sandbox-safe semaphore names in the worker too (ADR-0136 point 3), and a worker that
+            # exits with the server: this one outlives each sync, so it is the one that was orphaned.
+            initializer=scan_worker_init,
         )
 
         if not _scan_atexit_registered:

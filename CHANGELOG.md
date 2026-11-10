@@ -12,6 +12,12 @@ them from stored failures.
 
 ### Fixed
 
+- **Stopping the server no longer leaves a library-scan process behind** holding a database
+  connection. The scan pool's worker outlives each sync, and an idle pool worker never notices its
+  parent has gone; nothing stopped that pool at shutdown, so a SIGTERM (how Familiar Server stops
+  and restarts the server) or a crash orphaned it. Every pool worker now exits within a second of
+  losing its parent, and shutdown stops the scan pool. Docker was unaffected: stopping a container
+  ends every process in it.
 - **Track Edit's Analysis tab no longer shows "NaN%"** for a detected feature the server left out
   (found moving tracks to generated types, ADR-0173).
 - **Adding a track to a one-track playlist no longer ties it with the first** (found extracting

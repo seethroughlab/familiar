@@ -15,6 +15,12 @@ Three adaptations live here, each a no-op unless its condition holds:
   that read. Python's `mimetypes.init` does not catch the `PermissionError`, so the first static
   file the server sent, the web admin's own page, answered 500. Found on the first install against a
   real library, 2026-10-01; the integration check never fetched a page, only the API.
+- **Workers die with the server.** A `multiprocessing` pool worker waits on its task queue, and it
+  holds a write end of that queue itself, so when the server goes it never sees end-of-file. It
+  leaves only if the pool sends it a stop message on the way out, which a crash or SIGKILL never
+  does, and which on 2026-11-10 a clean SIGTERM did not deliver to the scan pool's idle worker
+  either. Those orphans, re-parented to PID 1, held database connections for a day. macOS has no
+  `PR_SET_PDEATHSIG`, so `exit_with_parent` polls instead.
 - **Background priority (ADR-0138 point 3).** `nice(10)` decides who gets the CPU. On Darwin the
   background QoS clamp (`PRIO_DARWIN_BG`) also moves the work onto efficiency cores and throttles
   its I/O, which is what keeps a laptop cool while it analyses a library.
@@ -26,6 +32,8 @@ import logging
 import multiprocessing
 import os
 import sys
+import threading
+import time
 
 SEMAPHORE_PREFIX_ENV = "FAMILIAR_SEMAPHORE_PREFIX"
 
@@ -94,8 +102,41 @@ def darwin_background_clamped() -> bool:
     return libc.getpriority(_PRIO_DARWIN_PROCESS, 0) > 0
 
 
-def analysis_worker_init() -> None:
-    """Initialiser for the analysis pools: the platform's semaphore names, then background priority."""
+#: How often a pool worker checks that the server is still its parent.
+PARENT_POLL_S = 1.0
+
+
+def exit_with_parent(poll_s: float = PARENT_POLL_S) -> threading.Thread:
+    """End this process soon after its parent is gone, however the parent went.
+
+    A daemon thread compares `os.getppid()` with the parent at start; when the parent dies the
+    process is re-parented (to 1, or to a subreaper) and the thread calls `os._exit`. `_exit`, not
+    `sys.exit`: the worker may be blocked in a pipe read or a native call, and nothing it holds is
+    worth a clean shutdown once the server that asked for the work is gone. An open transaction
+    rolls back when PostgreSQL sees the connection close.
+    """
+    parent = os.getppid()
+
+    def watch() -> None:
+        while True:
+            time.sleep(poll_s)
+            if os.getppid() != parent:
+                os._exit(0)
+
+    thread = threading.Thread(target=watch, name="exit-with-parent", daemon=True)
+    thread.start()
+    return thread
+
+
+def scan_worker_init() -> None:
+    """Initialiser for the library-scan pool: the platform's semaphore names; exit with the server."""
     apply_semaphore_prefix()
+    exit_with_parent()
+
+
+def analysis_worker_init() -> None:
+    """Initialiser for the analysis pools: semaphore names, exit with the server, background priority."""
+    apply_semaphore_prefix()
+    exit_with_parent()
     lower_priority()
     logging.info(f"Analysis worker started at background priority (PID {os.getpid()})")
