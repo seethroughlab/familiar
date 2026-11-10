@@ -68,6 +68,10 @@ ALLOWLISTED_FUNCTIONS = {
     # way.
     ("auth", "issue_token"),
     ("auth", "revoke_token"),
+    # The media cookie is a server-wide credential like the token it is derived from (ADR-0176),
+    # not anything a listener's profile owns.
+    ("auth", "issue_media_cookie"),
+    ("auth", "clear_media_cookie"),
     # Ambient (ADR-0106). Both are POSTs because they carry a body, not because they mutate
     # anything: they rank the library against a track and return the result. There is no profile
     # state to protect, and `AMBIENT`'s `taste_weight` and `max_negative_penalty` are both 0, so a
