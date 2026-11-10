@@ -12,5 +12,9 @@
     "check:api": "pnpm --filter @familiar/api-client run check",
     "build:visualizers": "pnpm --filter @familiar/visualizers build",
     "test:visualizers": "pnpm --filter @familiar/visualizers test:documents"
+  },
+  "packageManager": "pnpm@10.30.3",
+  "engines": {
+    "node": ">=22"
   }
 }

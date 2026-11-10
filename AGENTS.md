@@ -243,6 +243,10 @@ FAMILIAR_DATA_DIR=/path/to/state       # where settings.json, caches and profile
 
 ## Running Locally
 
+First setup, from a clone: the prerequisites and versions are in `CONTRIBUTING.md` (Python 3.11+
+with headers, uv, Node 22, pnpm 10), then `make doctor`, `pnpm install` and
+`cd backend && uv sync --extra dev`. After that:
+
 ```bash
 docker compose -f docker/docker-compose.yml up -d   # Postgres + Redis
 cd backend && make run                               # API with reload on :4400

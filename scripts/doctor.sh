@@ -19,9 +19,14 @@ bad()  { printf '  \033[31m✗\033[0m %-26s %s\n' "$1" "$2"; fail=1; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
 echo "Runtimes"
-for tool in python3 uv node pnpm docker ffmpeg; do
+# The versions the checks need (ADR-0175): CI uses Python 3.11, Node 22 and pnpm 10. Node 18 fails
+# `check:boundaries`, and pnpm 12 refuses `pnpm install`, so "on PATH" is not enough to be ✓.
+major() { echo "$1" | sed -E 's/^v//; s/^([0-9]+).*/\1/'; }
+minor() { echo "$1" | sed -E 's/^v//; s/^[0-9]+\.([0-9]+).*/\1/'; }
+for tool in make python3 uv node pnpm docker ffmpeg; do
   if have "$tool"; then
     case "$tool" in
+      make)    v=$(make --version 2>&1 | head -1 | awk '{print $3}') ;;
       python3) v=$(python3 --version 2>&1 | awk '{print $2}') ;;
       uv)      v=$(uv --version 2>&1 | awk '{print $2}') ;;
       node)    v=$(node --version) ;;
@@ -29,14 +34,24 @@ for tool in python3 uv node pnpm docker ffmpeg; do
       docker)  v=$(docker --version 2>/dev/null | sed -E 's/Docker version ([^,]+),.*/\1/') ;;
       ffmpeg)  v=$(ffmpeg -version 2>/dev/null | head -1 | awk '{print $3}') ;;
     esac
-    ok "$tool" "$v"
+    case "$tool" in
+      python3) if [ "$(major "$v")" -eq 3 ] && [ "$(minor "$v")" -ge 11 ]; then ok "$tool" "$v"; else bad "$tool" "$v — needs 3.11 or newer"; fi ;;
+      node)    if [ "$(major "$v")" -ge 22 ]; then ok "$tool" "$v"; else bad "$tool" "$v — needs 22 or newer (.nvmrc); 18 fails check:boundaries"; fi ;;
+      pnpm)    if [ "$(major "$v")" -eq 10 ]; then ok "$tool" "$v"; else bad "$tool" "$v — needs 10 (packageManager in package.json); run: corepack enable"; fi ;;
+      *)       ok "$tool" "$v" ;;
+    esac
   else
     case "$tool" in
       docker|ffmpeg) warn "$tool" "not on PATH (docker: test-services and the image; ffmpeg: transcode tests)" ;;
-      *) bad "$tool" "not on PATH" ;;
+      make)    bad "$tool" "not on PATH — install your platform's build tools (Xcode CLT, build-essential)" ;;
+      python3) bad "$tool" "not on PATH — Python 3.11+, with headers (python3-dev on Debian/Ubuntu)" ;;
+      uv)      bad "$tool" "not on PATH — https://docs.astral.sh/uv/getting-started/installation/" ;;
+      node)    bad "$tool" "not on PATH — Node 22 (.nvmrc), e.g. through nvm or fnm" ;;
+      pnpm)    bad "$tool" "not on PATH — corepack enable (reads packageManager in package.json)" ;;
     esac
   fi
 done
+
 if [ -f backend/.python-version ]; then
   want=$(cat backend/.python-version)
   got=$(python3 --version 2>&1 | awk '{print $2}')
@@ -54,7 +69,7 @@ else
 fi
 gitdir=$(git rev-parse --git-dir 2>/dev/null || echo "")
 case "$gitdir" in
-  .git) warn "worktree" "this is the shared main checkout; several sessions use it — work in a worktree";;
+  .git) ok "worktree" "main checkout (if several people or tools share it, use a git worktree each)";;
   "")   warn "worktree" "not a git checkout";;
   *)    ok "worktree" "$(git rev-parse --abbrev-ref HEAD 2>/dev/null)";;
 esac
