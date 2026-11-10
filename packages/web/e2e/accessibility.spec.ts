@@ -106,9 +106,9 @@ for (const viewport of VIEWPORTS) {
       await ensureProfile(page);
       await page.goto('/analysis');
       await settle(page);
-      // The failed-tracks list (ADR-0172) is what makes this an error state; the grouped failures
-      // (ADR-0174 Phase 2) render beside it once present, and are checked by the same scan.
+      // Both error views: the failed tracks (ADR-0172) and the grouped task failures (ADR-0174).
       await expect(page.getByRole('region', { name: 'Failed tracks' })).toBeVisible();
+      await expect(page.getByText('The audio file could not be decoded')).toBeVisible();
       expect(await violations(page)).toEqual([]);
     });
   });
