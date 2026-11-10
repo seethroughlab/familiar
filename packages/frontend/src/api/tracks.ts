@@ -118,6 +118,31 @@ export const tracksApi = {
     return getApiUrl(`/tracks/${id}/artwork?size=${size}`);
   },
 
+  /**
+   * The artwork as a `data:` URL, fetched with the server token (ADR-0176 point 4).
+   *
+   * For the visualizer page only. Its plugins run in an opaque-origin sandbox and load
+   * `artworkUrl` themselves, so they can carry neither the header nor the admin's cookie, and a
+   * server enforcing media credentials would refuse them. The page holds the token, so it fetches
+   * the picture and hands the plugin the bytes. `null` when there is none.
+   */
+  getArtworkDataUrl: async (id: string, size: 'full' | 'thumb' = 'full'): Promise<string | null> => {
+    try {
+      const { data } = await api.get<Blob>(`/tracks/${id}/artwork`, {
+        params: { size },
+        responseType: 'blob',
+      });
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(data);
+      });
+    } catch {
+      return null;
+    }
+  },
+
   getLyrics: async (id: string): Promise<LyricsResponse> => {
     const { data } = await api.get(`/tracks/${id}/lyrics`);
     return data;

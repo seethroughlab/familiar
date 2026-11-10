@@ -24,6 +24,7 @@ from uuid import UUID, uuid4
 from xml.sax.saxutils import escape
 
 from app.config import settings
+from app.logging_config import redact_credentials as redact
 
 logger = logging.getLogger(__name__)
 
@@ -472,7 +473,7 @@ class UPnPOutput(AudioOutput):
             # with an actionable error code, which the bare message would otherwise hide.
             logger.exception(
                 "UPnP play failed for %s (openhome=%s, url=%s): %r",
-                self.name, self._has_openhome, stream_url, e,
+                self.name, self._has_openhome, redact(stream_url), e,
             )
             self.state = OutputState.ERROR
             return False

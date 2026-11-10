@@ -8,6 +8,7 @@ from fastapi import APIRouter, status
 from pydantic import BaseModel
 from sqlalchemy import select
 
+from app.api import media_credentials
 from app.api.deps import DbSession
 from app.api.exceptions import NotFoundError, ValidationError
 from app.api.routes.tracks import AUDIO_MIME_TYPES
@@ -66,18 +67,29 @@ class SeekRequest(BaseModel):
     position_ms: int
 
 
-def _device_stream_url(stream_url: str, track_id: UUID | None) -> str:
+def _device_stream_url(
+    stream_url: str, track_id: UUID | None, duration_s: float | None = None
+) -> str:
     """Resolve the stream URL a network device should fetch.
 
     The frontend builds ``stream_url`` from its own origin (``window.location.origin``), which a
     network device may not be able to reach (e.g. the browser is on Tailscale but the WiiM is only
     on the LAN). When ``device_stream_base_url`` is configured, rebuild the URL from that
     LAN-reachable base so the device can fetch the audio. Falls back to the frontend-provided URL.
+
+    On a tokened server the URL is signed (ADR-0176 point 2): a speaker can send neither the token
+    nor a cookie, so the URL itself carries a credential valid for this track's length plus a margin.
+    The server signs it here; a client never can.
     """
-    base = get_app_settings_service().get_effective("device_stream_base_url")
-    if base and track_id:
-        return f"{base.rstrip('/')}/api/v1/tracks/{track_id}/stream"
-    return stream_url
+    service = get_app_settings_service()
+    base = service.get_effective("device_stream_base_url")
+    url = f"{base.rstrip('/')}/api/v1/tracks/{track_id}/stream" if base and track_id else stream_url
+    token = service.get().access_token
+    if not token:
+        return url
+    return media_credentials.sign_url(
+        url, token, lifetime_s=media_credentials.speaker_url_lifetime(duration_s)
+    )
 
 
 async def _build_track_metadata(db: DbSession, track_id: UUID | None) -> TrackMetadata | None:
@@ -224,7 +236,8 @@ async def play_to_output(
     manager = get_output_manager()
     track_id = UUID(request.track_id) if request.track_id else None
     metadata = await _build_track_metadata(db, track_id)
-    stream_url = _device_stream_url(request.stream_url, track_id)
+    duration_s = metadata.duration_ms / 1000 if metadata and metadata.duration_ms else None
+    stream_url = _device_stream_url(request.stream_url, track_id, duration_s)
     success = await manager.play_to_output(output_id, stream_url, track_id, metadata)
     if not success:
         raise ValidationError("Failed to start playback")

@@ -1,7 +1,7 @@
 {
   "contract_version": 1,
   "min_client_contract": 1,
-  "schema_hash": "sha256:5193ccbf814501daeb30ebf5faf737c4ea273e40f145ce26b9e406bf161e571b",
+  "schema_hash": "sha256:fa0380164b9d621f164e9c94ce7160f2b1daa923b12e380b770b47fc7d6c4c67",
   "client_floor_history": [
     {
       "floor": 1,

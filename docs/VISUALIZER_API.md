@@ -96,7 +96,7 @@ parent.postMessage({ type: 'familiar:ready', apiVersion: 1 }, '*');
     title: string | null,
     artist: string | null,
     album: string | null,
-    artworkUrl: string | null,   // load it directly; it is a normal URL
+    artworkUrl: string | null,   // load it directly; a data: URL from Familiar, which needs no credential
     duration: number,            // seconds
     features: {                  // null when the track has not been analysed
       bpm?: number, key?: string, energy?: number, valence?: number,

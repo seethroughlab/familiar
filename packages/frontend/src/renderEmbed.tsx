@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
-import { initApiOrigin, initServerToken, registerProfileProvider } from './api/base';
+import { initApiOrigin, initServerToken, registerProfileProvider, syncMediaCookie } from './api/base';
 import { profileFromURL } from './services/embedBridge';
 import { EmbedDiscover } from './components/Embed/EmbedDiscover';
 
@@ -48,7 +48,10 @@ export function renderEmbed(options?: { onReady?: () => void }): void {
   });
 
   // The token too (ADR-0045) — the embedded surface calls the same API the app does.
-  Promise.all([initApiOrigin(), initServerToken()]).then(() => {
+  Promise.all([initApiOrigin(), initServerToken()])
+    // The media cookie before the first <img> asks for artwork (ADR-0176 point 3). It never throws.
+    .then(() => syncMediaCookie())
+    .then(() => {
     options?.onReady?.();
     createRoot(document.getElementById('root')!).render(
       <StrictMode>

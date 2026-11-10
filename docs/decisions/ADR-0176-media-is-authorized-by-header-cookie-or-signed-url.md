@@ -21,7 +21,42 @@ Implementation:
   the file exists, the issued key and a UUID are served, tampered and path-shaped keys are refused,
   the secret is minted once and never shown; the route tests fail against the previous routes. The
   two stale comments named under Follow-up (`MEDIA_ROUTES`, `api/base.ts`) are corrected.
-- **Not done:** Phases 2–4 (accept header, cookie and signed URL; clients send them; enforce).
+- **Phase 2, 2026-11-10: all three credentials are accepted, none required.**
+  `backend/app/api/media_credentials.py` checks a media read for the token header, a media cookie or
+  a signed URL, every key derived from the server token so rotation re-keys all three (point 5). The
+  gate's check (`TokenAuthMiddleware._media_refused`) is written and tested but switched off by
+  `MEDIA_ENFORCED = False`; Phase 4 flips it. `POST /auth/media-cookie` issues the cookie behind the
+  token gate (`HttpOnly`, `SameSite=Strict`, `Path=/api/v1`, a month, `Secure` only over https,
+  since the tailnet is plain http); `DELETE` clears it. `POST /outputs/{id}/play` hands a speaker
+  `?exp=&sig=`, the HMAC over method class, routed path and `exp`. **`exp` measured, per the
+  follow-up:** the longest track on the NAS on 2026-11-10 was 11,626 s and 97 ran over an hour, so a
+  URL lasts its own track plus four hours (eight when the length is unknown) rather than one fixed
+  span. `RedactCredentialsFilter` on `uvicorn.access` and `redact_credentials` on the UPnP failure
+  log keep `sig` out of logs (point 6). The server advertises `media.credentials` (point 8).
+  `tests/test_media_credentials.py` runs the exit condition with enforcement on: each credential reads
+  media; none, a wrong token, a rotated cookie or signature, the token used as a cookie and an expired
+  signature are refused; a cookie on a `POST` or a non-media path and a signature for another path
+  authorize nothing; a tokenless server is left to ADR-0171; and, with enforcement off as shipped,
+  media is still served bare.
+- **Phase 3, web and server side, 2026-11-10.** The web admin and `/embed` ask for the cookie once
+  the token is loaded, and whenever it is set or cleared (`syncMediaCookie` in `api/base.ts`). The
+  visualizer page cannot use the cookie (its origin is the app's own scheme), so `EmbedVisualizer`
+  fetches the artwork with the header and hands the plugin a `data:` URL. **Apple side:**
+  `familiar-apple` #267: one rule, `MediaAuthorization`, sends the header only to the paired server's
+  scheme, host and port, reading the token per request, from the engine's load, preload and
+  lock-screen artwork, `ArtworkFetcher`, `DownloadManager` and the video `AVURLAsset`. An App Store
+  release carrying it is what starts point 8's clock.
+- **Found while building:**
+  - **Nothing calls the speaker route.** The web player that called `POST /outputs/{id}/play` was
+    retired, the Apple app never used it, and no MCP tool reaches it, so signing is built and tested
+    but has no live consumer today. It is kept because the route still exists.
+  - **The Context table misses one consumer:** `NativeAudioEngine`'s lock-screen artwork fetch of
+    `/tracks/{id}/artwork`, now covered.
+  - **A background download queued before a rotation keeps the old token**, held by the system with
+    the task's other headers. Once enforced it fails until retried; point 4 forbids the token only in
+    a URL or `DownloadTaskDescription`, which this respects.
+- **Not done:** Phase 4 (enforce, `Cache-Control: private`, remove the health-register entry) waits for
+  point 8's trigger: 1.6 and 1.7 (build 78) send no credential on media and are still offered.
 
 Extends [ADR-0171](ADR-0171-a-remotely-reachable-server-is-protected-by-default.md) and
 [ADR-0045](ADR-0045-familiar-authenticates-inbound-requests.md)

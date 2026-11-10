@@ -5731,6 +5731,20 @@
         "title": "MapNode3DResponse",
         "type": "object"
       },
+      "MediaCookieStatus": {
+        "description": "Whether this browser now holds a media cookie (ADR-0176 point 3).",
+        "properties": {
+          "issued": {
+            "title": "Issued",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "issued"
+        ],
+        "title": "MediaCookieStatus",
+        "type": "object"
+      },
       "MergeArtistsRequest": {
         "properties": {
           "keep_id": {
@@ -13753,6 +13767,148 @@
         "summary": "Get Artwork By Hash",
         "tags": [
           "artwork"
+        ]
+      }
+    },
+    "/api/v1/auth/media-cookie": {
+      "delete": {
+        "description": "Remove this browser's media cookie, as the web admin does when it forgets the token.",
+        "operationId": "auth_clear_media_cookie",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaCookieStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Clear Media Cookie",
+        "tags": [
+          "auth"
+        ]
+      },
+      "post": {
+        "description": "Give the web admin a cookie its `<img>` artwork requests carry (ADR-0176 point 3).\n\nBehind the token gate like the rest of the API, so only a caller holding the token gets one. The\ncookie is `HttpOnly`, `SameSite=Strict` and scoped to `/api/v1`, and the gate honours it only for\n`GET`/`HEAD` on media routes: it can show a picture and never perform an action. It is derived\nfrom the token, so rotating the token invalidates it.",
+        "operationId": "auth_issue_media_cookie",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaCookieStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Issue Media Cookie",
+        "tags": [
+          "auth"
         ]
       }
     },

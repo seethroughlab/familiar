@@ -96,6 +96,7 @@ class TestCapabilities:
         "lyrics.status",
         "visualizer.paired_page",
         "albums.move_to_album",
+        "media.credentials",
     }
 
     def test_no_published_name_is_dropped(self) -> None:

@@ -8,6 +8,7 @@ Also provides an in-memory ring buffer of recent logs for diagnostics export.
 
 import json
 import logging
+import re
 import sys
 import threading
 from collections import deque
@@ -182,6 +183,32 @@ class DevelopmentFormatter(logging.Formatter):
 CHILD_LOG_FORMAT = "%(asctime)s %(levelname)s [pid %(process)d] %(message)s"
 
 
+#: A signed media URL's signature (ADR-0176 point 6). The access log records path and query, so a
+#: speaker's URL would otherwise put a working credential in the log and the diagnostics export.
+_URL_SIGNATURE = re.compile(r"([?&]sig=)[^&\s\"']+")
+
+
+def redact_credentials(text: str) -> str:
+    """Remove a URL signature from anything about to be logged."""
+    return _URL_SIGNATURE.sub(r"\1[redacted]", text)
+
+
+class RedactCredentialsFilter(logging.Filter):
+    """Redacts URL signatures from a record's message and arguments before any handler sees it.
+
+    On `uvicorn.access` the path and query are an argument, not part of the format string.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str) and "sig=" in record.msg:
+            record.msg = redact_credentials(record.msg)
+        if isinstance(record.args, tuple):
+            record.args = tuple(
+                redact_credentials(a) if isinstance(a, str) and "sig=" in a else a for a in record.args
+            )
+        return True
+
+
 def setup_logging() -> None:
     """Configure logging based on environment."""
     # Determine log level
@@ -216,7 +243,10 @@ def setup_logging() -> None:
     # Reduce noise from third-party libraries
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
-    logging.getLogger("uvicorn.access").setLevel(logging.INFO)
+    access = logging.getLogger("uvicorn.access")
+    access.setLevel(logging.INFO)
+    if not any(isinstance(f, RedactCredentialsFilter) for f in access.filters):
+        access.addFilter(RedactCredentialsFilter())
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 
 

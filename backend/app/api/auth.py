@@ -97,7 +97,9 @@ def token_matches(presented: str | None, configured: str | None) -> bool:
 #: leak (ADR-0045, ADR-0134 point 3): an oracle over the collection. Since ADR-0176 Phase 1 a hash
 #: key is served only with this server's MAC (`app/services/artwork_keys.py`), on the image route and
 #: on `/artwork/status/{key}` (which the second pattern below also matches); a bare hash is a 404.
-#: Requiring a credential for media at all is ADR-0176's later phases.
+#: A media read is authorized by the header, a media cookie or a server-signed URL
+#: (`app/api/media_credentials.py`, ADR-0176 Phase 2), but none is *required* until Phase 4 turns on
+#: `MEDIA_ENFORCED`: the App Store builds 1.6 and 1.7 send no credential on media.
 MEDIA_ROUTES = tuple(
     re.compile(pattern)
     for pattern in (
@@ -149,6 +151,12 @@ LOCAL_ONLY_DETAIL = (
     "This server has no token, so it only answers requests from its own machine. On the server, run "
     "`python -m app.token --create` (in Docker: `docker exec familiar-api python -m app.token "
     "--create`) and sign in with the link it prints."
+)
+
+#: What a media read without a credential is told once ADR-0176 is enforced.
+MEDIA_CREDENTIAL_DETAIL = (
+    f"Media needs a credential: send the server token in the {TOKEN_HEADER} header, sign in to the "
+    "web admin for its media cookie, or use a URL this server signed."
 )
 
 #: What `/mcp` answers on an open server with no Host allow-list (ADR-0171 point 7).
@@ -208,6 +216,8 @@ class TokenAuthMiddleware:
         path = scope.get("path", "")
         method = scope.get("method", "GET")
         claims = _claims_the_server(path, method)
+        if await self._media_refused(scope, path, method, send):
+            return
         if not claims and not path_requires_token(path, method):
             await self.app(scope, receive, send)
             return
@@ -233,6 +243,25 @@ class TokenAuthMiddleware:
             return
 
         await self._refuse(scope, send)
+
+    @staticmethod
+    async def _media_refused(scope: Scope, path: str, method: str, send: Send) -> bool:
+        """ADR-0176: on a tokened server, a media read needs a header, cookie or signed URL.
+
+        Only once `MEDIA_ENFORCED` is on (Phase 4). Until then this returns False before reading
+        anything, and media stays exempt as `MEDIA_ROUTES` records.
+        """
+        from app.api import media_credentials as media
+
+        if not media.MEDIA_ENFORCED or not media.is_media_request(path, method):
+            return False
+        from app.services.app_settings import get_app_settings_service
+
+        configured = get_app_settings_service().get().access_token
+        if not configured or media.presented_credential(scope, configured) is not None:
+            return False
+        await TokenAuthMiddleware._refuse(scope, send, detail=MEDIA_CREDENTIAL_DETAIL)
+        return True
 
     @staticmethod
     async def _refuse(scope: Scope, send: Send, detail: str | None = None) -> None:
