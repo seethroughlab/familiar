@@ -3820,6 +3820,88 @@
         "title": "ExternalAlbumsResponse",
         "type": "object"
       },
+      "FailureExample": {
+        "description": "One occurrence, redacted (ADR-0174 point 5).",
+        "properties": {
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "timestamp": {
+            "title": "Timestamp",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "track": {
+            "title": "Track",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "FailureExample",
+        "type": "object"
+      },
+      "FailureGroup": {
+        "description": "Failures of one kind in one task: what failed, how much, and what to do (ADR-0174 point 4).",
+        "properties": {
+          "affected": {
+            "title": "Affected",
+            "type": "integer"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "examples": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FailureExample"
+            },
+            "title": "Examples",
+            "type": "array"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "last_at": {
+            "title": "Last At",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "next_action": {
+            "title": "Next Action",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "task": {
+            "title": "Task",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "task",
+          "summary",
+          "next_action",
+          "count",
+          "affected"
+        ],
+        "title": "FailureGroup",
+        "type": "object"
+      },
       "FavoriteStatusResponse": {
         "description": "Response for favorite status check.",
         "properties": {
@@ -10435,6 +10517,13 @@
             "title": "Error",
             "type": "string"
           },
+          "kind": {
+            "title": "Kind",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "task": {
             "title": "Task",
             "type": "string"
@@ -12213,6 +12302,14 @@
               "$ref": "#/components/schemas/BackgroundEvent"
             },
             "title": "Background Events",
+            "type": "array"
+          },
+          "failure_groups": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FailureGroup"
+            },
+            "title": "Failure Groups",
             "type": "array"
           },
           "phase_queues": {

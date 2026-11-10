@@ -32,6 +32,11 @@ them from stored failures.
 
 ### Changed
 
+- **Analysis failures are grouped, with what to do** (ADR-0174). Each failure has a stable `kind`;
+  `/health/workers` gains `failure_groups` (summary, count, tracks affected, last occurrence, next
+  action), and Analysis → Status shows those, with the raw messages behind "Details" and a copy
+  button. Messages are redacted before they are stored or sent: passwords in connection strings,
+  server tokens and API keys become `***`.
 - **`/new-releases/status` and `/new-releases/check*` declare their responses** (ADR-0173), and
   `purchase_links` is typed as `{name, url}` per store. The JSON is the same except that the status
   response's `progress` no longer echoes the internal `profile_id`, which no client read. The

@@ -14,6 +14,7 @@ import { Link } from 'react-router-dom';
 import { libraryApi, systemApi } from '../../api';
 import { queryKeys } from '../../api/queryKeys';
 import { SectionPage } from '../AdminPage';
+import { FailureGroups } from './FailureGroups';
 
 const PHASE_LABELS: Record<string, string> = {
   features: 'Features',
@@ -48,7 +49,6 @@ export function StatusSection() {
   const queues = workers.data?.phase_queues ?? [];
   const progress = workers.data?.analysis_progress;
   const worker = workers.data?.workers?.[0];
-  const failures = workers.data?.recent_failures ?? [];
   const stalls = queues.reduce((n, q) => n + (q.stall_recoveries ?? 0), 0);
   const syncRunning = sync.data?.status === 'running';
 
@@ -145,18 +145,7 @@ export function StatusSection() {
         </section>
       )}
 
-      {failures.length > 0 && (
-        <section className="bg-zinc-800/50 rounded-lg p-4 space-y-2" aria-label="Recent failures">
-          <h4 className="font-medium text-white">Recent failures</h4>
-          <ul className="space-y-1 text-sm">
-            {failures.slice(0, 10).map((f, i) => (
-              <li key={i} className="text-zinc-300 break-words">
-                {f.task} — <span className="text-zinc-500">{f.error}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      <FailureGroups groups={workers.data?.failure_groups ?? []} />
     </SectionPage>
   );
 }

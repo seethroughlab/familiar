@@ -245,9 +245,18 @@ export function attentionItems(inputs: OverviewInputs): AttentionItem[] {
     }
   }
 
-  const failures = inputs.workers?.recent_failures?.length ?? 0;
-  if (failures > 0) {
-    items.push({ tone: 'warn', title: `${failures} recent analysis failure${failures === 1 ? '' : 's'}`, detail: 'Tracks whose analysis raised; see the pipeline status', to: '/analysis', where: 'Analysis' });
+  // ADR-0174: the groups say what failed and what to do; a raw count said neither.
+  const groups = inputs.workers?.failure_groups ?? [];
+  if (groups.length > 0) {
+    const total = groups.reduce((n, g) => n + g.count, 0);
+    const top = groups[0];
+    items.push({
+      tone: 'warn',
+      title: `${total} recent failure${total === 1 ? '' : 's'}: ${top.summary.toLowerCase()}`,
+      detail: groups.length > 1 ? `${top.next_action} (and ${groups.length - 1} other kind${groups.length === 2 ? '' : 's'})` : top.next_action,
+      to: '/analysis',
+      where: 'Analysis',
+    });
   }
 
   const pending = backlog(inputs.workers?.phase_queues);

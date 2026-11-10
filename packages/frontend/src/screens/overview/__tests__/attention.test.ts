@@ -185,7 +185,10 @@ describe('every attention item links to a mounted route (ADR-0126 point 3)', () 
       health: { ...idleNas.health, services: [{ name: 'redis', status: 'unhealthy', message: '' }] },
       backup: { ...idleNas.backup, last_backup: { timestamp: 'x', status: 'failed' } },
       discovery: { status: 'failing', sources: [{ source: 'lastfm', state: 'failing', last_success_at: null, last_failure_at: null, last_failure_kind: null, last_failure_detail: null, consecutive_failures: 1, items_contributed: 0, backoff_until: null }] },
-      workers: { ...idleNas.workers, recent_failures: [{ task: 't', error: 'e' }] },
+      workers: {
+        ...idleNas.workers,
+        failure_groups: [{ kind: 'undecodable', task: 'extract_features', summary: 'The audio file could not be decoded', next_action: 'Replace it.', count: 2, affected: 1, examples: [] }],
+      },
     } as never);
     expect(everything.length).toBeGreaterThan(4);
     for (const item of everything) {
@@ -235,5 +238,23 @@ describe('the library watch (ADR-0142 point 6)', () => {
   it('stays quiet while watching', () => {
     const items = attentionItems({ watch: { watching: true, roots: ['/music'], pending: 0 } });
     expect(items.some((i) => i.title.includes('next sync'))).toBe(false);
+  });
+});
+
+describe('failures (ADR-0174)', () => {
+  it('names what failed and what to do, not a raw count', () => {
+    const items = attentionItems({
+      ...idleNas,
+      workers: {
+        ...idleNas.workers,
+        failure_groups: [
+          { kind: 'undecodable', task: 'extract_features', summary: 'The audio file could not be decoded', next_action: 'Replace it.', count: 3, affected: 2, examples: [] },
+          { kind: 'network', task: 'new_releases', summary: 'An outside service could not be reached', next_action: 'Check the connection.', count: 1, affected: 1, examples: [] },
+        ],
+      },
+    } as never);
+    const item = items.find((i) => i.where === 'Analysis' && i.tone === 'warn');
+    expect(item?.title).toBe('4 recent failures: the audio file could not be decoded');
+    expect(item?.detail).toBe('Replace it. (and 1 other kind)');
   });
 });

@@ -19,6 +19,7 @@ import {
   type BackgroundJob as WireBackgroundJob,
   type BackgroundJobsResponse as WireBackgroundJobsResponse,
   type DiscoveryHealthResponse,
+  type FailureGroup as WireFailureGroup,
   type DiscoverySourceHealthResponse,
   type PhaseQueue as WirePhaseQueue,
   type ServiceStatus as WireServiceStatus,
@@ -30,6 +31,7 @@ export type SystemHealth = WireSystemHealth;
 export type ServiceStatus = WireServiceStatus;
 export type WorkerStatus = WireWorkerStatus;
 export type PhaseQueue = WirePhaseQueue;
+export type FailureGroup = WireFailureGroup;
 export type DiscoveryHealth = DiscoveryHealthResponse;
 export type DiscoverySourceHealth = DiscoverySourceHealthResponse;
 export type BackgroundJob = WireBackgroundJob;

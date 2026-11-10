@@ -42,12 +42,19 @@ MAX_FAILURES_STORED = 50
 
 
 def _record_task_failure(task_name: str, error: str, track_info: str | None = None) -> None:
-    """Record a task failure in Redis for UI visibility."""
+    """Record a task failure in Redis for UI visibility.
+
+    With a stable `kind` (ADR-0174 point 3), and redacted before it is stored, so no credential in
+    an exception message is kept for 24 hours or sent to a browser.
+    """
+    from app.services.failure_report import failure_kind, redact
+
     try:
         r = get_redis()
         failure = json.dumps({
             "task": task_name,
-            "error": error,
+            "kind": failure_kind(error),
+            "error": redact(error),
             "track": track_info,
             "timestamp": datetime.now().isoformat(),
         })

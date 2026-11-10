@@ -2760,6 +2760,66 @@ export type ExternalAlbumsResponse = {
 };
 
 /**
+ * FailureExample
+ *
+ * One occurrence, redacted (ADR-0174 point 5).
+ */
+export type FailureExample = {
+    /**
+     * Error
+     */
+    error: string;
+    /**
+     * Timestamp
+     */
+    timestamp?: string | null;
+    /**
+     * Track
+     */
+    track?: string | null;
+};
+
+/**
+ * FailureGroup
+ *
+ * Failures of one kind in one task: what failed, how much, and what to do (ADR-0174 point 4).
+ */
+export type FailureGroup = {
+    /**
+     * Affected
+     */
+    affected: number;
+    /**
+     * Count
+     */
+    count: number;
+    /**
+     * Examples
+     */
+    examples?: Array<FailureExample>;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Last At
+     */
+    last_at?: string | null;
+    /**
+     * Next Action
+     */
+    next_action: string;
+    /**
+     * Summary
+     */
+    summary: string;
+    /**
+     * Task
+     */
+    task: string;
+};
+
+/**
  * FavoriteStatusResponse
  *
  * Response for favorite status check.
@@ -7416,6 +7476,10 @@ export type TaskFailure = {
      */
     error: string;
     /**
+     * Kind
+     */
+    kind?: string | null;
+    /**
      * Task
      */
     task: string;
@@ -8593,6 +8657,10 @@ export type WorkerStatus = {
      * Background Events
      */
     background_events?: Array<BackgroundEvent>;
+    /**
+     * Failure Groups
+     */
+    failure_groups?: Array<FailureGroup>;
     /**
      * Phase Queues
      */
