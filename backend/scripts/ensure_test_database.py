@@ -4,7 +4,9 @@
         uv run python scripts/ensure_test_database.py
 
 `make test` runs this first, so nobody edits a DSN by hand before a test run. Idempotent: an
-existing database is left alone and `alembic upgrade head` is a no-op at head. The URL goes
+existing database is left alone and `alembic upgrade head` is a no-op at head — **unless it is worn
+out**: a table whose column numbers are close to PostgreSQL's 1,600 limit is dropped and recreated
+(`worn_out`), since a test database is disposable by definition and nothing else repairs it. The URL goes
 through the same guard the suite uses, so this cannot create or migrate anything not named as
 disposable — the guard, not this script, is where the rule lives.
 
@@ -71,6 +73,66 @@ async def ensure_database(url: str) -> bool:
     raise SystemExit(f"could not open a maintenance connection to create {name!r}: {last_error}")
 
 
+#: PostgreSQL never reuses a dropped column's number, and a table may number at most 1,600. A test
+#: database migrated down and up enough times runs out: on 2026-11-10 the shared `familiar_test` had
+#: `track_analysis` at 1,599 (1,587 of them dropped), and every migration failed with "tables can
+#: have at most 1600 columns". The round-trip tests now use their own database; this repairs the
+#: databases they already wore out, well before the limit stops a migration from adding one.
+WORN_OUT_AT = 1200
+
+
+async def worn_out(url: str) -> tuple[str, int] | None:
+    """The table with the highest column number, if it is past `WORN_OUT_AT`; otherwise None."""
+    parts = make_url(url)
+    connection = await asyncpg.connect(
+        host=parts.host,
+        port=parts.port or 5432,
+        user=parts.username,
+        password=parts.password,
+        database=parts.database,
+    )
+    try:
+        row = await connection.fetchrow(
+            """
+            SELECT c.relname AS name, max(a.attnum) AS attnum
+            FROM pg_attribute a
+            JOIN pg_class c ON c.oid = a.attrelid
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public' AND c.relkind = 'r' AND a.attnum > 0
+            GROUP BY c.relname ORDER BY 2 DESC LIMIT 1
+            """
+        )
+    finally:
+        await connection.close()
+    if row and row["attnum"] >= WORN_OUT_AT:
+        return row["name"], row["attnum"]
+    return None
+
+
+async def recreate_database(url: str) -> None:
+    """Drop and create the database the URL names. Only ever reached through the guard."""
+    parts = make_url(url)
+    connection = await asyncpg.connect(
+        host=parts.host,
+        port=parts.port or 5432,
+        user=parts.username,
+        password=parts.password,
+        database="postgres",
+    )
+    try:
+        # Not `WITH (FORCE)`: several sessions share one test database, and ending another's run
+        # halfway would be worse than asking for a retry.
+        await connection.execute(f'DROP DATABASE IF EXISTS "{parts.database}"')
+        await connection.execute(f'CREATE DATABASE "{parts.database}"')
+    except asyncpg.ObjectInUseError:
+        raise SystemExit(
+            f"{parts.database} needs recreating but another session is connected to it. Run this "
+            "again once that test run finishes, or point TEST_DATABASE_URL at another *_test name."
+        ) from None
+    finally:
+        await connection.close()
+
+
 def migrate(url: str) -> None:
     environment = {**os.environ, "DATABASE_URL": url}
     subprocess.run(
@@ -88,7 +150,14 @@ def main() -> int:
         print(error, file=sys.stderr)
         return 2
     created = asyncio.run(ensure_database(url))
-    print(f"{'created' if created else 'found'} {make_url(url).database}")
+    name = make_url(url).database
+    print(f"{'created' if created else 'found'} {name}")
+    if not created and (table := asyncio.run(worn_out(url))):
+        print(
+            f"{name} is worn out ({table[0]} is at column {table[1]} of PostgreSQL's 1,600, from "
+            "migrations run down and up); recreating it"
+        )
+        asyncio.run(recreate_database(url))
     migrate(url)
     return 0
 
