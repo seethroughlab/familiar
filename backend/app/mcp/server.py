@@ -44,6 +44,7 @@ from app.mcp.playback import (
     now_playing_tool,
 )
 from app.services.llm.tools import MUSIC_TOOLS
+from app.services.playback_commands import get_channel
 
 logger = logging.getLogger(__name__)
 
@@ -257,10 +258,27 @@ async def on_call_tool(
     )
     if is_error:
         logger.info("mcp tool %s returned an error: %s", name, result.get("error"))
+    elif name in PLAYLIST_WRITING_TOOLS:
+        get_channel().notify(profile_id, PLAYLISTS_CHANGED)
     return types.CallToolResult(
         content=[types.TextContent(type="text", text=json.dumps(result, default=str))],
         is_error=is_error,
     )
+
+
+#: Tools that write a playlist. After one succeeds, every attached client is told its playlists
+#: changed, so a playlist made from a conversation appears without relaunching the app (ADR-0177).
+#: A spurious notice costs one small request; a missing one is a playlist the listener cannot find.
+PLAYLIST_WRITING_TOOLS = frozenset(
+    {
+        "create_playlist_from_items",
+        "add_tracks_to_playlist",
+        "generate_playlist",
+        "select_diverse_tracks",
+    }
+)
+
+PLAYLISTS_CHANGED = {"type": "playlists_changed"}
 
 
 def _error(message: str) -> types.CallToolResult:
