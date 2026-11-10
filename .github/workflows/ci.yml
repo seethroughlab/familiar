@@ -66,12 +66,16 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_id || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+# Linux jobs name ubuntu-24.04, not ubuntu-latest: on 2026-11-10 `latest` became 26.04, and
+# Playwright 1.57 refuses to install Chromium there ("does not support chromium on
+# ubuntu26.04-x64"), so every E2E and Site Test job failed at its first step. Move to 26.04
+# deliberately, with a Playwright that supports it.
 jobs:
   macos-compose-check:
     name: macOS Compose Check
     # Parses compose files; nothing here is macOS-specific, and a bare `self-hosted` label could land
     # on any self-hosted machine.
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -279,7 +283,7 @@ jobs:
     # `No download found for request: cpython-3.11.15-macos-aarch64-none` before running a check.
     # It only surfaced when `CI_RUNNER` was cleared: while it was `ubuntu-latest` these landed on
     # hosted Linux and the ambiguity never showed.
-    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-24.04"]') }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -308,7 +312,7 @@ jobs:
     # `No download found for request: cpython-3.11.15-macos-aarch64-none` before running a check.
     # It only surfaced when `CI_RUNNER` was cleared: while it was `ubuntu-latest` these landed on
     # hosted Linux and the ambiguity never showed.
-    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-24.04"]') }}
     timeout-minutes: 10
     env:
       UV_HTTP_TIMEOUT: '120'
@@ -388,7 +392,7 @@ jobs:
 
   backend-test-contract:
     name: Backend Test (Contract)
-    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-24.04"]') }}
     timeout-minutes: 10
     env:
       UV_HTTP_TIMEOUT: '120'
@@ -473,7 +477,7 @@ jobs:
 
   backend-test-core:
     name: Backend Test (Core)
-    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-24.04"]') }}
     timeout-minutes: 10
     env:
       UV_HTTP_TIMEOUT: '120'
@@ -561,7 +565,7 @@ jobs:
   # measures coverage.
   backend-test-no-redis:
     name: Backend Test (Core, no Redis)
-    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-24.04"]') }}
     timeout-minutes: 10
     env:
       UV_HTTP_TIMEOUT: '120'
@@ -609,7 +613,7 @@ jobs:
 
   backend-test-integration:
     name: Backend Test (Integration)
-    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-24.04"]') }}
     timeout-minutes: 15
     env:
       UV_HTTP_TIMEOUT: '120'
@@ -713,7 +717,7 @@ jobs:
     #
     # That happened five times in a day, always to `Frontend Build`. Moving them here leaves the Mac
     # for the two jobs that genuinely need it.
-    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-24.04"]') }}
     timeout-minutes: 10
     env:
       NPM_CONFIG_FETCH_RETRIES: '5'
@@ -773,7 +777,7 @@ jobs:
     #
     # That happened five times in a day, always to `Frontend Build`. Moving them here leaves the Mac
     # for the two jobs that genuinely need it.
-    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-24.04"]') }}
     timeout-minutes: 15
     env:
       NPM_CONFIG_FETCH_RETRIES: '5'
@@ -810,7 +814,7 @@ jobs:
   # file://, no server.
   site-test:
     name: Site Test
-    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-24.04"]') }}
     timeout-minutes: 15
     env:
       NPM_CONFIG_FETCH_RETRIES: '5'
@@ -852,7 +856,7 @@ jobs:
     #
     # That happened five times in a day, always to `Frontend Build`. Moving them here leaves the Mac
     # for the two jobs that genuinely need it.
-    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-24.04"]') }}
     timeout-minutes: 15
     env:
       NPM_CONFIG_FETCH_RETRIES: '5'
@@ -908,7 +912,7 @@ jobs:
     name: Docker Build
     # Pull requests only: on a merge it would re-validate an image the PR run already built.
     if: github.event_name != 'push'
-    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-24.04"]') }}
     timeout-minutes: 60
     # No longer `continue-on-error`. It was advisory because the NAS's network made 30-minute
     # builds flake on TCP connects and slow mirrors, so a red build said nothing about the code. On a
@@ -941,7 +945,7 @@ jobs:
     # nothing docker-build makes and builds its own frontend and backend. On hosted runners each job
     # has its own machine, so it now waits only for the tests below.
     if: github.event_name != 'push'
-    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["ubuntu-24.04"]') }}
     timeout-minutes: 30
     needs: [backend-lint, backend-test-contract, backend-test-core, backend-test-no-redis, backend-test-integration, frontend-lint, frontend-test]
     # **Deliberately not `continue-on-error`.** It was, and the reason was sound: the job inherited
