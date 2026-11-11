@@ -10,7 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **Music and artwork now need a credential on a server with a token** (ADR-0176 Phase 4). The apps
 send one from 1.7 on, the web admin uses a cookie, and speakers get a link that expires. An iPhone
 or Mac still on Familiar 1.5.1 or earlier stops playing from a server with a token after this
-upgrade, so update the apps first. A server with no token is unaffected.
+upgrade, so update the apps first. The server log names each device it refuses, once an hour,
+with that reason. A server with no token is unaffected.
 
 ### Changed
 

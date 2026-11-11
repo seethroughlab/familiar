@@ -44,7 +44,9 @@ async def _gate(monkeypatch, scope, *, token=TOKEN, enforced=True):
     monkeypatch.setattr(media, "MEDIA_ENFORCED", enforced)
     from app import exposure
 
-    exposure.record(exposure.Exposure.OPEN)  # a tokenless server's own rules are ADR-0171's, not ours
+    exposure.record(
+        exposure.Exposure.OPEN
+    )  # a tokenless server's own rules are ADR-0171's, not ours
     passed, sent = False, []
 
     async def downstream(scope, receive, send):
@@ -59,7 +61,9 @@ async def _gate(monkeypatch, scope, *, token=TOKEN, enforced=True):
 
 
 def _signed_query(path=STREAM, token=TOKEN, lifetime_s=600, now=None):
-    return urlsplit(media.sign_url(f"http://nas:4400{path}", token, lifetime_s=lifetime_s, now=now)).query
+    return urlsplit(
+        media.sign_url(f"http://nas:4400{path}", token, lifetime_s=lifetime_s, now=now)
+    ).query
 
 
 # ── Signed URLs ─────────────────────────────────────────────────────────────────────────────────
@@ -87,7 +91,9 @@ def test_a_moved_expiry_is_refused():
 
 
 def test_signing_keeps_the_query_and_never_duplicates_exp_or_sig():
-    url = media.sign_url(f"http://nas:4400{STREAM}?format=aac&exp=1&sig=x", TOKEN, lifetime_s=60, now=NOW)
+    url = media.sign_url(
+        f"http://nas:4400{STREAM}?format=aac&exp=1&sig=x", TOKEN, lifetime_s=60, now=NOW
+    )
     params = parse_qs(urlsplit(url).query)
     assert params["format"] == ["aac"]
     assert len(params["exp"]) == len(params["sig"]) == 1
@@ -95,7 +101,9 @@ def test_signing_keeps_the_query_and_never_duplicates_exp_or_sig():
 
 
 def test_a_url_on_a_proxy_prefix_still_verifies_at_the_route():
-    query = urlsplit(media.sign_url(f"https://host/familiar{STREAM}", TOKEN, lifetime_s=60, now=NOW)).query
+    query = urlsplit(
+        media.sign_url(f"https://host/familiar{STREAM}", TOKEN, lifetime_s=60, now=NOW)
+    ).query
     assert media.signature_valid(STREAM, query, TOKEN, now=NOW)
 
 
@@ -145,7 +153,14 @@ async def test_each_credential_reads_media(monkeypatch, credential):
         {"query": _signed_query(token="rotated").encode()},
         {"query": _signed_query(lifetime_s=-1).encode()},
     ],
-    ids=["none", "wrong token", "old cookie", "token as cookie", "old signature", "expired signature"],
+    ids=[
+        "none",
+        "wrong token",
+        "old cookie",
+        "token as cookie",
+        "old signature",
+        "expired signature",
+    ],
 )
 async def test_without_a_valid_credential_media_is_refused(monkeypatch, credential):
     passed, status = await _gate(monkeypatch, _scope(**credential))
@@ -290,8 +305,13 @@ def test_a_signature_never_reaches_the_access_log():
     signed = f"{STREAM}?{_signed_query()}"
     sig = parse_qs(urlsplit(signed).query)["sig"][0]
     record = logging.LogRecord(
-        "uvicorn.access", logging.INFO, __file__, 1, '%s - "%s %s HTTP/%s" %d',
-        ("192.168.1.30:50000", "GET", signed, "1.1", 206), None,
+        "uvicorn.access",
+        logging.INFO,
+        __file__,
+        1,
+        '%s - "%s %s HTTP/%s" %d',
+        ("192.168.1.30:50000", "GET", signed, "1.1", 206),
+        None,
     )
     assert RedactCredentialsFilter().filter(record)
     line = record.getMessage()
@@ -311,3 +331,18 @@ def test_the_capability_is_advertised():
     from app.config import SERVER_CAPABILITIES
 
     assert "media.credentials" in SERVER_CAPABILITIES
+
+
+@pytest.mark.asyncio
+async def test_a_refusal_is_named_in_the_log_once_per_client(monkeypatch, caplog):
+    """An app older than 1.7 goes silent; the server log is where its owner finds out why."""
+    from app.api import auth
+
+    monkeypatch.setattr(auth, "_media_refusals_logged", {})
+    with caplog.at_level(logging.WARNING, logger="app.api.auth"):
+        for _ in range(3):
+            passed, status = await _gate(monkeypatch, _scope())
+            assert not passed and status == 401
+    warnings = [r for r in caplog.records if "Refused media" in r.getMessage()]
+    assert len(warnings) == 1
+    assert "192.168.1.20" in warnings[0].getMessage() and "1.7" in warnings[0].getMessage()

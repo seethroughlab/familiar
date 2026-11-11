@@ -30,12 +30,15 @@ attacker who can read `settings.json` — who already has every outbound API key
 from __future__ import annotations
 
 import hmac
+import logging
 import re
 import secrets
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.api.exceptions import ErrorCode
+
+logger = logging.getLogger(__name__)
 
 TOKEN_HEADER = "X-Familiar-Token"
 
@@ -160,6 +163,36 @@ MEDIA_CREDENTIAL_DETAIL = (
     "web admin for its media cookie, or use a URL this server signed."
 )
 
+#: How long a client that was refused media goes before it is named in the log again.
+MEDIA_REFUSAL_LOG_INTERVAL_S = 3600.0
+_media_refusals_logged: dict[str, float] = {}
+
+
+def _warn_media_refused(scope: Scope) -> None:
+    """Say in the server log why a listener's app went silent (ADR-0176 Phase 4).
+
+    An app from before 1.7 sends no credential on media. It shows the listener nothing useful, so
+    the server log is where the person running the server can find out. Once per client an hour,
+    since a player asks for audio and artwork many times a minute.
+    """
+    import time
+
+    client = scope.get("client")
+    host = client[0] if client else "unknown"
+    now = time.monotonic()
+    last = _media_refusals_logged.get(host)
+    if last is not None and now - last < MEDIA_REFUSAL_LOG_INTERVAL_S:
+        return
+    if len(_media_refusals_logged) > 1024:
+        _media_refusals_logged.clear()
+    _media_refusals_logged[host] = now
+    logger.warning(
+        "Refused media to %s: it sent no credential. An iPhone or Mac app older than Familiar 1.7 "
+        "does this; update the app. Media on a server with a token needs one (ADR-0176).",
+        host,
+    )
+
+
 #: What `/mcp` answers on an open server with no Host allow-list (ADR-0171 point 7).
 OPEN_MCP_DETAIL = (
     "MCP is off on a server with no token, because nothing else would stop a web page from reaching "
@@ -261,6 +294,7 @@ class TokenAuthMiddleware:
         configured = get_app_settings_service().get().access_token
         if not configured or media.presented_credential(scope, configured) is not None:
             return False
+        _warn_media_refused(scope)
         await TokenAuthMiddleware._refuse(scope, send, detail=MEDIA_CREDENTIAL_DETAIL)
         return True
 

@@ -68,6 +68,10 @@ Implementation:
   which replaces the test that pinned the exemption. All three fail against the Phase 3 code.
   **It reaches a listener only when their server upgrades**, so an iPhone or Mac still on 1.5.1 or an
   old TestFlight build loses audio and artwork from a tokened server at that upgrade, not before.
+  Such an app shows nothing useful, so the server logs a warning naming the client and the likely
+  cause (an app older than 1.7), once per client an hour (`_warn_media_refused` in `auth.py`;
+  `test_a_refusal_is_named_in_the_log_once_per_client`). The author's own iPhone and Mac were
+  checked on build 80 before this was written.
 - **Found while building Phase 4, contradicting Phase 3's note:** *the speaker route is called.*
   `familiar-apple`'s casting, `ServerCastOutputsSource.swift`, calls `POST /outputs/{id}/play` with
   the stream URL, and that is how a WiiM or other UPnP speaker gets its URL. So the Phase 2 signing
