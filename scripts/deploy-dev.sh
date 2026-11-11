@@ -81,6 +81,13 @@ ssh jeff@$NAS_HOST "docker exec familiar-api uv pip install 'curl_cffi>=0.7.0' '
 if [ "$DEPLOY_BACKEND" = true ]; then
     echo "Copying backend into container..."
     ssh jeff@$NAS_HOST "docker cp $REMOTE_PATH/backend/app/. familiar-api:/app/app/"
+
+    # The image's /app/VERSION names the release it was built from, and this overlay is newer code
+    # than that. Left alone, the server reports the image's release and the update check announces
+    # a release older than what it runs (ADR-0178 point 4). "dev" skips the check. Recreating the
+    # container from its image restores the real VERSION, along with the image's code.
+    echo "Marking the container's version as dev..."
+    ssh jeff@$NAS_HOST "docker exec familiar-api sh -c 'echo dev > /app/VERSION && chown familiar:familiar /app/VERSION'"
 fi
 
 if [ "$DEPLOY_FRONTEND" = true ]; then

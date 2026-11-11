@@ -98,6 +98,23 @@ This creates `.crt` and `.key` files (you're responsible for renewal every 90 da
 
 See [Tailscale HTTPS docs](https://tailscale.com/kb/1153/enabling-https) for more details.
 
+## Update checks
+
+Once a day, and 30 seconds after it starts, the server asks GitHub's releases API
+(`api.github.com/repos/seethroughlab/familiar/releases`) whether a newer Familiar release exists.
+It is a plain request for the public list of releases: GitHub sees your address, as with any
+web request, and nothing about your library or this server is sent. The web admin shows
+the answer, and so do the iPhone and Mac apps, which read it from the server rather than asking
+GitHub themselves (ADR-0178).
+
+It is on by default, on the **beta** channel, because every release so far is a beta. To turn it
+off, or to pick another channel, go to the web admin: **Server → Health → Release channel**.
+Choosing **Disabled** stops the request entirely.
+
+A server upgraded from a release before this one had `"disabled"` written to its `settings.json`
+whether or not anyone chose it, so the upgrade turns the check on once and says so in the log.
+Turn it off again and it stays off.
+
 ## Cloud Backup
 
 Familiar can back up your entire music library and configuration to Amazon S3 Glacier Deep Archive for long-term archival storage at ~$1/TB/month.
