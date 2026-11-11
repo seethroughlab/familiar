@@ -4,6 +4,19 @@ Status: accepted
 
 Date: 2026-11-11
 
+Implementation:
+
+- **Server, points 2–4, 2026-11-11 (#485).** `DEFAULT_UPDATE_CHANNEL = "beta"` in
+  `app/services/app_settings.py`. `_migrate_update_channel` runs in `_load`: a file without
+  `update_channel_migrated` whose channel is `"disabled"` or missing becomes `"beta"`, is saved, and
+  is logged with where to turn it off. Every file gets the marker, so it runs once. The marker
+  defaults to `True`, so a new install never migrates, and `get_masked` drops it.
+  `SettingsResponse` lists its fields, so the API schema did not change. `scripts/deploy-dev.sh`
+  writes `dev` to the container's `/app/VERSION`. Tests: `tests/test_update_channel_default.py`.
+  Four fail against the previous settings code; the other four guard that a channel someone chose
+  is kept. `docs/CONFIGURATION.md` gains "Update checks".
+- **Not done:** point 5, the banner in `familiar-apple`.
+
 Extends [ADR-0168](ADR-0168-a-server-names-what-it-can-do.md) and
 [ADR-0113](ADR-0113-the-api-declares-a-contract-version.md)
 
