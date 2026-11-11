@@ -12,10 +12,10 @@ admin shows artwork with `<img>`. So a media read is authorized by any one of:
 invalidates cookies in the same moment it signs clients out (point 5). Nothing new is stored: with
 no token there is nothing to derive from, no URL is signed, and ADR-0171's exposure rules decide.
 
-**Not enforced yet** (`MEDIA_ENFORCED`). Point 8 waits until no App Store build that omits the header
-is still offered — 1.6 and 1.7 (build 78) send nothing on media. Until then the gate checks nothing on
-media, and this module is exercised by its tests and by the clients that already send credentials.
-Phase 4 is flipping `MEDIA_ENFORCED`, then making media `Cache-Control: private`.
+**Enforced since Phase 4** (`MEDIA_ENFORCED`, 2026-11-11). Point 8's trigger was met when app 1.7
+(build 80), which sends the header, became the only App Store build offered on iOS and macOS: a
+tokened server refuses a media read that carries none of the three. Media is served
+`Cache-Control: private` so a shared cache cannot hand one listener's library to another (point 6).
 """
 
 from __future__ import annotations
@@ -33,8 +33,9 @@ from app.api.auth import MEDIA_METHODS, MEDIA_ROUTES, extract_token, token_match
 # Signatures are kept out of logs by `app.logging_config.redact_credentials`, which the access log
 # applies to every line (point 6).
 
-#: Phase 4 of ADR-0176. While False, a media request with no credential is still served.
-MEDIA_ENFORCED = False
+#: Phase 4 of ADR-0176: on a tokened server, a media read with no credential is refused. A module
+#: constant rather than a setting, so a server cannot be talked back into the old exemption.
+MEDIA_ENFORCED = True
 
 COOKIE_NAME = "familiar_media"
 #: The cookie is sent only to the API, and honoured only on media reads (`presented_credential`).

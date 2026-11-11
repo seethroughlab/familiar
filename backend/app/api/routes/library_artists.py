@@ -827,7 +827,7 @@ async def get_artist_image(
     if is_valid_image(artist.image_url):
         return RedirectResponse(
             url=artist.image_url,
-            headers={"Cache-Control": "public, max-age=86400"},
+            headers={"Cache-Control": "private, max-age=86400"},
         )
 
     # Step 2: Try Last.fm. Promote to Artist.image_url on success so the
@@ -856,7 +856,7 @@ async def get_artist_image(
                     await db.commit()
                     return RedirectResponse(
                         url=image_url,
-                        headers={"Cache-Control": "public, max-age=86400"},
+                        headers={"Cache-Control": "private, max-age=86400"},
                     )
         except Exception as e:
             logger.debug(f"Last.fm artist image lookup failed for '{artist.name}': {e}")
@@ -887,7 +887,7 @@ async def get_artist_image(
             return StreamingResponse(
                 stream_artwork(),
                 media_type="image/jpeg",
-                headers={"Cache-Control": "public, max-age=31536000"},
+                headers={"Cache-Control": "private, max-age=31536000"},
             )
 
         file_path = Path(track.file_path)
@@ -902,7 +902,7 @@ async def get_artist_image(
                 return StreamingResponse(
                     stream_artwork(),
                     media_type="image/jpeg",
-                    headers={"Cache-Control": "public, max-age=31536000"},
+                    headers={"Cache-Control": "private, max-age=31536000"},
                 )
 
     raise NotFoundError("No artist image available")

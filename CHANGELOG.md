@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**Music and artwork now need a credential on a server with a token** (ADR-0176 Phase 4). The apps
+send one from 1.7 on, the web admin uses a cookie, and speakers get a link that expires. An iPhone
+or Mac still on Familiar 1.5.1 or earlier stops playing from a server with a token after this
+upgrade, so update the apps first. A server with no token is unaffected.
+
+### Changed
+
+- Media on a tokened server is refused without the token header, the media cookie or a
+  server-signed URL. It is served `Cache-Control: private`, so a shared cache cannot serve one
+  listener's library to another.
+
 ## [0.2.0-beta24] - 2026-11-10
 
 One migration (`20261109_embed_failure_reason` adds two columns to `track_analysis` and backfills

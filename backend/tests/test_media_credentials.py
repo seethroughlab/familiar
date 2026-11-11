@@ -1,8 +1,8 @@
 """ADR-0176 Phase 2: media accepts a header, a cookie or a server-signed URL.
 
-Nothing is *required* yet (`MEDIA_ENFORCED` is off until no App Store build lacks the header), so the
-gate tests switch enforcement on: they are the exit condition Phase 4 will rely on, written while the
-code is fresh. One test pins that, today, media is still served without a credential.
+Phase 4 (2026-11-11) made them required on a tokened server: `MEDIA_ENFORCED` ships on, and the gate
+tests below are the ADR's exit condition. One test pins that it ships on, and one that media is never
+served `Cache-Control: public`.
 """
 
 from __future__ import annotations
@@ -177,15 +177,43 @@ async def test_a_tokenless_server_is_left_to_its_exposure_rules(monkeypatch):
     assert passed
 
 
-# ── Today ───────────────────────────────────────────────────────────────────────────────────────
+# ── As shipped ──────────────────────────────────────────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_until_phase_4_media_is_served_without_a_credential(monkeypatch):
-    """App 1.6 and 1.7 send nothing on media. Turning this on early silences every phone."""
-    assert media.MEDIA_ENFORCED is False
-    passed, status = await _gate(monkeypatch, _scope(), enforced=False)
-    assert passed and status is None
+async def test_phase_4_ships_enforced(monkeypatch):
+    """Since app 1.7 (build 80) is the only App Store build, a tokened server refuses bare media."""
+    assert media.MEDIA_ENFORCED is True
+    _settings(monkeypatch, TOKEN)
+    from app import exposure
+
+    exposure.record(exposure.Exposure.OPEN)
+    sent = []
+
+    async def downstream(scope, receive, send):
+        raise AssertionError("a bare media read reached the route")
+
+    async def send(message):
+        sent.append(message)
+
+    await TokenAuthMiddleware(downstream)(_scope(), None, send)
+    assert next(m["status"] for m in sent if m["type"] == "http.response.start") == 401
+
+
+def test_media_is_never_served_cache_control_public():
+    """Point 6: a shared cache must not hand one listener's library to another."""
+    from pathlib import Path
+
+    import app as app_pkg
+
+    root = Path(app_pkg.__file__).parent
+    offenders = [
+        f"{path.relative_to(root)}:{n}"
+        for path in root.rglob("*.py")
+        for n, line in enumerate(path.read_text().splitlines(), 1)
+        if '"Cache-Control": "public' in line
+    ]
+    assert offenders == []
 
 
 # ── The routes ──────────────────────────────────────────────────────────────────────────────────
