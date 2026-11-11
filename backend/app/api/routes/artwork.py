@@ -397,7 +397,7 @@ async def get_artwork_by_hash(album_hash: str, size: str) -> Any:
     return FileResponse(
         artwork_path,
         media_type="image/jpeg",
-        headers={"Cache-Control": "public, max-age=31536000"},
+        headers={"Cache-Control": "private, max-age=31536000"},
     )
 
 

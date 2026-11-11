@@ -267,7 +267,10 @@ class TestTheTokenIsNotLeaked:
 class TestMediaIsExempt:
     """ADR-0045's media exemption, which was recorded as decided on 2026-08-09 and did not exist
     until 2026-09-29. Without it, configuring a token broke `<img>` artwork in the web admin, every
-    stream a WiiM or Sonos fetches for itself, and the Apple app's audio and artwork."""
+    stream a WiiM or Sonos fetches for itself, and the Apple app's audio and artwork.
+
+    Since ADR-0176 Phase 4 these shapes are outside the *token* gate only: each needs the header, a
+    media cookie or a signed URL, which the middleware checks separately (`_media_refused`)."""
 
     MEDIA = [
         "/api/v1/tracks/3fa85f64-5717-4562-b3fc-2c963f66afa6/stream",
@@ -319,8 +322,13 @@ class TestMediaIsExempt:
             assert any(pattern.match(p) for p in get_paths), f"no GET route matches {pattern.pattern}"
 
     @pytest.mark.asyncio
-    async def test_the_middleware_serves_media_to_a_client_with_no_token(self, monkeypatch):
+    async def test_the_middleware_refuses_media_with_no_credential(self, monkeypatch):
+        """ADR-0176 Phase 4: outside the token gate is not open. `test_media_credentials.py` covers
+        the cookie and the signed URL; this pins the bare request and the header."""
+        path = "/api/v1/tracks/3fa85f64-5717-4562-b3fc-2c963f66afa6/stream"
+        passed, status = await TestTheMiddlewareGate._call(monkeypatch, "secret", {}, path)
+        assert not passed and status == 401
         passed, status = await TestTheMiddlewareGate._call(
-            monkeypatch, "secret", {}, "/api/v1/tracks/3fa85f64-5717-4562-b3fc-2c963f66afa6/stream"
+            monkeypatch, "secret", {"X-Familiar-Token": "secret"}, path
         )
         assert passed and status is None

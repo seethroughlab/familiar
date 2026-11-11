@@ -55,8 +55,34 @@ Implementation:
   - **A background download queued before a rotation keeps the old token**, held by the system with
     the task's other headers. Once enforced it fails until retried; point 4 forbids the token only in
     a URL or `DownloadTaskDescription`, which this respects.
-- **Not done:** Phase 4 (enforce, `Cache-Control: private`, remove the health-register entry) waits for
-  point 8's trigger: 1.6 and 1.7 (build 78) send no credential on media and are still offered.
+- **Phase 4, 2026-11-11: enforced.** Point 8's trigger was checked, not assumed: app 1.7 (build 80)
+  was released by hand on iOS and macOS that day, and App Store Connect read `READY_FOR_DISTRIBUTION`
+  for both. Build 80 was built from `familiar-apple` `2649ca93`, which contains #267, and its
+  visualizer page was re-vendored for this ADR (`86e08d4`). 1.5.1, the build it replaced, had the
+  same minimum OS (iOS 17.0, macOS 14.4), so no device is offered it as a last compatible version.
+  1.6 and build 78 only ever reached TestFlight. `MEDIA_ENFORCED` is now `True`. Every media route
+  answers `Cache-Control: private`: artwork, track artwork, artist images, video posters and
+  avatars had been `public`, and stream already was `private`. `test_media_is_never_served_cache_control_public`
+  scans `app/` so none can go back. The `docs/HEALTH.md` row is removed. Tests:
+  `test_phase_4_ships_enforced`, and `TestMediaIsExempt.test_the_middleware_refuses_media_with_no_credential`,
+  which replaces the test that pinned the exemption. All three fail against the Phase 3 code.
+  **It reaches a listener only when their server upgrades**, so an iPhone or Mac still on 1.5.1 or an
+  old TestFlight build loses audio and artwork from a tokened server at that upgrade, not before.
+  Such an app shows nothing useful, so the server logs a warning naming the client and the likely
+  cause (an app older than 1.7), once per client an hour (`_warn_media_refused` in `auth.py`;
+  `test_a_refusal_is_named_in_the_log_once_per_client`). The author's own iPhone and Mac were
+  checked on build 80 before this was written.
+- **Found while building Phase 4, contradicting Phase 3's note:** *the speaker route is called.*
+  `familiar-apple`'s casting, `ServerCastOutputsSource.swift`, calls `POST /outputs/{id}/play` with
+  the stream URL, and that is how a WiiM or other UPnP speaker gets its URL. So the Phase 2 signing
+  is live, not idle, and the route must stay. The "nothing calls the speaker route" note above came
+  from searching for the web player, which was retired, and not for the generated
+  `outputsPlayToOutput`. Speaker metadata carries no artwork URL (`TrackMetadata.artwork_url` is
+  never set), so there is no unsigned URL in the DIDL either.
+- **Not done:** the public site still says the music is served without sign-in
+  (`site/index.html`, "Listening away from home", and `site/faq.html`'s reverse-proxy answer).
+  That stays true for every released server up to v0.2.0-beta24. It changes in the release that
+  ships Phase 4 (ADR-0145 point 6's expiry, recorded in `docs/SITE-CLAIMS.md`).
 
 Extends [ADR-0171](ADR-0171-a-remotely-reachable-server-is-protected-by-default.md) and
 [ADR-0045](ADR-0045-familiar-authenticates-inbound-requests.md)

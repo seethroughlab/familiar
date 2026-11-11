@@ -356,7 +356,7 @@ async def get_video_poster(track_id: UUID) -> FileResponse:
     return FileResponse(
         poster_path,
         media_type="image/jpeg",
-        headers={"Cache-Control": "public, max-age=31536000"},
+        headers={"Cache-Control": "private, max-age=31536000"},
     )
 
 

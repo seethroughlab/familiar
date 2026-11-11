@@ -429,7 +429,7 @@ async def get_track_artwork(
         stream_artwork(),  # type: ignore[no-untyped-call]
         media_type="image/jpeg",
         headers={
-            "Cache-Control": "public, max-age=31536000",  # Cache for 1 year
+            "Cache-Control": "private, max-age=31536000",  # a year; private since ADR-0176 Phase 4
         },
     )
 

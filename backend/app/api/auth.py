@@ -30,12 +30,15 @@ attacker who can read `settings.json` — who already has every outbound API key
 from __future__ import annotations
 
 import hmac
+import logging
 import re
 import secrets
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.api.exceptions import ErrorCode
+
+logger = logging.getLogger(__name__)
 
 TOKEN_HEADER = "X-Familiar-Token"
 
@@ -83,7 +86,8 @@ def token_matches(presented: str | None, configured: str | None) -> bool:
     return hmac.compare_digest(presented, configured)
 
 
-#: Media, readable without a token (ADR-0045, "Media is exempt from the gate, decided 2026-08-09").
+#: Media: outside the token gate (ADR-0045, "Media is exempt from the gate, decided 2026-08-09"),
+#: but since ADR-0176 Phase 4 not open — see the end of this comment.
 #:
 #: **Recorded as decided for six weeks before it existed.** Until 2026-09-29 every `/api/` path was
 #: gated, so configuring a token broke `<img>` artwork in the web admin, every stream a WiiM or
@@ -97,9 +101,9 @@ def token_matches(presented: str | None, configured: str | None) -> bool:
 #: leak (ADR-0045, ADR-0134 point 3): an oracle over the collection. Since ADR-0176 Phase 1 a hash
 #: key is served only with this server's MAC (`app/services/artwork_keys.py`), on the image route and
 #: on `/artwork/status/{key}` (which the second pattern below also matches); a bare hash is a 404.
-#: A media read is authorized by the header, a media cookie or a server-signed URL
-#: (`app/api/media_credentials.py`, ADR-0176 Phase 2), but none is *required* until Phase 4 turns on
-#: `MEDIA_ENFORCED`: the App Store builds 1.6 and 1.7 send no credential on media.
+#: These shapes are not behind *the token*, but they are not open either: since ADR-0176 Phase 4 a
+#: media read on a tokened server needs one of three credentials — the header, a media cookie or a
+#: server-signed URL (`app/api/media_credentials.py`, `TokenAuthMiddleware._media_refused`).
 MEDIA_ROUTES = tuple(
     re.compile(pattern)
     for pattern in (
@@ -158,6 +162,36 @@ MEDIA_CREDENTIAL_DETAIL = (
     f"Media needs a credential: send the server token in the {TOKEN_HEADER} header, sign in to the "
     "web admin for its media cookie, or use a URL this server signed."
 )
+
+#: How long a client that was refused media goes before it is named in the log again.
+MEDIA_REFUSAL_LOG_INTERVAL_S = 3600.0
+_media_refusals_logged: dict[str, float] = {}
+
+
+def _warn_media_refused(scope: Scope) -> None:
+    """Say in the server log why a listener's app went silent (ADR-0176 Phase 4).
+
+    An app from before 1.7 sends no credential on media. It shows the listener nothing useful, so
+    the server log is where the person running the server can find out. Once per client an hour,
+    since a player asks for audio and artwork many times a minute.
+    """
+    import time
+
+    client = scope.get("client")
+    host = client[0] if client else "unknown"
+    now = time.monotonic()
+    last = _media_refusals_logged.get(host)
+    if last is not None and now - last < MEDIA_REFUSAL_LOG_INTERVAL_S:
+        return
+    if len(_media_refusals_logged) > 1024:
+        _media_refusals_logged.clear()
+    _media_refusals_logged[host] = now
+    logger.warning(
+        "Refused media to %s: it sent no credential. An iPhone or Mac app older than Familiar 1.7 "
+        "does this; update the app. Media on a server with a token needs one (ADR-0176).",
+        host,
+    )
+
 
 #: What `/mcp` answers on an open server with no Host allow-list (ADR-0171 point 7).
 OPEN_MCP_DETAIL = (
@@ -248,8 +282,8 @@ class TokenAuthMiddleware:
     async def _media_refused(scope: Scope, path: str, method: str, send: Send) -> bool:
         """ADR-0176: on a tokened server, a media read needs a header, cookie or signed URL.
 
-        Only once `MEDIA_ENFORCED` is on (Phase 4). Until then this returns False before reading
-        anything, and media stays exempt as `MEDIA_ROUTES` records.
+        On since Phase 4 (`MEDIA_ENFORCED`). Switched off, this returns False before reading
+        anything, and media is served to anyone, as it was before ADR-0176.
         """
         from app.api import media_credentials as media
 
@@ -260,6 +294,7 @@ class TokenAuthMiddleware:
         configured = get_app_settings_service().get().access_token
         if not configured or media.presented_credential(scope, configured) is not None:
             return False
+        _warn_media_refused(scope)
         await TokenAuthMiddleware._refuse(scope, send, detail=MEDIA_CREDENTIAL_DETAIL)
         return True
 

@@ -286,7 +286,7 @@ async def get_avatar(
     return FileResponse(
         avatar_file,
         media_type="image/jpeg",
-        headers={"Cache-Control": "public, max-age=86400"},  # Cache for 1 day
+        headers={"Cache-Control": "private, max-age=86400"},  # Cache for 1 day
     )
 
 

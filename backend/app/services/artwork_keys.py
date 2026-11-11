@@ -1,7 +1,9 @@
 """Artwork keys a caller cannot derive (ADR-0176 Phase 1).
 
-Artwork is served without the server token (`MEDIA_ROUTES`, ADR-0045), because an `<img>` and a
-casting device cannot send one. That is safe only for a key nobody can guess. Since ADR-0052 an
+Artwork was served without any credential (`MEDIA_ROUTES`, ADR-0045), because an `<img>` and a
+casting device cannot send the token; since ADR-0176 Phase 4 it takes a cookie or a signed URL
+instead. A tokenless server still serves it to whoever ADR-0171 lets in, so a key must stay one
+nobody can guess. Since ADR-0052 an
 album's key is its `Album.id`, a UUID. But a track the album resolver could not place still files
 its artwork under `compute_album_hash(artist, album)`: sixteen hex digits anyone can compute for a
 guessed album. Asking `GET /api/v1/artwork/<that>/thumb` (or `/artwork/status/<that>`) answered
