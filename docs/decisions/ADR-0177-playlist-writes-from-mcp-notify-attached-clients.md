@@ -13,7 +13,7 @@ Implementation:
   `TestNotify` in `tests/test_command_channel.py`, `TestPlaylistWritesNotifyClients` in
   `tests/test_mcp_server.py`. Client: `familiar-apple` #269 decodes `playlists_changed`, reloads
   `PlaylistsStore` (coalescing a notice that arrives mid-load) and reloads an open playlist's
-  detail; in app 1.7 (build 80, submitted to App Review 2026-11-10).
+  detail; in app 1.7 (build 80, released on the App Store on iOS and macOS 2026-11-11).
 
 Extends [ADR-0044](ADR-0044-mcp-clients-actuate-playback-through-a-command-channel.md)
 
