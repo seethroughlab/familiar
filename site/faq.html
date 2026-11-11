@@ -78,7 +78,7 @@
     </details>
     <details>
       <summary>What are the alternatives to Tailscale?</summary>
-      <p><strong>Cloudflare Tunnel</strong> if you want a stable public hostname routed through Cloudflare without opening a port. <strong>WireGuard</strong> if you would rather run your own VPN and use the LAN address. Or any VPN you already run: anything that puts your phone on the same network as the server will do. A <strong>reverse proxy</strong> — nginx, Caddy, Traefik — does not make Familiar safe to publish: with HTTPS it keeps the sign-in private on the way, but the music needs no sign-in (<a href="./#remote">why</a>). What you should not do is port-forward <code>4400</code> to the open internet.</p>
+      <p><strong>Cloudflare Tunnel</strong> if you want a stable public hostname routed through Cloudflare without opening a port. <strong>WireGuard</strong> if you would rather run your own VPN and use the LAN address. Or any VPN you already run: anything that puts your phone on the same network as the server will do. A <strong>reverse proxy</strong> — nginx, Caddy, Traefik — does not on its own make Familiar safe to publish: with HTTPS it keeps the sign-in private on the way, but a server with no sign-in, or one older than 0.2.0-beta25, serves its music without it (<a href="./#remote">why</a>). What you should not do is port-forward <code>4400</code> to the open internet.</p>
     </details>
     <details>
       <summary>Is there an iPhone app?</summary>
