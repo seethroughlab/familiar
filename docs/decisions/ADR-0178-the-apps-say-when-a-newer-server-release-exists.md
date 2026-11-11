@@ -1,6 +1,6 @@
 # ADR-0178: The Apps Say When a Newer Server Release Exists
 
-Status: proposed
+Status: accepted
 
 Date: 2026-11-11
 
