@@ -325,12 +325,13 @@ docker compose -f docker-compose.prod.yml -f docker-compose.desktop.yml up -d</c
 
      ADR-0145 point 1 — the reason leads, stated once. It used to be "Familiar has no login", true
      until ADR-0141 gave every new server a token. The recommendation stands because the reason
-     moved: music and artwork are served without the token on purpose (MEDIA_ROUTES, auth.py), the
-     server speaks plain HTTP, and a server from before ADR-0141 may have no token at all.
+     moved: the server speaks plain HTTP, and a server from before ADR-0141 may have no token at
+     all. Music and artwork were served without the token until ADR-0176 Phase 4 (0.2.0-beta25),
+     so a server older than that still serves them to anyone.
 
      Point 4 — nothing about what to type into an app until pairing over Tailscale has been run end
      to end; the section makes the server reachable and stops. Point 6 — the wording depends on the
-     media exemption and on plain HTTP; its docs/SITE-CLAIMS.md row says so, and changing either is
+     media credentials of ADR-0176 and on plain HTTP; its docs/SITE-CLAIMS.md row says so, and changing either is
      a reason to revisit this. ADR-0096 point 7's register: no shields, no "hackers". -->
 <section id="remote">
   <div class="section-head">
@@ -340,14 +341,14 @@ docker compose -f docker-compose.prod.yml -f docker-compose.desktop.yml up -d</c
   </div>
   <p class="lede">At home, your apps reach the server over your own network. Listening from a train is a different question, and worth understanding before you set it up.</p>
   <div class="note">
-    <strong>Sign-in covers the library, not the music.</strong> A new Familiar server asks for sign-in before anything can browse the library, change it or use its tools. The music and artwork are served without it, on purpose, so speakers and the apps' players can fetch them. The server also speaks plain HTTP, so on the open internet the sign-in itself could be read on its way. And a server set up before October 2026 may have no sign-in at all. So the answer is not to publish it behind a lock — it is to keep it private and let your own devices in.
+    <strong>Sign-in covers the library and the music.</strong> A Familiar server with sign-in asks for it before anything can browse the library, change it, use its tools or play from it. The apps sign in once, and a speaker is handed a link to one track that expires. But the server speaks plain HTTP, so on the open internet the sign-in itself could be read on its way. A server older than 0.2.0-beta25 serves the music and artwork without sign-in, and one set up before October 2026 may have no sign-in at all. So the answer is not to publish it behind a lock — it is to keep it private and let your own devices in.
   </div>
   <h3>Use Tailscale</h3>
   <p><a href="https://tailscale.com" target="_blank" rel="noopener">Tailscale</a> puts your server and your phone on a small private network of your own. Nothing is exposed to the internet, there is no router setting to change, it works on cellular, and the connection is encrypted, so the sign-in stays private. Install it on the server and on each device you listen with, turn on HTTPS certificates in the admin console, then run one command on the server:</p>
 <pre><code>tailscale serve --bg https / http://localhost:4400</code></pre>
   <p>The server is then at <code>https://&lt;server&gt;.&lt;tailnet&gt;.ts.net</code>, with a certificate that renews itself. This is the setup Familiar is developed against.</p>
   <h3>If you would rather not</h3>
-  <p>Cloudflare Tunnel and WireGuard both work, and are covered in <a href="./faq.html">the FAQ</a>. One warning worth reading twice: <strong>a reverse proxy does not make Familiar safe to publish.</strong> With HTTPS it keeps the sign-in private on the way, but the music needs no sign-in. A proxy that adds a login of its own covers everything — and the apps and speakers cannot answer it.</p>
+  <p>Cloudflare Tunnel and WireGuard both work, and are covered in <a href="./faq.html">the FAQ</a>. One warning worth reading twice: <strong>a reverse proxy alone does not make Familiar safe to publish.</strong> With HTTPS it keeps the sign-in private on the way, but a server with no sign-in, or one older than 0.2.0-beta25, still serves its music to anyone who finds it. And a proxy that adds a login of its own covers everything — which the apps and speakers cannot answer.</p>
 </section>
 
 <section id="get-started" class="closing-cta">
