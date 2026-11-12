@@ -160,10 +160,12 @@ test.describe('install platform chooser', () => {
 
   test('remote access says what sign-in covers, not that there is none', async ({ page }) => {
     // ADR-0145. "Familiar has no login" stopped being true when ADR-0141 gave every new server a
-    // token; the recommendation stands on what the token does not cover.
+    // token; "not the music" stopped with ADR-0176 Phase 4. The recommendation stands on plain HTTP
+    // and on older servers.
     await page.goto('index.html');
     const note = page.locator('#remote .note');
-    await expect(note).toContainText('Sign-in covers the library, not the music');
+    await expect(note).toContainText('Sign-in covers the library and the music');
+    await expect(page.locator('main')).not.toContainText('not the music');
     await expect(note).toContainText('plain HTTP');
     await expect(page.locator('main')).not.toContainText('Familiar has no login');
     // Point 4: nothing about what to type into an app until pairing over Tailscale has been run.
