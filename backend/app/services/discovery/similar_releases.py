@@ -25,7 +25,7 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.external_albums_helpers import normalize_artist_name
+from app.services.external_albums_helpers import _INDEX_WHERE_BY_CONTEXT, normalize_artist_name
 
 logger = logging.getLogger(__name__)
 
@@ -212,7 +212,8 @@ async def save_for_profile(
         .values(discovery_context=SIMILAR_CONTEXT, **item)
         .on_conflict_do_nothing(
             index_elements=["release_id"],
-            index_where=ExternalAlbumCache.discovery_context == SIMILAR_CONTEXT,
+            # A literal predicate: PostgreSQL cannot match a partial index from a parameter.
+            index_where=_INDEX_WHERE_BY_CONTEXT[SIMILAR_CONTEXT],
         )
         .returning(ExternalAlbumCache.id)
     )
