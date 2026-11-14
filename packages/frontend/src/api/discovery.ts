@@ -42,6 +42,40 @@ export const newReleasesApi = {
 };
 
 // ============================================================================
+// What's new for this profile (ADR-0179)
+// ============================================================================
+
+export type WhatsNew = Wire.WhatsNewResponse;
+
+export const whatsNewApi = {
+  async get(params?: { limit?: number }): Promise<WhatsNew> {
+    const { data } = await api.get('/library/discover/whats-new', { params });
+    return data;
+  },
+
+  /**
+   * Record that this profile has seen what was found up to `through`: the newest `discovered_at`
+   * the page actually showed, passed back exactly as the server wrote it, never the current time.
+   */
+  async markSeen(through: string): Promise<void> {
+    await api.post('/library/discover/whats-new/seen', { through });
+  },
+};
+
+/** The newest `discovered_at` among rows, as the server's own string, or null. */
+export function newestDiscoveredAt(rows: readonly { discovered_at: string }[]): string | null {
+  let newest: string | null = null;
+  for (const row of rows) {
+    // Compared as instants: the server's ISO strings drop zero microseconds, so they do not sort
+    // as text.
+    if (newest === null || Date.parse(row.discovered_at) > Date.parse(newest)) {
+      newest = row.discovered_at;
+    }
+  }
+  return newest;
+}
+
+// ============================================================================
 // External albums (generic dismiss + listening-profile + per-playlist)
 // ============================================================================
 

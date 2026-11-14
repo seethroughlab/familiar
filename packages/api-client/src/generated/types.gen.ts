@@ -8631,6 +8631,135 @@ export type WatchStatusResponse = {
 };
 
 /**
+ * WhatsNewItem
+ */
+export type WhatsNewItem = {
+    /**
+     * Artist Name
+     */
+    artist_name: string;
+    /**
+     * Artwork Url
+     */
+    artwork_url?: string | null;
+    /**
+     * Bandcamp Url
+     */
+    bandcamp_url?: string | null;
+    /**
+     * Discovered At
+     */
+    discovered_at: string;
+    /**
+     * External Url
+     */
+    external_url?: string | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Is New
+     */
+    is_new: boolean;
+    reason: WhatsNewReason;
+    /**
+     * Release Date
+     */
+    release_date?: string | null;
+    /**
+     * Release Name
+     */
+    release_name: string;
+    /**
+     * Release Type
+     */
+    release_type?: string | null;
+};
+
+/**
+ * WhatsNewReason
+ *
+ * Why a release is listed: the artist the listener plays, and how much.
+ */
+export type WhatsNewReason = {
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Play Count
+     */
+    play_count: number;
+    /**
+     * Seed Artist Name
+     */
+    seed_artist_name: string;
+    /**
+     * Text
+     */
+    text: string;
+};
+
+/**
+ * WhatsNewResponse
+ *
+ * A profile's new music, newest found first.
+ *
+ * `state` is `ok`, `never_run` (discovery has never found anything, which is not "nothing new",
+ * ADR-0099 point 8) or `disabled` (`discovery_enabled` is off). `new_count` counts every release
+ * found since `seen_through`, not only those in `items`.
+ */
+export type WhatsNewResponse = {
+    /**
+     * Age Hours
+     */
+    age_hours?: number | null;
+    /**
+     * As Of
+     */
+    as_of?: string | null;
+    /**
+     * Items
+     */
+    items: Array<WhatsNewItem>;
+    /**
+     * New Count
+     */
+    new_count: number;
+    /**
+     * Seen Through
+     */
+    seen_through?: string | null;
+    /**
+     * State
+     */
+    state: 'ok' | 'never_run' | 'disabled';
+};
+
+/**
+ * WhatsNewSeenRequest
+ */
+export type WhatsNewSeenRequest = {
+    /**
+     * Through
+     *
+     * The newest `discovered_at` the client showed. Never the current time.
+     */
+    through: string;
+};
+
+/**
+ * WhatsNewSeenResponse
+ */
+export type WhatsNewSeenResponse = {
+    /**
+     * Seen Through
+     */
+    seen_through: string;
+};
+
+/**
  * WorkerInfo
  *
  * Information about a background worker.
@@ -12638,6 +12767,93 @@ export type DiscoverGetListeningProfileExternalAlbumsResponses = {
 };
 
 export type DiscoverGetListeningProfileExternalAlbumsResponse = DiscoverGetListeningProfileExternalAlbumsResponses[keyof DiscoverGetListeningProfileExternalAlbumsResponses];
+
+export type DiscoverGetWhatsNewData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/library/discover/whats-new';
+};
+
+export type DiscoverGetWhatsNewErrors = {
+    /**
+     * Bad Request
+     */
+    400: ErrorEnvelope;
+    /**
+     * Unauthorized
+     */
+    401: ErrorEnvelope;
+    /**
+     * Not Found
+     */
+    404: ErrorEnvelope;
+    /**
+     * Unprocessable Entity
+     */
+    422: ErrorEnvelope;
+    /**
+     * Internal Server Error
+     */
+    500: ErrorEnvelope;
+};
+
+export type DiscoverGetWhatsNewError = DiscoverGetWhatsNewErrors[keyof DiscoverGetWhatsNewErrors];
+
+export type DiscoverGetWhatsNewResponses = {
+    /**
+     * Successful Response
+     */
+    200: WhatsNewResponse;
+};
+
+export type DiscoverGetWhatsNewResponse = DiscoverGetWhatsNewResponses[keyof DiscoverGetWhatsNewResponses];
+
+export type DiscoverMarkWhatsNewSeenData = {
+    body: WhatsNewSeenRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/library/discover/whats-new/seen';
+};
+
+export type DiscoverMarkWhatsNewSeenErrors = {
+    /**
+     * Bad Request
+     */
+    400: ErrorEnvelope;
+    /**
+     * Unauthorized
+     */
+    401: ErrorEnvelope;
+    /**
+     * Not Found
+     */
+    404: ErrorEnvelope;
+    /**
+     * Unprocessable Entity
+     */
+    422: ErrorEnvelope;
+    /**
+     * Internal Server Error
+     */
+    500: ErrorEnvelope;
+};
+
+export type DiscoverMarkWhatsNewSeenError = DiscoverMarkWhatsNewSeenErrors[keyof DiscoverMarkWhatsNewSeenErrors];
+
+export type DiscoverMarkWhatsNewSeenResponses = {
+    /**
+     * Successful Response
+     */
+    200: WhatsNewSeenResponse;
+};
+
+export type DiscoverMarkWhatsNewSeenResponse = DiscoverMarkWhatsNewSeenResponses[keyof DiscoverMarkWhatsNewSeenResponses];
 
 export type LibraryGetLibraryFingerprintData = {
     body?: never;
