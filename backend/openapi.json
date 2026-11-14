@@ -12265,6 +12265,193 @@
         "title": "WatchStatusResponse",
         "type": "object"
       },
+      "WhatsNewItem": {
+        "properties": {
+          "artist_name": {
+            "title": "Artist Name",
+            "type": "string"
+          },
+          "artwork_url": {
+            "title": "Artwork Url",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "bandcamp_url": {
+            "title": "Bandcamp Url",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "discovered_at": {
+            "format": "date-time",
+            "title": "Discovered At",
+            "type": "string"
+          },
+          "external_url": {
+            "title": "External Url",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_new": {
+            "title": "Is New",
+            "type": "boolean"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/WhatsNewReason"
+          },
+          "release_date": {
+            "format": "date-time",
+            "title": "Release Date",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "release_name": {
+            "title": "Release Name",
+            "type": "string"
+          },
+          "release_type": {
+            "title": "Release Type",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "artist_name",
+          "release_name",
+          "discovered_at",
+          "is_new",
+          "reason"
+        ],
+        "title": "WhatsNewItem",
+        "type": "object"
+      },
+      "WhatsNewReason": {
+        "description": "Why a release is listed: the artist the listener plays, and how much.",
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "play_count": {
+            "title": "Play Count",
+            "type": "integer"
+          },
+          "seed_artist_name": {
+            "title": "Seed Artist Name",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "text",
+          "seed_artist_name",
+          "play_count"
+        ],
+        "title": "WhatsNewReason",
+        "type": "object"
+      },
+      "WhatsNewResponse": {
+        "description": "A profile's new music, newest found first.\n\n`state` is `ok`, `never_run` (discovery has never found anything, which is not \"nothing new\",\nADR-0099 point 8) or `disabled` (`discovery_enabled` is off). `new_count` counts every release\nfound since `seen_through`, not only those in `items`.",
+        "properties": {
+          "age_hours": {
+            "title": "Age Hours",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WhatsNewItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "new_count": {
+            "title": "New Count",
+            "type": "integer"
+          },
+          "seen_through": {
+            "format": "date-time",
+            "title": "Seen Through",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "enum": [
+              "ok",
+              "never_run",
+              "disabled"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "new_count",
+          "items"
+        ],
+        "title": "WhatsNewResponse",
+        "type": "object"
+      },
+      "WhatsNewSeenRequest": {
+        "properties": {
+          "through": {
+            "description": "The newest `discovered_at` the client showed. Never the current time.",
+            "format": "date-time",
+            "title": "Through",
+            "type": "string"
+          }
+        },
+        "required": [
+          "through"
+        ],
+        "title": "WhatsNewSeenRequest",
+        "type": "object"
+      },
+      "WhatsNewSeenResponse": {
+        "properties": {
+          "seen_through": {
+            "format": "date-time",
+            "title": "Seen Through",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seen_through"
+        ],
+        "title": "WhatsNewSeenResponse",
+        "type": "object"
+      },
       "WorkerInfo": {
         "description": "Information about a background worker.",
         "properties": {
@@ -19879,6 +20066,184 @@
           }
         ],
         "summary": "Get Listening Profile External Albums",
+        "tags": [
+          "discover"
+        ]
+      }
+    },
+    "/api/v1/library/discover/whats-new": {
+      "get": {
+        "description": "New releases for this profile, each marked new or seen, with why it is listed (ADR-0179).\n\nRead from what the background discovery job stored; this never calls out (ADR-0099 point 1).",
+        "operationId": "discover_get_whats_new",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhatsNewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "ProfileHeader": []
+          }
+        ],
+        "summary": "Get Whats New",
+        "tags": [
+          "discover"
+        ]
+      }
+    },
+    "/api/v1/library/discover/whats-new/seen": {
+      "post": {
+        "description": "Record that this profile has seen what was found up to `through`. It only moves forward.\n\nThe profile's other attached clients are told (`whats_new_changed`), so a release seen on one\ndevice clears the reminder on the others. Committed before telling them, so a client that\nrefetches straight away reads the new state.",
+        "operationId": "discover_mark_whats_new_seen",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WhatsNewSeenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhatsNewSeenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "ProfileHeader": []
+          }
+        ],
+        "summary": "Mark Whats New Seen",
         "tags": [
           "discover"
         ]

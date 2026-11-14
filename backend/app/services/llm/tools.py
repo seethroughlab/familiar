@@ -391,6 +391,20 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
         }
     },
     {
+        "name": "get_whats_new",
+        "description": "What is new for this listener since they last looked: releases discovery has found, newest first, each marked `is_new` with a `reason` (which of their artists it is from and how often they play them), plus `new_count`. Use when the user asks what's new for them, whether there is new music, or what they have missed. `state` is `ok`, `never_run` (discovery has never found anything, which is not the same as nothing new) or `disabled`; report that distinction. Reading this does not mark anything as seen; only opening Discover does.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "description": "Max releases to return (default 20, max 100)",
+                    "default": 20
+                }
+            }
+        }
+    },
+    {
         "name": "get_discovery_recommendations",
         "description": "Get recommended artists based on the user's most-played artists. Returns external artists similar to what the user listens to (via Last.fm), plus unheard tracks and deep cuts from artists they already have. Use when the user wants to discover new artists, asks 'who should I listen to', or wants recommendations.",
         "input_schema": {

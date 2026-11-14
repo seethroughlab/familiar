@@ -7,10 +7,10 @@
  *
  * Polls /new-releases/status every 2s while a check is running.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Disc3, Loader2, RefreshCw } from 'lucide-react';
-import { newReleasesApi, externalAlbumsApi } from '../../api/discovery';
+import { newReleasesApi, externalAlbumsApi, newestDiscoveredAt, whatsNewApi } from '../../api/discovery';
 import { queryKeys } from '../../api/queryKeys';
 import { STALE_TIME } from '../../api/queryDefaults';
 import { showError, showSuccess } from '../../stores/toastStore';
@@ -104,6 +104,17 @@ export function NewReleasesSection() {
   });
 
   const releases = listQuery.data?.releases ?? [];
+
+  // Having shown the list, this profile has seen what it holds (ADR-0179 point 5): the reminder
+  // clears on every device. Once per newest release, so a re-render does not post again; failures
+  // are ignored, since the next visit records the same thing.
+  const markedThrough = useRef<string | null>(null);
+  const newest = newestDiscoveredAt(releases);
+  useEffect(() => {
+    if (!newest || markedThrough.current === newest) return;
+    markedThrough.current = newest;
+    whatsNewApi.markSeen(newest).catch(() => {});
+  }, [newest]);
   const isRunning = progressStatus === 'running' || isCheckTriggered;
 
   return (

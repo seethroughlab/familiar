@@ -281,6 +281,7 @@ SERVER_CAPABILITIES: tuple[str, ...] = (
     "visualizer.paired_page",
     "albums.move_to_album",
     "media.credentials",
+    "discover.whats_new",  # ADR-0179: GET/POST /library/discover/whats-new
 )
 
 # Per-phase analysis version constants

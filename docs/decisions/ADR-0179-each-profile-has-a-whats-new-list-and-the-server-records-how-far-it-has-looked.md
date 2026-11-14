@@ -4,6 +4,22 @@ Status: accepted
 
 Date: 2026-11-14
 
+Implementation:
+
+- **Points 1–7, 2026-11-14 (#488).** Migration `20261114_profile_discovery_state` and model
+  `ProfileDiscoveryState` (`db/models/profiles.py`). `app/operations/whats_new.py` holds `get` and
+  `mark_seen`. It lists `artist_new_release` rows that are not dismissed, not owned and released
+  within 90 days (`RELEASE_WINDOW`), newest found first. The reason comes from this profile's plays,
+  through `ArtistAlias.alias_normalized`, which uses the same normaliser as the cache's
+  `artist_name_normalized`. The routes are in `api/routes/library_discover.py`, under the `discover`
+  tag. `seen` updates with `GREATEST`, commits, and only then sends `WHATS_NEW_CHANGED`
+  (`services/playback_commands.py`), so a device that refetches reads the new state. The MCP tool
+  `get_whats_new` reads and never marks seen. `NewReleasesSection.tsx` posts the newest
+  `discovered_at` it rendered, compared as instants (`newestDiscoveredAt`), because Python drops zero
+  microseconds and the strings do not sort as text. Capability `discover.whats_new` is in
+  `SERVER_CAPABILITIES` and recorded in `test_contract_lock.py`. Tests:
+  `tests/test_whats_new.py`. App side: `familiar-apple` #274 (ADR-0181).
+
 Extends [ADR-0099](ADR-0099-discovery-is-a-background-job-with-visible-sources.md) and
 [ADR-0101](ADR-0101-discovery-ranks-against-the-listening-model.md)
 

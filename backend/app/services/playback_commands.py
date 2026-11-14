@@ -260,6 +260,10 @@ def _enqueue(player: AttachedPlayer, message: dict[str, Any]) -> None:
     player.queue.put_nowait(message)
 
 
+#: Sent to a profile's attached clients when its what's-new state changes (ADR-0179): a release
+#: was seen on another device, or discovery found something. Re-fetch; it carries no data.
+WHATS_NEW_CHANGED: dict[str, Any] = {"type": "whats_new_changed"}
+
 #: One channel per process, matching point 6's in-process, ephemeral scope.
 _channel = PlaybackCommandChannel()
 

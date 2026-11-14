@@ -1,10 +1,11 @@
 """Discovery dashboard endpoints."""
 
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
+from typing import Literal
 
 from fastapi import APIRouter, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
 from app.api.deps import DbSession, RequiredProfile
@@ -13,7 +14,9 @@ from app.api.routes._external_albums_schemas import (
     ExternalAlbumsResponse,
 )
 from app.db.models import Artist, ArtistAlias, Track, TrackStatus
+from app.operations import whats_new
 from app.services.external_albums_helpers import normalize_artist_name
+from app.services.playback_commands import WHATS_NEW_CHANGED, get_channel
 from app.services.recommendations import RecommendationsService
 from app.utils.time import utcnow
 
@@ -333,3 +336,95 @@ async def get_listening_profile_external_albums(
         )
     finally:
         await service.close()
+
+
+# ── What's new (ADR-0179) ────────────────────────────────────────────────────────────────────────
+
+
+class WhatsNewReason(BaseModel):
+    """Why a release is listed: the artist the listener plays, and how much."""
+
+    kind: str  # "library_artist"; ADR-0180 adds "similar_artist"
+    text: str
+    seed_artist_name: str
+    play_count: int
+
+
+class WhatsNewItem(BaseModel):
+    id: str
+    artist_name: str
+    release_name: str
+    release_type: str | None = None
+    release_date: datetime | None = None
+    artwork_url: str | None = None
+    discovered_at: datetime
+    is_new: bool
+    bandcamp_url: str | None = None
+    external_url: str | None = None
+    reason: WhatsNewReason
+
+
+class WhatsNewResponse(BaseModel):
+    """A profile's new music, newest found first.
+
+    `state` is `ok`, `never_run` (discovery has never found anything, which is not "nothing new",
+    ADR-0099 point 8) or `disabled` (`discovery_enabled` is off). `new_count` counts every release
+    found since `seen_through`, not only those in `items`.
+    """
+
+    state: Literal["ok", "never_run", "disabled"]
+    as_of: datetime | None = None
+    age_hours: float | None = None
+    seen_through: datetime | None = None
+    new_count: int
+    items: list[WhatsNewItem]
+
+
+class WhatsNewSeenRequest(BaseModel):
+    through: datetime = Field(
+        description="The newest `discovered_at` the client showed. Never the current time."
+    )
+
+
+class WhatsNewSeenResponse(BaseModel):
+    seen_through: datetime
+
+
+@router.get("/discover/whats-new", response_model=WhatsNewResponse)
+async def get_whats_new(
+    db: DbSession,
+    profile: RequiredProfile,
+    limit: int = Query(20, ge=1, le=100),
+) -> WhatsNewResponse:
+    """New releases for this profile, each marked new or seen, with why it is listed (ADR-0179).
+
+    Read from what the background discovery job stored; this never calls out (ADR-0099 point 1).
+    """
+    result = await whats_new.get(db, profile.id, limit=limit)
+    return WhatsNewResponse(
+        state=result.state,
+        as_of=result.as_of,
+        age_hours=round(result.age_hours, 1) if result.age_hours is not None else None,
+        seen_through=result.seen_through,
+        new_count=result.new_count,
+        items=[WhatsNewItem(**item) for item in result.items],
+    )
+
+
+@router.post("/discover/whats-new/seen", response_model=WhatsNewSeenResponse)
+async def mark_whats_new_seen(
+    db: DbSession,
+    profile: RequiredProfile,
+    request: WhatsNewSeenRequest,
+) -> WhatsNewSeenResponse:
+    """Record that this profile has seen what was found up to `through`. It only moves forward.
+
+    The profile's other attached clients are told (`whats_new_changed`), so a release seen on one
+    device clears the reminder on the others. Committed before telling them, so a client that
+    refetches straight away reads the new state.
+    """
+    seen_through, changed = await whats_new.mark_seen(db, profile.id, request.through)
+    await db.commit()
+    if changed:
+        get_channel().notify(profile.id, WHATS_NEW_CHANGED)
+    return WhatsNewSeenResponse(seen_through=seen_through)
