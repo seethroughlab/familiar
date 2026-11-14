@@ -4,6 +4,36 @@ Status: accepted
 
 Date: 2026-11-14
 
+Implementation:
+
+- **Points 1, 2, 4–8, 2026-11-14.** `app/services/discovery/similar_releases.py` holds:
+  - `candidates_from_similar` and `select_for_similar`, both pure;
+  - `profile_candidates` and `save_for_profile`;
+  - `match_similar_releases`, called from `run_listenbrainz_fresh_releases` on the response it
+    already has, which then sends `whats_new_changed` to each profile it gave something new;
+  - `run_similar_artists_warm`, the `similar_artists_warm` job every six hours, deferrable under
+    ADR-0138.
+
+  Migration `20261114_similar_releases` adds `ix_eac_similar_release_unique` and
+  `profile_release_reasons`. `app/operations/whats_new.py` lists a similar artist's release only for
+  a profile with a reason row, worded "Similar to X, which you play" with X's play count.
+  Tests: `tests/test_similar_releases.py`.
+- **Found while building:**
+  - **The warmer must not set `Artist.fetched_at`.** The artist page reads a recent
+    `fetched_at` as "bio, tags and images cached" (`api/routes/library_artists.py:506-513`) and
+    stops fetching them. It writes `similar_artists` only, and only where none are cached.
+  - **What's new measured freshness from library releases only**, and returned `never_run` without
+    recording a baseline. A profile that asked before anything was found then took its baseline
+    after the first releases existed, and saw them as already seen. Freshness and the baseline now
+    cover both contexts, and the baseline is recorded on the never-run read
+    (`test_a_profile_that_asked_before_discovery_ran_sees_the_first_finds_as_new`).
+- **Not done:**
+  - **Point 3's MusicBrainz search fallback.** Only similar artists for which Last.fm gives an
+    `mbid` are matched. On the NAS on 2026-11-14, 389 artists had cached similar lists, and the
+    entries sampled carried one.
+  - **The request path's own Last.fm call** in `GET /library/discover` is left as is. The warmer
+    makes it rarer but does not remove it.
+
 Extends [ADR-0179](ADR-0179-each-profile-has-a-whats-new-list-and-the-server-records-how-far-it-has-looked.md),
 [ADR-0099](ADR-0099-discovery-is-a-background-job-with-visible-sources.md) and
 [ADR-0101](ADR-0101-discovery-ranks-against-the-listening-model.md)

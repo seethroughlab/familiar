@@ -16,6 +16,7 @@ from .artists import (
     DiscoverySourceHealth,
     ExternalAlbumCache,
     ExternalArtistImageCache,
+    ProfileReleaseReason,
 )
 from .base import (
     AlbumType,
@@ -75,6 +76,7 @@ __all__ = [
     "ProfileFavorite",
     "ProfileDiscoveryState",
     "ProfilePlayHistory",
+    "ProfileReleaseReason",
     "ProposedChange",
     "SmartPlaylist",
     "Track",

@@ -15,7 +15,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 from uuid import UUID
 
-from sqlalchemy import func, select, update
+from sqlalchemy import and_, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,9 +24,12 @@ from app.db.models import (
     ExternalAlbumCache,
     ProfileDiscoveryState,
     ProfilePlayHistory,
+    ProfileReleaseReason,
     Track,
 )
-from app.services.new_releases import DISCOVERY_CONTEXT, NewReleasesService
+from app.services.discovery.similar_releases import SIMILAR_CONTEXT
+from app.services.external_albums_helpers import normalize_artist_name
+from app.services.new_releases import DISCOVERY_CONTEXT
 from app.services.search_links import generate_release_search_urls
 from app.utils.time import utcnow
 
@@ -53,14 +56,45 @@ def _naive_utc(value: datetime) -> datetime:
 
 
 def _eligible(now: datetime):
-    """The releases a what's-new list may show: not dismissed, not already owned, recent."""
+    """The releases a what's-new list may show: not dismissed, not already owned, recent.
+
+    A library artist's release is for everyone; a similar artist's only for a profile it was
+    found for (ADR-0180 point 5), which the outer join to `ProfileReleaseReason` decides.
+    """
     cutoff = now - RELEASE_WINDOW
     return (
-        ExternalAlbumCache.discovery_context == DISCOVERY_CONTEXT,
+        (ExternalAlbumCache.discovery_context == DISCOVERY_CONTEXT)
+        | (
+            (ExternalAlbumCache.discovery_context == SIMILAR_CONTEXT)
+            & ProfileReleaseReason.profile_id.isnot(None)
+        ),
         ExternalAlbumCache.dismissed.is_(False),
         ExternalAlbumCache.local_album_match.is_(False),
         (ExternalAlbumCache.release_date.is_(None)) | (ExternalAlbumCache.release_date >= cutoff),
     )
+
+
+#: What a what's-new list is made of: library artists' releases, and similar artists' (ADR-0180).
+CONTEXTS = (DISCOVERY_CONTEXT, SIMILAR_CONTEXT)
+
+
+async def _freshness(db: AsyncSession) -> tuple[datetime | None, float | None]:
+    """When discovery last found anything this list could show, and how many hours ago.
+
+    Both contexts: a library that only has similar artists' releases so far has run, and saying
+    `never_run` would be wrong (ADR-0099 point 8).
+    """
+    as_of = (
+        await db.execute(
+            select(func.max(ExternalAlbumCache.discovered_at)).where(
+                ExternalAlbumCache.discovery_context.in_(CONTEXTS)
+            )
+        )
+    ).scalar()
+    if as_of is None:
+        return None, None
+    age = (utcnow().replace(tzinfo=None) - as_of).total_seconds() / 3600.0
+    return as_of, max(0.0, age)
 
 
 async def _state_row(db: AsyncSession, profile_id: UUID) -> ProfileDiscoveryState:
@@ -71,7 +105,7 @@ async def _state_row(db: AsyncSession, profile_id: UUID) -> ProfileDiscoveryStat
     newest = (
         await db.execute(
             select(func.max(ExternalAlbumCache.discovered_at)).where(
-                ExternalAlbumCache.discovery_context == DISCOVERY_CONTEXT
+                ExternalAlbumCache.discovery_context.in_(CONTEXTS)
             )
         )
     ).scalar()
@@ -115,6 +149,16 @@ def _reason(artist: str, plays: int) -> dict[str, Any]:
     return {"kind": "library_artist", "text": text, "seed_artist_name": artist, "play_count": plays}
 
 
+def _similar_reason(seed: str, plays: int) -> dict[str, Any]:
+    """Why a similar artist's release is listed: the artist the listener plays (ADR-0180 point 6)."""
+    return {
+        "kind": "similar_artist",
+        "text": f"Similar to {seed}, which you play",
+        "seed_artist_name": seed,
+        "play_count": plays,
+    }
+
+
 async def get(db: AsyncSession, profile_id: UUID, *, limit: int = 20) -> WhatsNew:
     """This profile's what's-new list: newest found first, each marked new or not, with a reason."""
     from app.services.app_settings import get_app_settings_service
@@ -122,38 +166,44 @@ async def get(db: AsyncSession, profile_id: UUID, *, limit: int = 20) -> WhatsNe
     if not getattr(get_app_settings_service().get(), "discovery_enabled", True):
         return WhatsNew("disabled", None, None, None, 0)
 
-    as_of, age_hours = await NewReleasesService(db).get_discovery_freshness()
-    if as_of is None:
-        return WhatsNew("never_run", None, None, None, 0)
-
+    # Before the never-run check: a profile that first asks before discovery has found anything
+    # starts from now, so what is found afterwards is new to it rather than silently the baseline.
     state = await _state_row(db, profile_id)
+    as_of, age_hours = await _freshness(db)
+    if as_of is None:
+        return WhatsNew("never_run", None, None, state.seen_through, 0)
+
     seen = state.seen_through
     now = utcnow().replace(tzinfo=None)
     eligible = _eligible(now)
 
+    reasons = and_(
+        ProfileReleaseReason.external_album_id == ExternalAlbumCache.id,
+        ProfileReleaseReason.profile_id == profile_id,
+    )
     new_count = (
         await db.execute(
             select(func.count())
             .select_from(ExternalAlbumCache)
+            .outerjoin(ProfileReleaseReason, reasons)
             .where(*eligible, ExternalAlbumCache.discovered_at > seen)
         )
     ).scalar_one()
     rows = (
-        (
-            await db.execute(
-                select(ExternalAlbumCache)
-                .where(*eligible)
-                .order_by(
-                    ExternalAlbumCache.discovered_at.desc(),
-                    ExternalAlbumCache.release_date.desc().nullslast(),
-                )
-                .limit(limit)
+        await db.execute(
+            select(ExternalAlbumCache, ProfileReleaseReason)
+            .outerjoin(ProfileReleaseReason, reasons)
+            .where(*eligible)
+            .order_by(
+                ExternalAlbumCache.discovered_at.desc(),
+                ExternalAlbumCache.release_date.desc().nullslast(),
             )
+            .limit(limit)
         )
-        .scalars()
-        .all()
-    )
-    plays = await _plays_by_artist(db, profile_id, {r.artist_name_normalized for r in rows})
+    ).all()
+    played_names = {r.artist_name_normalized for r, why in rows if why is None}
+    played_names |= {normalize_artist_name(why.seed_artist_name) for _, why in rows if why is not None}
+    plays = await _plays_by_artist(db, profile_id, played_names)
     items = [
         {
             "id": str(r.id),
@@ -169,9 +219,13 @@ async def get(db: AsyncSession, profile_id: UUID, *, limit: int = 20) -> WhatsNe
             .get("bandcamp", {})
             .get("url"),
             "external_url": r.external_url,
-            "reason": _reason(r.artist_name, plays.get(r.artist_name_normalized, 0)),
+            "reason": _reason(r.artist_name, plays.get(r.artist_name_normalized, 0))
+            if why is None
+            else _similar_reason(
+                why.seed_artist_name, plays.get(normalize_artist_name(why.seed_artist_name), 0)
+            ),
         }
-        for r in rows
+        for r, why in rows
     ]
     return WhatsNew("ok", as_of, age_hours, seen, int(new_count), items)
 

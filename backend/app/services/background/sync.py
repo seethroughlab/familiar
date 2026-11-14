@@ -456,6 +456,15 @@ class SyncMixin(_SyncBase):
         except Exception as e:
             logger.warning(f"ListenBrainz fresh releases failed: {e}")
 
+    async def _similar_artists_warm(self) -> None:
+        """APScheduler entry: fill similar artists for what profiles play (ADR-0180 point 1)."""
+        from app.services.discovery.similar_releases import run_similar_artists_warm
+
+        try:
+            await run_similar_artists_warm()
+        except Exception as e:
+            logger.warning(f"Similar-artist warming failed: {e}")
+
     async def _recording_backfill(self) -> None:
         """APScheduler entry: one tick of ADR-0115 — resolve, then claim."""
         from app.services.background.manager import RECORDING_BACKFILL_INTERVAL_MINUTES

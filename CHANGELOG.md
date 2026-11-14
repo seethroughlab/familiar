@@ -44,6 +44,13 @@ with that reason. A server with no token is unaffected.
   MCP tool `get_whats_new`, and the capability `discover.whats_new`. One new table,
   `profile_discovery_state`.
 
+- **New releases by artists similar to the ones you play** (ADR-0180). The ListenBrainz feed
+  the server already reads every three hours is matched again against each listener's similar
+  artists (Last.fm, from their most-played artists), and a match shows up in what's new as "Similar
+  to Tycho, which you play". Only releases from the last two weeks count. A new background job
+  fills in similar artists for what you play, at most 25 Last.fm calls every six hours, and is off
+  when discovery is off. One new table, `profile_release_reasons`.
+
 ## [0.2.0-beta24] - 2026-11-10
 
 One migration (`20261109_embed_failure_reason` adds two columns to `track_analysis` and backfills

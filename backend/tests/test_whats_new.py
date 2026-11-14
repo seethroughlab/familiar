@@ -221,3 +221,16 @@ async def test_the_mcp_tool_gives_the_same_answer_and_marks_nothing_seen(async_d
     assert result["state"] == "ok" and result["new_count"] == 1
     assert result["items"][0]["release_name"] == "Weather"
     assert _get(client, test_profile)["new_count"] == 1, "reading through the tool is not looking"
+
+
+@pytest.mark.asyncio
+async def test_a_profile_that_asked_before_discovery_ran_sees_the_first_finds_as_new(async_db, client, test_profile):
+    """Found while building ADR-0180: the never-run answer used to skip the baseline, so the next
+    read took it after the first releases existed and counted them as already seen."""
+    await async_db.commit()
+    assert _get(client, test_profile)["state"] == "never_run"
+
+    _release(async_db, name="Weather", found=_now() + timedelta(seconds=1))
+    await async_db.commit()
+
+    assert _get(client, test_profile)["new_count"] == 1

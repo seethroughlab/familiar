@@ -6,6 +6,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -177,6 +178,14 @@ class ExternalAlbumCache(Base):
                 "discovery_context = 'listening_profile_recommendation'"
             ),
         ),
+        # New releases by artists similar to ones a profile plays (ADR-0180): once each,
+        # library-wide; which profile it is for lives in `profile_release_reasons`.
+        Index(
+            "ix_eac_similar_release_unique",
+            "release_id",
+            unique=True,
+            postgresql_where=text("discovery_context = 'similar_artist_new_release'"),
+        ),
         # Compound index for the per-playlist listing query.
         Index(
             "ix_eac_source_playlist_context",
@@ -224,6 +233,32 @@ class ExternalAlbumCache(Base):
     local_album_match: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
     discovered_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class ProfileReleaseReason(Base):
+    """Why a profile is shown a similar artist's new release (ADR-0180 point 5).
+
+    The release itself is one `external_album_cache` row for the whole library; two profiles
+    can reach it from different artists they play, so the reason is per profile. A similar
+    artist's release is shown only to profiles with a row here. The best match is kept.
+    """
+
+    __tablename__ = "profile_release_reasons"
+
+    external_album_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("external_album_cache.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    profile_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("profiles.id", ondelete="CASCADE"), primary_key=True
+    )
+    seed_artist_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("artists.id", ondelete="SET NULL")
+    )
+    seed_artist_name: Mapped[str] = mapped_column(String(500), nullable=False)
+    match_score: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
 class DiscoverySourceHealth(Base):
