@@ -4,6 +4,22 @@ Status: accepted
 
 Date: 2026-11-14
 
+Implementation:
+
+- **Points 1–6, 2026-11-14 (`familiar-apple` #274).** `Sources/FamiliarKit/WhatsNew.swift` holds the
+  marker, the Home selection and the `discover.whats_new` check. It is deliberately not a
+  `ServerFeature`, which would have produced a "needs a newer server" line. The mapping lives in
+  `FamiliarAppCore/WhatsNewSource.swift` and the state in `HomeStore`. The marker is on the Discover
+  rows of `LibrarySidebar` and `LibraryRootList`, and Home has "New Releases" with each release's
+  reason and Bandcamp link. Rendered in the iOS Simulator, which caught a subtitle that repeated
+  the artist and was cut off; it now shows the reason alone.
+- **Found while building ADR-0182 (`familiar-apple` #275):** the refresh on `whats_new_changed` and
+  on capabilities arriving sat in `LibraryView`'s Mac-only block, beside an `interfaceCommands` that
+  was declared only for the Mac although the app injects it on both. On the iPhone the marker could
+  therefore stay empty until the next return to the foreground. Both are now cross-platform. The
+  #274 Simulator check missed it because its probe bypassed loading.
+- **Shipped to TestFlight in 1.8 (81), 2026-11-14.**
+
 Extends [ADR-0179](ADR-0179-each-profile-has-a-whats-new-list-and-the-server-records-how-far-it-has-looked.md),
 [ADR-0168](ADR-0168-a-server-names-what-it-can-do.md) and
 [ADR-0177](ADR-0177-playlist-writes-from-mcp-notify-attached-clients.md)

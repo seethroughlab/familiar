@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-beta25] - 2026-11-14
+
+Two migrations (`20261114_profile_discovery_state` and `20261114_similar_releases` add two tables
+and an index); the API contract stays at v1. Music and artwork now need sign-in on a server that
+has it, so **update the iPhone and Mac apps to 1.7 or later before upgrading**. Also: Familiar
+reminds you to get new music, including releases by artists like the ones you play (the apps show
+it from 1.8), and a server says when a newer release of itself exists.
+
 **This server now checks GitHub for a newer Familiar release once a day** (ADR-0178), so the web
 admin, and the iPhone and Mac apps from their next release, can say when one exists. It was
 possible before but off unless turned on. An upgraded server turns it on once, and says so in its
@@ -54,7 +62,7 @@ with that reason. A server with no token is unaffected.
 - **A weekly digest, sent by one device** (ADR-0182). `POST /api/v1/library/discover/whats-new/digest-claim`
   hands a profile's weekly new-release digest to the first device that asks and to no other, and
   only when something was found since the listener last looked and since the last digest. The
-  iPhone and Mac apps post it as a notification from their next release. Capability
+  iPhone and Mac apps post it as a notification from 1.8. Capability
   `discover.whats_new_digest`.
 
 ## [0.2.0-beta24] - 2026-11-10
