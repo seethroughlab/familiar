@@ -8,7 +8,14 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy import select
 
-from app.db.models import Artist, ArtistAlias, ProfilePlayHistory, ProfileReleaseReason, Track, TrackStatus
+from app.db.models import (
+    Artist,
+    ArtistAlias,
+    ProfilePlayHistory,
+    ProfileReleaseReason,
+    Track,
+    TrackStatus,
+)
 from app.services.discovery import similar_releases as sr
 from app.utils.time import utcnow
 from tests.conftest import make_profile_headers
