@@ -234,3 +234,85 @@ async def test_a_profile_that_asked_before_discovery_ran_sees_the_first_finds_as
     await async_db.commit()
 
     assert _get(client, test_profile)["new_count"] == 1
+
+
+def _claim(client: TestClient, profile: dict) -> dict:
+    response = client.post(f"{URL}/digest-claim", json={"min_interval_days": 7}, headers=make_profile_headers(profile))
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+@pytest.mark.asyncio
+class TestDigest:
+    """ADR-0182: one device a week gets the digest, and only when there is something to say."""
+
+    async def _baseline_then_new(self, async_db, client, profile, *names: str) -> None:
+        _release(async_db, name="Old", found=_now() - timedelta(days=2))
+        await async_db.commit()
+        _get(client, profile)
+        for i, artist in enumerate(names):
+            _release(async_db, name=f"New {i}", artist=artist, found=_now() + timedelta(seconds=i))
+        await async_db.commit()
+
+    async def test_nothing_new_claims_nothing_and_keeps_the_week(self, async_db, client, test_profile):
+        await self._baseline_then_new(async_db, client, test_profile)
+        assert _claim(client, test_profile)["claimed"] is False
+
+        _release(async_db, name="Weather", found=_now() + timedelta(seconds=5))
+        await async_db.commit()
+        assert _claim(client, test_profile)["claimed"] is True
+
+    async def test_the_first_device_gets_it_with_a_headline_and_the_second_does_not(self, async_db, client, test_profile):
+        await self._baseline_then_new(async_db, client, test_profile, "Tycho", "Bonobo", "Tycho")
+
+        first = _claim(client, test_profile)
+        assert first == {"claimed": True, "count": 3, "headline": ["Tycho", "Bonobo"]}
+        assert _claim(client, test_profile)["claimed"] is False
+
+    async def test_what_was_seen_is_not_in_the_digest(self, async_db, client, test_profile, notices):
+        await self._baseline_then_new(async_db, client, test_profile, "Tycho")
+        _seen(client, test_profile, _get(client, test_profile)["items"][0]["discovered_at"])
+        assert _claim(client, test_profile)["claimed"] is False
+
+    async def test_next_week_counts_only_what_came_after_the_last_digest(self, async_db, client, test_profile):
+        from sqlalchemy import update
+
+        from app.db.models import ProfileDiscoveryState
+
+        await self._baseline_then_new(async_db, client, test_profile, "Tycho")
+        assert _claim(client, test_profile)["count"] == 1
+
+        await async_db.execute(
+            update(ProfileDiscoveryState)
+            .where(ProfileDiscoveryState.profile_id == UUID(test_profile["id"]))
+            .values(digest_sent_at=_now() - timedelta(days=8))
+        )
+        _release(async_db, name="Later", artist="Bonobo", found=_now() + timedelta(seconds=10))
+        await async_db.commit()
+
+        assert _claim(client, test_profile) == {"claimed": True, "count": 1, "headline": ["Bonobo"]}
+
+    async def test_two_devices_claiming_at_once_get_one_digest(self, async_db, client, test_profile):
+        import asyncio
+
+        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+        from app.config import settings
+        from app.operations import whats_new
+
+        await self._baseline_then_new(async_db, client, test_profile, "Tycho")
+        profile_id = UUID(test_profile["id"])
+        engine = create_async_engine(settings.database_url)
+        sessions = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+        async def device():
+            async with sessions() as db:
+                digest = await whats_new.claim_digest(db, profile_id)
+                await db.commit()
+                return digest.claimed
+
+        try:
+            results = await asyncio.gather(*(device() for _ in range(4)))
+        finally:
+            await engine.dispose()
+        assert sorted(results) == [False, False, False, True]

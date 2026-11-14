@@ -254,3 +254,69 @@ async def mark_seen(db: AsyncSession, profile_id: UUID, through: datetime) -> tu
         )
     ).scalar_one()
     return after, after != before
+
+
+@dataclass
+class Digest:
+    """The weekly reminder a device may post (ADR-0182), or why it may not."""
+
+    claimed: bool
+    count: int = 0
+    headline: list[str] = field(default_factory=list)
+
+
+async def claim_digest(db: AsyncSession, profile_id: UUID, *, min_interval_days: int = 7) -> Digest:
+    """Give this week's digest to the first device that asks, and nothing to the rest (ADR-0182).
+
+    A digest covers what was found after both what the listener has seen and the last digest. With
+    nothing to say, nothing is claimed, so the week is not used up. Otherwise one conditional
+    UPDATE takes it: under READ COMMITTED a second device's UPDATE waits for the first, re-reads
+    `digest_sent_at` and matches no row, so two devices cannot both notify. The caller commits.
+    """
+    from app.services.app_settings import get_app_settings_service
+
+    if not getattr(get_app_settings_service().get(), "discovery_enabled", True):
+        return Digest(False)
+
+    state = await _state_row(db, profile_id)
+    since = max(
+        (t for t in (state.seen_through, state.digest_through) if t is not None),
+        default=datetime.min,
+    )
+    now = utcnow().replace(tzinfo=None)
+    reasons = and_(
+        ProfileReleaseReason.external_album_id == ExternalAlbumCache.id,
+        ProfileReleaseReason.profile_id == profile_id,
+    )
+    fresh = (
+        await db.execute(
+            select(ExternalAlbumCache.artist_name, ExternalAlbumCache.discovered_at)
+            .outerjoin(ProfileReleaseReason, reasons)
+            .where(*_eligible(now), ExternalAlbumCache.discovered_at > since)
+            .order_by(ExternalAlbumCache.discovered_at.desc())
+        )
+    ).all()
+    if not fresh:
+        return Digest(False)
+
+    taken = await db.execute(
+        update(ProfileDiscoveryState)
+        .where(
+            ProfileDiscoveryState.profile_id == profile_id,
+            (ProfileDiscoveryState.digest_sent_at.is_(None))
+            | (ProfileDiscoveryState.digest_sent_at < now - timedelta(days=min_interval_days)),
+        )
+        .values(digest_sent_at=now, digest_through=fresh[0].discovered_at)
+        .returning(ProfileDiscoveryState.profile_id)
+    )
+    if taken.scalar_one_or_none() is None:
+        return Digest(False)
+
+    # Two distinct artists, newest first: "including Tycho and Bonobo".
+    headline: list[str] = []
+    for name, _ in fresh:
+        if name not in headline:
+            headline.append(name)
+        if len(headline) == 2:
+            break
+    return Digest(True, len(fresh), headline)

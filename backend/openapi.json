@@ -12265,6 +12265,47 @@
         "title": "WatchStatusResponse",
         "type": "object"
       },
+      "WhatsNewDigestRequest": {
+        "properties": {
+          "min_interval_days": {
+            "default": 7,
+            "description": "Days between digests for a profile.",
+            "maximum": 60.0,
+            "minimum": 1.0,
+            "title": "Min Interval Days",
+            "type": "integer"
+          }
+        },
+        "title": "WhatsNewDigestRequest",
+        "type": "object"
+      },
+      "WhatsNewDigestResponse": {
+        "description": "Whether this device should post the weekly digest (ADR-0182). Only one device gets `claimed`.\n\n`headline` holds up to two artist names, newest first, for \"4 new releases, including X and Y\".",
+        "properties": {
+          "claimed": {
+            "title": "Claimed",
+            "type": "boolean"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "headline": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Headline",
+            "type": "array"
+          }
+        },
+        "required": [
+          "claimed",
+          "count",
+          "headline"
+        ],
+        "title": "WhatsNewDigestResponse",
+        "type": "object"
+      },
       "WhatsNewItem": {
         "properties": {
           "artist_name": {
@@ -20157,6 +20198,93 @@
           }
         ],
         "summary": "Get Whats New",
+        "tags": [
+          "discover"
+        ]
+      }
+    },
+    "/api/v1/library/discover/whats-new/digest-claim": {
+      "post": {
+        "description": "Take this profile's weekly new-release digest, if it is due and has something to say.\n\nThe first device to ask in a week gets `claimed: true` and posts the notification; any other\ngets `false`, so a profile on a Mac and an iPhone is reminded once. Nothing new claims nothing.",
+        "operationId": "discover_claim_whats_new_digest",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WhatsNewDigestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhatsNewDigestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "ProfileHeader": []
+          }
+        ],
+        "summary": "Claim Whats New Digest",
         "tags": [
           "discover"
         ]

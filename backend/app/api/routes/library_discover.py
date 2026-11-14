@@ -428,3 +428,34 @@ async def mark_whats_new_seen(
     if changed:
         get_channel().notify(profile.id, WHATS_NEW_CHANGED)
     return WhatsNewSeenResponse(seen_through=seen_through)
+
+
+class WhatsNewDigestRequest(BaseModel):
+    min_interval_days: int = Field(7, ge=1, le=60, description="Days between digests for a profile.")
+
+
+class WhatsNewDigestResponse(BaseModel):
+    """Whether this device should post the weekly digest (ADR-0182). Only one device gets `claimed`.
+
+    `headline` holds up to two artist names, newest first, for "4 new releases, including X and Y".
+    """
+
+    claimed: bool
+    count: int
+    headline: list[str]
+
+
+@router.post("/discover/whats-new/digest-claim", response_model=WhatsNewDigestResponse)
+async def claim_whats_new_digest(
+    db: DbSession,
+    profile: RequiredProfile,
+    request: WhatsNewDigestRequest,
+) -> WhatsNewDigestResponse:
+    """Take this profile's weekly new-release digest, if it is due and has something to say.
+
+    The first device to ask in a week gets `claimed: true` and posts the notification; any other
+    gets `false`, so a profile on a Mac and an iPhone is reminded once. Nothing new claims nothing.
+    """
+    digest = await whats_new.claim_digest(db, profile.id, min_interval_days=request.min_interval_days)
+    await db.commit()
+    return WhatsNewDigestResponse(claimed=digest.claimed, count=digest.count, headline=digest.headline)
