@@ -1,6 +1,6 @@
 # ADR-0179: Each Profile Has a What's-New List, and the Server Records How Far It Has Looked
 
-Status: proposed
+Status: accepted
 
 Date: 2026-11-14
 

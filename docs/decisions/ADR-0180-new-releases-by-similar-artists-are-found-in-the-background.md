@@ -1,6 +1,6 @@
 # ADR-0180: New Releases by Similar Artists Are Found in the Background
 
-Status: proposed
+Status: accepted
 
 Date: 2026-11-14
 

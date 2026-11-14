@@ -1,6 +1,6 @@
 # ADR-0182: A Weekly Digest Notification, Sent by One Device
 
-Status: proposed
+Status: accepted
 
 Date: 2026-11-14
 
