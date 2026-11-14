@@ -4,6 +4,18 @@ Status: accepted
 
 Date: 2026-11-14
 
+Implementation:
+
+- **Point 2, server, 2026-11-14.** `whats_new.claim_digest` in `app/operations/whats_new.py` and
+  `POST /library/discover/whats-new/digest-claim` (`api/routes/library_discover.py`). The digest
+  counts eligible releases found after both `seen_through` and `digest_through`, so similar-artist
+  releases count only for their profile. With none, it claims nothing and the week is not used up.
+  Otherwise one conditional `UPDATE … RETURNING` takes the week. Capability
+  `discover.whats_new_digest`. Tests are in `TestDigest` in `tests/test_whats_new.py`, including
+  four sessions claiming at once with exactly one winning, which held 15 runs of 15.
+- **Not done:** points 1 and 3–5, the apps' notification, its timing, the setting, and opening
+  Discover on tap.
+
 Extends [ADR-0179](ADR-0179-each-profile-has-a-whats-new-list-and-the-server-records-how-far-it-has-looked.md)
 and [ADR-0181](ADR-0181-the-apps-show-whats-new.md)
 

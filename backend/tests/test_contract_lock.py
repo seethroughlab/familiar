@@ -98,6 +98,7 @@ class TestCapabilities:
         "albums.move_to_album",
         "media.credentials",
         "discover.whats_new",
+        "discover.whats_new_digest",
     }
 
     def test_no_published_name_is_dropped(self) -> None:

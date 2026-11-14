@@ -51,6 +51,12 @@ with that reason. A server with no token is unaffected.
   fills in similar artists for what you play, at most 25 Last.fm calls every six hours, and is off
   when discovery is off. One new table, `profile_release_reasons`.
 
+- **A weekly digest, sent by one device** (ADR-0182). `POST /api/v1/library/discover/whats-new/digest-claim`
+  hands a profile's weekly new-release digest to the first device that asks and to no other, and
+  only when something was found since the listener last looked and since the last digest. The
+  iPhone and Mac apps post it as a notification from their next release. Capability
+  `discover.whats_new_digest`.
+
 ## [0.2.0-beta24] - 2026-11-10
 
 One migration (`20261109_embed_failure_reason` adds two columns to `track_analysis` and backfills

@@ -8631,6 +8631,40 @@ export type WatchStatusResponse = {
 };
 
 /**
+ * WhatsNewDigestRequest
+ */
+export type WhatsNewDigestRequest = {
+    /**
+     * Min Interval Days
+     *
+     * Days between digests for a profile.
+     */
+    min_interval_days?: number;
+};
+
+/**
+ * WhatsNewDigestResponse
+ *
+ * Whether this device should post the weekly digest (ADR-0182). Only one device gets `claimed`.
+ *
+ * `headline` holds up to two artist names, newest first, for "4 new releases, including X and Y".
+ */
+export type WhatsNewDigestResponse = {
+    /**
+     * Claimed
+     */
+    claimed: boolean;
+    /**
+     * Count
+     */
+    count: number;
+    /**
+     * Headline
+     */
+    headline: Array<string>;
+};
+
+/**
  * WhatsNewItem
  */
 export type WhatsNewItem = {
@@ -12813,6 +12847,47 @@ export type DiscoverGetWhatsNewResponses = {
 };
 
 export type DiscoverGetWhatsNewResponse = DiscoverGetWhatsNewResponses[keyof DiscoverGetWhatsNewResponses];
+
+export type DiscoverClaimWhatsNewDigestData = {
+    body: WhatsNewDigestRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/library/discover/whats-new/digest-claim';
+};
+
+export type DiscoverClaimWhatsNewDigestErrors = {
+    /**
+     * Bad Request
+     */
+    400: ErrorEnvelope;
+    /**
+     * Unauthorized
+     */
+    401: ErrorEnvelope;
+    /**
+     * Not Found
+     */
+    404: ErrorEnvelope;
+    /**
+     * Unprocessable Entity
+     */
+    422: ErrorEnvelope;
+    /**
+     * Internal Server Error
+     */
+    500: ErrorEnvelope;
+};
+
+export type DiscoverClaimWhatsNewDigestError = DiscoverClaimWhatsNewDigestErrors[keyof DiscoverClaimWhatsNewDigestErrors];
+
+export type DiscoverClaimWhatsNewDigestResponses = {
+    /**
+     * Successful Response
+     */
+    200: WhatsNewDigestResponse;
+};
+
+export type DiscoverClaimWhatsNewDigestResponse = DiscoverClaimWhatsNewDigestResponses[keyof DiscoverClaimWhatsNewDigestResponses];
 
 export type DiscoverMarkWhatsNewSeenData = {
     body: WhatsNewSeenRequest;
