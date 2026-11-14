@@ -4,6 +4,28 @@ Status: accepted
 
 Date: 2026-11-11
 
+Implementation:
+
+- **Server, points 2–4, 2026-11-11 (#485).** `DEFAULT_UPDATE_CHANNEL = "beta"` in
+  `app/services/app_settings.py`. `_migrate_update_channel` runs in `_load`: a file without
+  `update_channel_migrated` whose channel is `"disabled"` or missing becomes `"beta"`, is saved, and
+  is logged with where to turn it off. Every file gets the marker, so it runs once. The marker
+  defaults to `True`, so a new install never migrates, and `get_masked` drops it.
+  `SettingsResponse` lists its fields, so the API schema did not change. `scripts/deploy-dev.sh`
+  writes `dev` to the container's `/app/VERSION`. Tests: `tests/test_update_channel_default.py`.
+  Four fail against the previous settings code; the other four guard that a channel someone chose
+  is kept. `docs/CONFIGURATION.md` gains "Update checks".
+- **Apps, point 5, 2026-11-14 (`familiar-apple` #273).** `system_get_update_status` joins the
+  generated surface (`VENDORED_OPERATIONS` here too). `ServerUpdateNotice.decide` in FamiliarKit
+  shows the notice only when the server says an update exists and names it, the server knows its
+  version (not `dev`/`demo`) and that release was not dismissed for this server; notes only over
+  https. `ServerConfiguration` reads the answer after a contract check that answered, keeps it
+  while away and forgets it with the server. `LibraryView` shows it after the contract and
+  capability banners, through `ServerBehindBanner` with a link and a dismiss button. Rendered in
+  the Simulator in both themes: the first layout squeezed the message onto three lines, and the
+  second truncated it to one. Not yet seen against a real server, since none reports an update
+  before the release that ships #485.
+
 Extends [ADR-0168](ADR-0168-a-server-names-what-it-can-do.md) and
 [ADR-0113](ADR-0113-the-api-declares-a-contract-version.md)
 

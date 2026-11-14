@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**This server now checks GitHub for a newer Familiar release once a day** (ADR-0178), so the web
+admin, and the iPhone and Mac apps from their next release, can say when one exists. It was
+possible before but off unless turned on. An upgraded server turns it on once, and says so in its
+log; to turn it off, go to Server → Health → Release channel → Disabled. `docs/CONFIGURATION.md`
+says what is sent.
+
 **Music and artwork now need a credential on a server with a token** (ADR-0176 Phase 4). The apps
 send one from 1.7 on, the web admin uses a cookie, and speakers get a link that expires. An iPhone
 or Mac still on Familiar 1.5.1 or earlier stops playing from a server with a token after this

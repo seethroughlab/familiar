@@ -35,6 +35,9 @@ from pydantic import BaseModel, ValidationError
 
 logger = logging.getLogger(__name__)
 
+#: The channel a server checks when nobody has chosen one (ADR-0178 point 2).
+DEFAULT_UPDATE_CHANNEL = "beta"
+
 
 class AppSettings(BaseModel):
     """User-configurable app settings."""
@@ -127,8 +130,13 @@ class AppSettings(BaseModel):
     s3_backup_prefix: str = ""
     s3_backup_schedule: str = "weekly"  # daily, weekly, monthly
 
-    # Update notifications
-    update_channel: str = "disabled"  # "disabled", "stable", "beta", "alpha"
+    # Update notifications: "disabled", "stable", "beta", "alpha". On by default since ADR-0178, so
+    # the apps can say a newer server exists. "beta" while every release is a beta: the "stable"
+    # channel skips them all. One request to api.github.com a day; "disabled" turns it off.
+    update_channel: str = DEFAULT_UPDATE_CHANNEL
+    # ADR-0178 point 3. True once a stored "disabled" has been through the one-time migration; a new
+    # install starts True, since its "disabled" can only be a choice. Not in the settings view.
+    update_channel_migrated: bool = True
 
     # Network audio outputs — LAN-reachable base URL (e.g. http://192.168.1.50:4400) that devices
     # (WiiM/Sonos/etc.) use to fetch the audio stream. Needed when the browser reaches the app over
@@ -164,6 +172,27 @@ class AppSettings(BaseModel):
     initial_import_complete: bool | None = None
 
 
+def _migrate_update_channel(data: dict[str, Any]) -> bool:
+    """Turn the update check on once for a server whose stored "disabled" nobody chose (ADR-0178).
+
+    `_save` writes every field with its default, so until ADR-0178 every saved `settings.json` held
+    `"update_channel": "disabled"` whether or not anyone picked it. That cannot be told apart from a
+    choice, so it is migrated exactly once, logged, and remembered: a server turned off after this
+    stays off. Returns whether `data` changed.
+    """
+    if data.get("update_channel_migrated"):
+        return False
+    if data.get("update_channel", "disabled") == "disabled":
+        data["update_channel"] = DEFAULT_UPDATE_CHANNEL
+        logger.warning(
+            "Update checks are now on (channel %r): once a day this server asks api.github.com "
+            "whether a newer Familiar release exists, so the apps can say so (ADR-0178). To turn it "
+            "off: web admin, Server → Health → Release channel → Disabled.",
+            DEFAULT_UPDATE_CHANNEL,
+        )
+    data["update_channel_migrated"] = True
+    return True
+
 
 class AppSettingsService:
     """Service for managing user-configurable app settings."""
@@ -183,6 +212,10 @@ class AppSettingsService:
             try:
                 with open(self.settings_path) as f:
                     data = json.load(f)
+                if _migrate_update_channel(data):
+                    migrated = AppSettings(**data)
+                    self._save(migrated)
+                    return migrated
                 return AppSettings(**data)
             except (json.JSONDecodeError, ValidationError) as e:
                 logger.warning(f"Failed to load settings from {self.settings_path}: {e}")
@@ -248,10 +281,12 @@ class AppSettingsService:
         # `tests/test_inbound_auth.py::TestTheTokenIsNotLeaked` covers `access_token` specifically;
         # the general "any new secret is masked" property is not enforced anywhere.
         secret_keys = {
-            "lastfm_api_key", "lastfm_api_secret",
+            "lastfm_api_key",
+            "lastfm_api_secret",
             "acoustid_api_key",
             "fanarttv_api_key",
-            "s3_backup_access_key_id", "s3_backup_secret_access_key",
+            "s3_backup_access_key_id",
+            "s3_backup_secret_access_key",
         }
 
         # Mask only secret values
@@ -273,6 +308,7 @@ class AppSettingsService:
 
         # Not masked but absent: nothing a client does needs it, and a prefix would be a start on it.
         data.pop("artwork_key_secret", None)
+        data.pop("update_channel_migrated", None)
 
         return data
 
@@ -415,7 +451,8 @@ class AppSettingsService:
             "reason": reason,
             "ram_gb": ram_gb,
             "ram_sufficient": ram_gb is not None and ram_gb >= 6.0,
-            "env_override": os.environ.get("DISABLE_CLAP_EMBEDDINGS", "").lower() in ("1", "true", "yes"),
+            "env_override": os.environ.get("DISABLE_CLAP_EMBEDDINGS", "").lower()
+            in ("1", "true", "yes"),
             "explicit_setting": self.get().clap_embeddings_enabled,
         }
 
@@ -424,6 +461,7 @@ def get_system_ram_gb() -> float | None:
     """Get total system RAM in GB. Returns None if unable to detect."""
     try:
         import psutil
+
         return psutil.virtual_memory().total / (1024**3)
     except ImportError:
         return None
