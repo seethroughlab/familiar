@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from uuid import UUID
 
 import httpx
 from sqlalchemy import select
@@ -119,6 +120,23 @@ async def run_listenbrainz_fresh_releases(days: int | None = None) -> dict[str, 
                         extra={"release": item.get("release_name")},
                         exc_info=True,
                     )
+
+            # The same response, matched again against each profile's similar artists
+            # (ADR-0180 point 4): no second request. A failure here costs this pass only.
+            try:
+                from app.services.discovery.similar_releases import match_similar_releases
+                from app.services.playback_commands import WHATS_NEW_CHANGED, get_channel
+                from app.utils.time import utcnow
+
+                similar = await match_similar_releases(
+                    db, releases, now=utcnow().replace(tzinfo=None)
+                )
+                for profile_id in similar.pop("profiles_told"):
+                    get_channel().notify(UUID(profile_id), WHATS_NEW_CHANGED)
+                stats.update(similar)
+            except Exception:
+                await db.rollback()
+                logger.warning("similar_releases_failed", exc_info=True)
     finally:
         await engine.dispose()
 

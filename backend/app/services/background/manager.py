@@ -33,6 +33,8 @@ DISCOVERY_BATCH_SIZE = 10
 #: day against a limit that reports 30 remaining per window, and the source's
 #: thirty-day lookback means nothing is missed between runs.
 LISTENBRAINZ_INTERVAL_HOURS = 3
+#: Last.fm similar artists for the artists profiles play most (ADR-0180 point 1).
+SIMILAR_WARM_INTERVAL_HOURS = 6
 
 #: ADR-0115 point 1. Ten minutes, two bounded phases per tick: 150 AcoustID lookups
 #: (about a minute at the 3/s ceiling) then 150 corpus claims (six minutes at 25/min).
@@ -195,6 +197,16 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
                 replace_existing=True,
             )
 
+            self._scheduler.add_job(
+                self._similar_artists_warm,
+                IntervalTrigger(hours=SIMILAR_WARM_INTERVAL_HOURS),
+                id="similar_artists_warm",
+                max_instances=1,
+                coalesce=True,
+                misfire_grace_time=600,
+                replace_existing=True,
+            )
+
             # Names the library's recordings through AcoustID (ADR-0115). The phase
             # gates itself on `recording_backfill_enabled`, so registering it
             # unconditionally is right: a disabled phase returns at once and records
@@ -268,6 +280,7 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
         "discovery_batch",
         "daily_external_albums",
         "listenbrainz_fresh_releases",
+        "similar_artists_warm",
         "recording_backfill",
         "artist_gallery",
         "daily_update_check",

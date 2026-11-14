@@ -40,6 +40,8 @@ _INDEX_WHERE_BY_CONTEXT: dict[str, TextClause] = {
     LISTENING_PROFILE_CONTEXT: text(
         "discovery_context = 'listening_profile_recommendation'"
     ),
+    # ADR-0180: new releases by similar artists.
+    "similar_artist_new_release": text("discovery_context = 'similar_artist_new_release'"),
 }
 
 
