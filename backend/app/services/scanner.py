@@ -268,7 +268,25 @@ def _get_file_info_sync(
 def _extract_metadata_sync(file_path: Path) -> dict[str, Any]:
     """Extract metadata from file (runs in thread pool)."""
     from app.services.metadata import extract_metadata
-    return extract_metadata(file_path)
+    return {key: _without_nul(value) for key, value in extract_metadata(file_path).items()}
+
+
+def _without_nul(value: Any) -> Any:
+    """A tag value Postgres will store: no NUL characters (issue #6).
+
+    Postgres text cannot hold `\x00`, and asyncpg's refusal aborts the whole transaction, so one
+    badly tagged file (`"Richie Havens\x00"`, written by a buggy tagger) failed every track after
+    it in the sync. A NUL at either end is padding and is dropped; one inside separates values, as
+    ID3v2.4 uses it, so the values are kept apart with "; " rather than run together.
+    """
+    if isinstance(value, str):
+        if "\x00" not in value:
+            return value
+        parts = [part.strip() for part in value.split("\x00")]
+        return "; ".join(part for part in parts if part) or None
+    if isinstance(value, list):
+        return [_without_nul(item) for item in value]
+    return value
 
 
 class LibraryScanner:
@@ -687,13 +705,17 @@ class LibraryScanner:
         if not artist_tag or not artist_tag.strip():
             return None
         try:
-            artist = await resolve_canonical_artist(
-                self.db,
-                artist_tag,
-                musicbrainz_artist_id=mbid,
-                do_mb_lookup=settings.scanner_mb_artist_lookup,
-                create_if_missing=True,
-            )
+            # A savepoint, because catching the exception is not enough: once Postgres rejects a
+            # statement the transaction is aborted, and every later track in the batch would fail
+            # with InFailedSQLTransactionError (issue #6). Rolling back to here keeps it usable.
+            async with self.db.begin_nested():
+                artist = await resolve_canonical_artist(
+                    self.db,
+                    artist_tag,
+                    musicbrainz_artist_id=mbid,
+                    do_mb_lookup=settings.scanner_mb_artist_lookup,
+                    create_if_missing=True,
+                )
         except Exception as e:
             logger.warning(
                 f"canonical artist resolve failed for {artist_tag!r}: {e}"
@@ -720,15 +742,17 @@ class LibraryScanner:
         library are in that position, and they otherwise share one bucket.
         """
         try:
-            album = await resolve_canonical_album(
-                self.db,
-                album_tag,
-                album_artist_id=album_artist_id,
-                file_path=file_path,
-                musicbrainz_release_id=release_id,
-                year=year,
-                create_if_missing=True,
-            )
+            # A savepoint for the reason the artist resolve has one (issue #6).
+            async with self.db.begin_nested():
+                album = await resolve_canonical_album(
+                    self.db,
+                    album_tag,
+                    album_artist_id=album_artist_id,
+                    file_path=file_path,
+                    musicbrainz_release_id=release_id,
+                    year=year,
+                    create_if_missing=True,
+                )
         except Exception as e:
             logger.warning(f"canonical album resolve failed for {album_tag!r}: {e}")
             return None

@@ -824,3 +824,47 @@ class TestUpdatedAtCursor:
                 f"an unchanged rescan moved updated_at ({before} -> {after}); "
                 "every delta would then return the entire library"
             )
+
+
+@pytest.mark.asyncio(loop_scope="function")
+class TestANulInATagDoesNotAbortTheSync:
+    """Issue #6: a NUL byte in one track's artist tag failed every track after it in the sync.
+
+    Postgres text cannot hold `\\x00`; asyncpg's refusal aborted the transaction, and catching the
+    exception in Python did not un-abort it, so every later statement raised
+    InFailedSQLTransactionError.
+    """
+
+    async def test_a_sync_with_one_badly_tagged_file_imports_every_file(self, clean_db, monkeypatch):
+        from app.services import metadata as metadata_module
+
+        real = metadata_module.extract_metadata
+
+        def with_a_nul(path):
+            tags = real(path)
+            if path.name == "ambient_loop.mp3":
+                tags["artist"] = "Richie Havens\x00"
+                tags["title"] = "Here Comes\x00the Sun"
+            return tags
+
+        monkeypatch.setattr(metadata_module, "extract_metadata", with_a_nul)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            music = Path(tmpdir) / "music"
+            shutil.copytree(FIXTURES_DIR / "artist1", music / "artist1")
+
+            results = await LibraryScanner(clean_db).scan(music)
+
+            assert results["total"] == 4
+            tracks = (await clean_db.execute(select(Track))).scalars().all()
+            assert len(tracks) == 4
+            bad = next(t for t in tracks if t.file_path.endswith("ambient_loop.mp3"))
+            assert bad.artist == "Richie Havens"
+            # A NUL inside a value separates values (ID3v2.4); they stay apart.
+            assert bad.title == "Here Comes; the Sun"
+
+    async def test_a_failed_resolve_leaves_the_session_usable(self, clean_db):
+        # Past the tag reader, as a NUL would arrive by any other route: the resolve fails, is
+        # logged and returns None, and the next statement on the same session still runs.
+        scanner = LibraryScanner(clean_db)
+        assert await scanner._resolve_canonical_artist_id("Richie Havens\x00", None) is None
+        assert (await clean_db.execute(select(Track).limit(1))).all() == []
