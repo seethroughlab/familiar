@@ -13,8 +13,16 @@ Implementation:
   Otherwise one conditional `UPDATE … RETURNING` takes the week. Capability
   `discover.whats_new_digest`. Tests are in `TestDigest` in `tests/test_whats_new.py`, including
   four sessions claiming at once with exactly one winning, which held 15 runs of 15.
-- **Not done:** points 1 and 3–5, the apps' notification, its timing, the setting, and opening
-  Discover on tap.
+- **Points 1 and 3–5, apps, 2026-11-14 (`familiar-apple` #275).** `FamiliarKit/WhatsNewDigest.swift`
+  limits attempts to 09:00–21:00, at most every 12 hours, and words the digest.
+  `WhatsNewDigestSource` makes the claim. `WhatsNewDigestNotifier` asks at launch, hourly while the
+  app runs and in the iPhone's background refresh. It never claims a week it cannot post, uses
+  provisional authorization, and posts one notification per server. `NotificationRouter` is the
+  app's first `UNUserNotificationCenterDelegate`, with `nonisolated` methods. It opens Discover
+  through `InterfaceCommands.notificationDestination`, leaving `pendingDestination` as the Mac's MCP
+  navigation, and other notifications behave as before. The "Weekly new-release reminder" setting is
+  in the iPhone's Server settings and the Mac's Library pane. Shipped to TestFlight in 1.8 (81). Not
+  yet seen delivering a notification on a device.
 
 Extends [ADR-0179](ADR-0179-each-profile-has-a-whats-new-list-and-the-server-records-how-far-it-has-looked.md)
 and [ADR-0181](ADR-0181-the-apps-show-whats-new.md)
