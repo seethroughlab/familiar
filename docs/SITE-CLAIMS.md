@@ -80,8 +80,8 @@ installs on a given platform.
 | `./start.sh` builds the image locally | **false — corrected on the page** | It does not build. `start.sh:84` runs `docker compose -f docker-compose.prod.yml`, which pulls `ghcr.io/seethroughlab/familiar:latest`, and there is no `--build` anywhere in the script. The "Build from source" block now shows an explicit `compose build` and says what `start.sh` actually does |
 | Windows needs `docker-compose.desktop.yml` | true | That file only swaps `journald` for `json-file`, and journald is Linux-only. Docker Desktop runs a Linux VM on macOS and Windows alike, so the override applies to both. It was `docker-compose.macos.yml` until 2026-08-29; the rename is why the Windows panel no longer has to explain itself |
 | ~~Familiar has no login~~ | **removed 2026-10-03 (ADR-0145)** | False for every server set up since ADR-0141, which starts with a token. Replaced by the row below |
-| Sign-in covers the library, not the music; the server speaks plain HTTP; a server from before October 2026 may have no sign-in | true | `backend/app/api/auth.py`: `PROTECTED_PREFIXES` gates `/api/` and `/mcp`; `MEDIA_ROUTES` exempts `GET`/`HEAD` on streams, artwork, artist images, video streams and posters, and avatars. No TLS in `app/serve.py`, `docker/Dockerfile` or `ServerLaunch.swift`. ADR-0141 point 3 keeps a tokenless older server serving. **Expiry (ADR-0145 point 6):** revisit if media is gated or the server terminates TLS |
-| A reverse proxy does not make Familiar safe to publish | true | With HTTPS it keeps the token private in transit, but `MEDIA_ROUTES` needs no token; a proxy that adds its own login gates the media too, which the Apple players and speakers (WiiM, Sonos) cannot answer — the reason media is exempt (ADR-0045, recorded in `auth.py`) |
+| Sign-in covers the library and the music; a speaker gets an expiring link; the server speaks plain HTTP; before 0.2.0-beta25 the music needs no sign-in, and before October 2026 there may be none | true from 0.2.0-beta25 (rewritten with that release; until then it read "the library, not the music") | `backend/app/api/auth.py`: `PROTECTED_PREFIXES` gates `/api/` and `/mcp`; `MEDIA_ROUTES` take a media credential instead, enforced by `_media_refused` with `MEDIA_ENFORCED` on (ADR-0176 Phase 4); `outputs.py`'s `_device_stream_url` signs a speaker's URL for its track plus a margin. No TLS in `app/serve.py`, `docker/Dockerfile` or `ServerLaunch.swift`. ADR-0141 point 3 keeps a tokenless older server serving. **Expiry (ADR-0145 point 6):** revisit if the server terminates TLS (media gating fired it once, with ADR-0176) |
+| A reverse proxy alone does not make Familiar safe to publish | true | With HTTPS it keeps the token private in transit. A server with no token (ADR-0141 point 3), or one older than 0.2.0-beta25 (before ADR-0176 Phase 4), still serves media to anyone; a proxy that adds its own login gates everything, which the Apple players and speakers (WiiM, Sonos) cannot answer |
 | Tailscale gives a private network, HTTPS and no router configuration | **unverifiable** | Tailscale's own documented behaviour, not checkable here. ADR-0096 point 5 is why the page says nothing about their pricing, plans or limits — `ADR-0055` point 2 was burned once already by claims about somebody else's product |
 
 | Windows needs `docker-compose.desktop.yml` | true | **Measured, not inferred.** `docker run --rm --log-driver=journald hello-world` on Windows Docker Desktop fails with *"failed to initialize logging driver: journald"*, exit **125**; the same run with `--log-driver=json-file` prints "Hello from Docker!". Without the override the install fails |
@@ -89,9 +89,10 @@ installs on a given platform.
 | `docs/WINDOWS.md`'s "Critical" issues block a Windows install | **false** | They do not, and two of them audit code that no longer exists: `BLOCKED_PATHS` appears nowhere in `backend/`, and there is no filesystem-browse endpoint. The document is dated 2026-01-14 and marked "Documented for future implementation". It is not linked from the site; see the ADR-0095 follow-up |
 
 **Expiry (ADR-0145 point 6, replacing ADR-0096 point 6, which fired when ADR-0141 shipped the
-token).** The sign-in and reverse-proxy rows depend on the media exemption and on the server
-speaking plain HTTP. If either changes, the "Listening away from home" section and these rows are
-revisited — a scheduled edit, not a later discovery.
+token).** The sign-in and reverse-proxy rows depended on the media exemption and on the server
+speaking plain HTTP. The exemption ended with ADR-0176 Phase 4, and both rows and the section were
+rewritten for 0.2.0-beta25. They now depend on plain HTTP; if the server terminates TLS they are
+revisited again — a scheduled edit, not a later discovery.
 
 ## Removed, with the reason
 
