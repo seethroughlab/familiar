@@ -117,6 +117,26 @@ class ProfilePlayHistory(Base):
     track: Mapped["Track"] = relationship()
 
 
+class ProfileDiscoveryState(Base):
+    """How far a profile has looked at new music, and when it was last sent a digest (ADR-0179).
+
+    One row per profile, created on its first what's-new read with `seen_through` set to the
+    newest release already found, so the backlog that existed then is never announced as new.
+    Naive UTC, like `ExternalAlbumCache.discovered_at`, which every value here is compared with.
+    `digest_through` and `digest_sent_at` belong to ADR-0182's weekly digest.
+    """
+
+    __tablename__ = "profile_discovery_state"
+
+    profile_id: Mapped[UUID] = mapped_column(
+        ForeignKey("profiles.id", ondelete="CASCADE"), primary_key=True
+    )
+    seen_through: Mapped[datetime | None] = mapped_column(DateTime)
+    digest_through: Mapped[datetime | None] = mapped_column(DateTime)
+    digest_sent_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class PlayEvent(Base):
     """One row per listening event — the per-play log behind ProfilePlayHistory.
 

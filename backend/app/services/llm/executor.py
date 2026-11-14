@@ -86,6 +86,7 @@ class ToolExecutor(
             # Discovery tools
             "get_similar_artists_in_library": self._get_similar_artists_in_library,
             "get_new_releases": self._get_new_releases,
+            "get_whats_new": self._get_whats_new,
             "get_discovery_recommendations": self._get_discovery_recommendations,
             # Web page reading tools
             "create_playlist_from_items": self._create_playlist_from_items,

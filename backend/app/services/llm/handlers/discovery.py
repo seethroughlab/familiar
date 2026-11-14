@@ -377,6 +377,36 @@ class DiscoveryHandlersMixin:
         service = NewReleasesService(self.db)
         return await service.get_new_releases_view(days_back=days_back, limit=limit)
 
+    async def _get_whats_new(self: "ToolExecutor", limit: int = 20) -> dict[str, Any]:
+        """This profile's what's-new list (ADR-0179), the same answer the apps and Discover get.
+
+        Reads only; it never marks anything seen. Whether the listener has *looked* is something a
+        model summarising for them cannot answer on their behalf.
+        """
+        from app.operations import whats_new
+
+        if not self.profile_id:
+            return {"error": "Profile required for what's new"}
+        try:
+            limit = max(1, min(100, int(limit)))
+        except (ValueError, TypeError):
+            limit = 20
+        result = await whats_new.get(self.db, self.profile_id, limit=limit)
+        return {
+            "state": result.state,
+            "as_of": result.as_of.isoformat() if result.as_of else None,
+            "age_hours": round(result.age_hours, 1) if result.age_hours is not None else None,
+            "new_count": result.new_count,
+            "items": [
+                {
+                    **item,
+                    "release_date": item["release_date"].isoformat() if item["release_date"] else None,
+                    "discovered_at": item["discovered_at"].isoformat(),
+                }
+                for item in result.items
+            ],
+        }
+
     async def _get_discovery_recommendations(
         self: "ToolExecutor",
         include_in_library: bool = False,

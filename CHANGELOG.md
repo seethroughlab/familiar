@@ -34,6 +34,16 @@ with that reason. A server with no token is unaffected.
   the artist and album lookups run in a savepoint so a failure there no longer poisons the rest of
   the sync.
 
+### Added
+
+- **What's new, per listener** (ADR-0179). `GET /api/v1/library/discover/whats-new` lists the
+  releases discovery has found, newest first, each marked new or seen, with why it is listed
+  ("You've played Tycho 42 times"), and `POST …/whats-new/seen` records how far this profile has
+  looked, only ever forward. Opening Discover marks it, and the profile's other devices are told.
+  The first read counts everything already found as seen, so nothing old is announced. Also the
+  MCP tool `get_whats_new`, and the capability `discover.whats_new`. One new table,
+  `profile_discovery_state`.
+
 ## [0.2.0-beta24] - 2026-11-10
 
 One migration (`20261109_embed_failure_reason` adds two columns to `track_analysis` and backfills

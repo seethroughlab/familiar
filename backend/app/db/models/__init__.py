@@ -36,6 +36,7 @@ from .profiles import (
     PlaybackSessionArchive,
     PlayEvent,
     Profile,
+    ProfileDiscoveryState,
     ProfileFavorite,
     ProfilePlayHistory,
 )
@@ -72,6 +73,7 @@ __all__ = [
     "PlaylistTrack",
     "Profile",
     "ProfileFavorite",
+    "ProfileDiscoveryState",
     "ProfilePlayHistory",
     "ProposedChange",
     "SmartPlaylist",
