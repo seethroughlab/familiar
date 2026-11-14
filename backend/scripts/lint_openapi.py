@@ -132,6 +132,9 @@ VENDORED_OPERATIONS = {
     # 2026-09-08 and missed here: CI never noticed, because the cross-check runs only with the Swift
     # repo checked out beside this one, which the runner does not have.
     "system_get_api_contract",
+    # Whether a newer server release exists (ADR-0178 point 5): the app reads the server's cached
+    # answer and never asks GitHub itself. Added to the Swift config in familiar-apple #273.
+    "system_get_update_status",
 }
 
 SWIFT_CLIENT_CONFIG = (
