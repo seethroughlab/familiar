@@ -25,6 +25,15 @@ with that reason. A server with no token is unaffected.
   server-signed URL. It is served `Cache-Control: private`, so a shared cache cannot serve one
   listener's library to another.
 
+### Fixed
+
+- **One badly tagged file no longer fails a whole library sync** ([#6](https://github.com/seethroughlab/familiar/issues/6)).
+  A NUL byte in a tag (`"Richie Havens\x00"`, as some taggers write) made Postgres reject the
+  statement and abort the transaction, so every track after it failed too. Tags are now read
+  without NUL characters (one inside a value separates values, which are kept apart with "; "), and
+  the artist and album lookups run in a savepoint so a failure there no longer poisons the rest of
+  the sync.
+
 ## [0.2.0-beta24] - 2026-11-10
 
 One migration (`20261109_embed_failure_reason` adds two columns to `track_analysis` and backfills
